@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Zigbee2MQTT Bridge Plugin - MenuItems.xml -->
+<MenuItems>
+    <MenuItem id="discoverCreateDevices">
+        <Name>Discover &amp; Create Devices</Name>
+        <CallbackMethod>discover_create_devices</CallbackMethod>
+    </MenuItem>
+    <MenuItem id="sep1" isSeparator="true"/>
+    <MenuItem id="refreshBridgeDevices">
+        <Name>Refresh Device List from MQTT</Name>
+        <CallbackMethod>refresh_bridge_devices</CallbackMethod>
+    </MenuItem>
+    <MenuItem id="sep2" isSeparator="true"/>
+    <MenuItem id="showPluginInfo">
+        <Name>Show Plugin Info</Name>
+        <CallbackMethod>showPluginInfo</CallbackMethod>
+    </MenuItem>
+</MenuItems>

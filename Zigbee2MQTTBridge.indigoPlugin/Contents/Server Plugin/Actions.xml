@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Zigbee2MQTT Bridge Plugin - Actions.xml -->
+<Actions>
+
+    <!-- Set color temperature (lights only) -->
+    <Action id="setColorTemperature" deviceFilter="self.z2mLight" uiPath="DeviceActions">
+        <Name>Set Color Temperature</Name>
+        <ConfigUI>
+            <Field id="kelvin" type="textfield" defaultValue="2700">
+                <Label>Color Temperature (Kelvin):</Label>
+                <Description>Warm white ~2700K  |  Neutral ~4000K  |  Daylight ~6500K</Description>
+            </Field>
+        </ConfigUI>
+        <CallbackMethod>action_set_color_temperature</CallbackMethod>
+    </Action>
+
+    <!-- Set brightness / position -->
+    <Action id="setBrightness" deviceFilter="self.z2mLight,self.z2mCover" uiPath="DeviceActions">
+        <Name>Set Brightness / Position</Name>
+        <ConfigUI>
+            <Field id="brightness" type="textfield" defaultValue="100">
+                <Label>Level (0-100%):</Label>
+                <Description>Lights: brightness level.  Covers: open position (0=closed, 100=open).</Description>
+            </Field>
+        </ConfigUI>
+        <CallbackMethod>action_set_brightness</CallbackMethod>
+    </Action>
+
+    <!-- Set cover position (covers only) -->
+    <Action id="setCoverPosition" deviceFilter="self.z2mCover" uiPath="DeviceActions">
+        <Name>Set Cover Position</Name>
+        <ConfigUI>
+            <Field id="position" type="textfield" defaultValue="50">
+                <Label>Position (0-100):</Label>
+                <Description>0 = fully closed, 100 = fully open.</Description>
+            </Field>
+        </ConfigUI>
+        <CallbackMethod>action_set_cover_position</CallbackMethod>
+    </Action>
+
+    <!-- Refresh device state (all types) -->
+    <Action id="refreshState"
+            deviceFilter="self.z2mLight,self.z2mRelay,self.z2mSensor,self.z2mCover"
+            uiPath="DeviceActions">
+        <Name>Refresh Device State</Name>
+        <CallbackMethod>action_refresh_state</CallbackMethod>
+    </Action>
+
+</Actions>

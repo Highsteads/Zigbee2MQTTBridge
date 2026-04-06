@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Zigbee2MQTT Bridge Plugin - Devices.xml -->
+<!-- Four device types auto-detected from zigbee2mqtt exposes array:         -->
+<!--   z2mLight  : dimmer  — bulbs, LED strips, colour lights                 -->
+<!--   z2mRelay  : relay   — switches, outlets, smart plugs                   -->
+<!--   z2mSensor : sensor  — contact, motion, temp, humidity, water leak, etc -->
+<!--   z2mCover  : dimmer  — blinds, shutters, covers (position = brightness) -->
+<Devices>
+
+    <!-- ================================================================
+         z2mLight — Zigbee light device (dimmer class)
+         Native states: onOffState, brightnessLevel
+         Optional native: redLevel/greenLevel/blueLevel (SupportsColor=true)
+                          whiteTemperature (SupportsWhiteTemperature=true)
+         ================================================================ -->
+    <Device type="dimmer" id="z2mLight">
+        <Name>Z2M Light</Name>
+        <ConfigUI>
+            <Field id="friendly_name" type="textfield" defaultValue="">
+                <Label>Friendly Name:</Label>
+                <Description>zigbee2mqtt friendly_name — must match exactly (e.g. Living Room Bulb)</Description>
+            </Field>
+            <Field id="ieee_address" type="textfield" readonly="true" defaultValue="">
+                <Label>IEEE Address:</Label>
+            </Field>
+            <Field id="vendor" type="textfield" readonly="true" defaultValue="">
+                <Label>Vendor:</Label>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="capabilities_display" type="textfield" readonly="true" defaultValue="">
+                <Label>Capabilities:</Label>
+            </Field>
+            <!-- Hidden capability flags — set by auto-create -->
+            <Field id="has_brightness"  type="checkbox" hidden="true" defaultValue="true"/>
+            <Field id="has_color_temp"  type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="has_color"       type="checkbox" hidden="true" defaultValue="false"/>
+        </ConfigUI>
+        <States>
+            <!-- onOffState, brightnessLevel: native dimmer states — not declared here -->
+            <State id="colorMode">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Color Mode Changed</TriggerLabel>
+                <ControlPageLabel>Color Mode</ControlPageLabel>
+            </State>
+            <State id="colorTemp">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Color Temp Changed</TriggerLabel>
+                <ControlPageLabel>Color Temp K</ControlPageLabel>
+            </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="linkQuality">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Link Quality Changed</TriggerLabel>
+                <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         z2mRelay — Zigbee relay/switch/outlet (relay class)
+         Native states: onOffState
+         ================================================================ -->
+    <Device type="relay" id="z2mRelay">
+        <Name>Z2M Relay</Name>
+        <ConfigUI>
+            <Field id="friendly_name" type="textfield" defaultValue="">
+                <Label>Friendly Name:</Label>
+                <Description>zigbee2mqtt friendly_name — must match exactly (e.g. Kitchen Switch)</Description>
+            </Field>
+            <Field id="ieee_address" type="textfield" readonly="true" defaultValue="">
+                <Label>IEEE Address:</Label>
+            </Field>
+            <Field id="vendor" type="textfield" readonly="true" defaultValue="">
+                <Label>Vendor:</Label>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="capabilities_display" type="textfield" readonly="true" defaultValue="">
+                <Label>Capabilities:</Label>
+            </Field>
+            <!-- Hidden capability flags -->
+            <Field id="has_power"  type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="has_energy" type="checkbox" hidden="true" defaultValue="false"/>
+        </ConfigUI>
+        <States>
+            <!-- onOffState: native relay state — not declared here -->
+            <State id="power">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Power Changed</TriggerLabel>
+                <ControlPageLabel>Power W</ControlPageLabel>
+            </State>
+            <State id="energy">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Energy Changed</TriggerLabel>
+                <ControlPageLabel>Energy kWh</ControlPageLabel>
+            </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="linkQuality">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Link Quality Changed</TriggerLabel>
+                <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         z2mSensor — Zigbee sensor (sensor class)
+         Native states: onOffState, sensorValue
+         onOffState assignment priority: waterLeak > occupancy > contact
+         sensorValue priority: temperature > illuminance > humidity > pressure
+         ================================================================ -->
+    <Device type="sensor" id="z2mSensor">
+        <Name>Z2M Sensor</Name>
+        <ConfigUI>
+            <Field id="friendly_name" type="textfield" defaultValue="">
+                <Label>Friendly Name:</Label>
+                <Description>zigbee2mqtt friendly_name — must match exactly (e.g. Front Door Sensor)</Description>
+            </Field>
+            <Field id="ieee_address" type="textfield" readonly="true" defaultValue="">
+                <Label>IEEE Address:</Label>
+            </Field>
+            <Field id="vendor" type="textfield" readonly="true" defaultValue="">
+                <Label>Vendor:</Label>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="capabilities_display" type="textfield" readonly="true" defaultValue="">
+                <Label>Capabilities:</Label>
+            </Field>
+            <!-- Hidden sensor capability flags -->
+            <Field id="has_temperature" type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="has_humidity"    type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="has_contact"     type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="has_occupancy"   type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="has_water_leak"  type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="has_battery"     type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="has_pressure"    type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="has_illuminance" type="checkbox" hidden="true" defaultValue="false"/>
+        </ConfigUI>
+        <States>
+            <!-- onOffState, sensorValue: native sensor states — not declared here -->
+            <State id="temperature">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Temperature Changed</TriggerLabel>
+                <ControlPageLabel>Temperature</ControlPageLabel>
+            </State>
+            <State id="humidity">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Humidity Changed</TriggerLabel>
+                <ControlPageLabel>Humidity %</ControlPageLabel>
+            </State>
+            <State id="contact">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Contact Changed</TriggerLabel>
+                <ControlPageLabel>Contact</ControlPageLabel>
+            </State>
+            <State id="motion">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Motion Changed</TriggerLabel>
+                <ControlPageLabel>Motion</ControlPageLabel>
+            </State>
+            <State id="waterLeak">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Water Leak Changed</TriggerLabel>
+                <ControlPageLabel>Water Leak</ControlPageLabel>
+            </State>
+            <State id="battery">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Battery Changed</TriggerLabel>
+                <ControlPageLabel>Battery %</ControlPageLabel>
+            </State>
+            <State id="pressure">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Pressure Changed</TriggerLabel>
+                <ControlPageLabel>Pressure hPa</ControlPageLabel>
+            </State>
+            <State id="illuminance">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Illuminance Changed</TriggerLabel>
+                <ControlPageLabel>Illuminance lux</ControlPageLabel>
+            </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="linkQuality">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Link Quality Changed</TriggerLabel>
+                <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         z2mCover — Zigbee cover/blind/shutter (dimmer class)
+         brightnessLevel maps to position (0=closed, 100=open)
+         onOffState: True=open (position>0), False=closed (position=0)
+         Commands use OPEN/CLOSE/STOP (not ON/OFF)
+         ================================================================ -->
+    <Device type="dimmer" id="z2mCover">
+        <Name>Z2M Cover</Name>
+        <ConfigUI>
+            <Field id="friendly_name" type="textfield" defaultValue="">
+                <Label>Friendly Name:</Label>
+                <Description>zigbee2mqtt friendly_name — must match exactly (e.g. Living Room Blind)</Description>
+            </Field>
+            <Field id="ieee_address" type="textfield" readonly="true" defaultValue="">
+                <Label>IEEE Address:</Label>
+            </Field>
+            <Field id="vendor" type="textfield" readonly="true" defaultValue="">
+                <Label>Vendor:</Label>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="capabilities_display" type="textfield" readonly="true" defaultValue="">
+                <Label>Capabilities:</Label>
+            </Field>
+            <Field id="has_tilt" type="checkbox" hidden="true" defaultValue="false"/>
+        </ConfigUI>
+        <States>
+            <!-- onOffState, brightnessLevel: native dimmer states — not declared here -->
+            <State id="coverState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Cover State Changed</TriggerLabel>
+                <ControlPageLabel>Cover State</ControlPageLabel>
+            </State>
+            <State id="tiltAngle">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Tilt Angle Changed</TriggerLabel>
+                <ControlPageLabel>Tilt</ControlPageLabel>
+            </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="linkQuality">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Link Quality Changed</TriggerLabel>
+                <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+</Devices>

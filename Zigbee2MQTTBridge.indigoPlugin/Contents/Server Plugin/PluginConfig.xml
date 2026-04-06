@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Zigbee2MQTT Bridge Plugin - PluginConfig.xml -->
+<!-- MQTT credentials (broker IP, port, username, password) are read exclusively from secrets.py -->
+<PluginConfig>
+    <Field id="mqtt_topic_prefix" type="textfield" defaultValue="zigbee2mqtt">
+        <Label>Topic Prefix:</Label>
+        <Description>The zigbee2mqtt root topic. Must match your z2m config (usually "zigbee2mqtt").</Description>
+    </Field>
+    <Field id="showDebugInfo" type="checkbox" defaultValue="false">
+        <Label>Show Debug Info in Event Log</Label>
+    </Field>
+</PluginConfig>
