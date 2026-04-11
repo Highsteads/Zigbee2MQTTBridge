@@ -4,7 +4,11 @@
 <PluginConfig>
     <Field id="mqtt_topic_prefix" type="textfield" defaultValue="zigbee2mqtt">
         <Label>Topic Prefix:</Label>
-        <Description>The zigbee2mqtt root topic. Must match your z2m config (usually "zigbee2mqtt").</Description>
+        <Description>The main zigbee2mqtt root topic. Must match your z2m config (usually "zigbee2mqtt").</Description>
+    </Field>
+    <Field id="mqtt_garage_topic_prefix" type="textfield" defaultValue="">
+        <Label>Garage Topic Prefix:</Label>
+        <Description>Optional second Z2M instance topic prefix (e.g. "zigbee2mqtt_garage"). Leave blank to disable.</Description>
     </Field>
     <Field id="showDebugInfo" type="checkbox" defaultValue="false">
         <Label>Show Debug Info in Event Log</Label>

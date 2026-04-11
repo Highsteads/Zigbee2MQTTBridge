@@ -6,8 +6,8 @@
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Sonnet 4.6
-# Date:        06-04-2026
-# Version:     1.0
+# Date:        11-04-2026
+# Version:     1.3
 
 import colorsys
 import json
@@ -53,7 +53,7 @@ except ImportError:
 # ── Constants ─────────────────────────────────────────────────────────────────
 PLUGIN_ID      = "com.clives.indigoplugin.z2mbridge"
 PLUGIN_NAME    = "Zigbee2MQTT Bridge"
-PLUGIN_VERSION = "1.0"
+PLUGIN_VERSION = "1.1"
 
 RECONNECT_DELAY      = 30   # seconds between MQTT reconnect attempts
 STATE_REQUEST_DELAY  = 2    # seconds after deviceStartComm before requesting state
@@ -155,7 +155,8 @@ def _detect_device_type(exposes):
     Determine the best Indigo device type for a zigbee2mqtt device from its
     exposes list.  Priority: Light > Cover > Relay > Sensor (default).
 
-    Returns one of: "z2mLight", "z2mRelay", "z2mSensor", "z2mCover"
+    Returns one of: "z2mLight", "z2mRelay", "z2mContactSensor", "z2mOccupancySensor",
+                    "z2mWaterLeakSensor", "z2mTemperatureSensor", "z2mSensor", "z2mCover"
     """
     if not exposes:
         return "z2mSensor"
@@ -188,7 +189,35 @@ def _detect_device_type(exposes):
                 and (feat.get("access", 0) & 2)):  # bit 1 = writable
             return "z2mRelay"
 
-    # Default: sensor
+    # Distinguish sensor sub-types before falling back to generic sensor
+    feature_names = {feat.get("name") for feat in _iter_features(exposes)}
+    has_contact    = "contact"    in feature_names
+    has_occupancy  = "occupancy"  in feature_names
+    has_presence   = "presence"   in feature_names
+    has_water_leak = "water_leak" in feature_names
+    has_temp       = "temperature" in feature_names
+    has_humidity   = "humidity"    in feature_names
+    has_pressure   = "pressure"    in feature_names
+    has_illuminance = any(n in feature_names for n in ("illuminance", "illuminance_lux"))
+
+    # Pure contact sensor: has contact, no occupancy/presence/water_leak
+    if has_contact and not has_occupancy and not has_presence and not has_water_leak:
+        return "z2mContactSensor"
+
+    # Occupancy/presence sensor: has occupancy or presence, no contact
+    if (has_occupancy or has_presence) and not has_contact:
+        return "z2mOccupancySensor"
+
+    # Water leak sensor: has water_leak, no contact/occupancy
+    if has_water_leak and not has_contact and not has_occupancy and not has_presence:
+        return "z2mWaterLeakSensor"
+
+    # Environmental sensor: temperature/humidity/pressure/illuminance, no binary alarms
+    has_env = has_temp or has_humidity or has_pressure or has_illuminance
+    if has_env and not has_contact and not has_occupancy and not has_presence and not has_water_leak:
+        return "z2mTemperatureSensor"
+
+    # Default: generic catch-all (mixed capabilities or unknown)
     return "z2mSensor"
 
 
@@ -209,8 +238,50 @@ def _detect_light_capabilities(exposes):
     }
 
 
+def _detect_contact_sensor_capabilities(exposes):
+    """Return capability flags for a z2mContactSensor device."""
+    names = {feat.get("name") for feat in _iter_features(exposes)}
+    return {
+        "has_battery": "battery" in names,
+    }
+
+
+def _detect_occupancy_sensor_capabilities(exposes):
+    """Return capability flags for a z2mOccupancySensor device."""
+    names = {feat.get("name") for feat in _iter_features(exposes)}
+    return {
+        "has_battery":      "battery"      in names,
+        "has_pir":          "occupancy"    in names,
+        "has_presence":     "presence"     in names,
+        "has_illuminance":  any(n in names for n in ("illuminance", "illuminance_lux")),
+        "has_temperature":  "temperature"  in names,
+        "has_humidity":     "humidity"     in names,
+    }
+
+
+def _detect_water_leak_sensor_capabilities(exposes):
+    """Return capability flags for a z2mWaterLeakSensor device."""
+    names = {feat.get("name") for feat in _iter_features(exposes)}
+    return {
+        "has_battery":     "battery"     in names,
+        "has_temperature": "temperature" in names,  # some leak sensors also report temp
+    }
+
+
+def _detect_temperature_sensor_capabilities(exposes):
+    """Return capability flags for a z2mTemperatureSensor device."""
+    names = {feat.get("name") for feat in _iter_features(exposes)}
+    return {
+        "has_battery":     "battery"     in names,
+        "has_temperature": "temperature" in names,
+        "has_humidity":    "humidity"    in names,
+        "has_pressure":    "pressure"    in names,
+        "has_illuminance": any(n in names for n in ("illuminance", "illuminance_lux")),
+    }
+
+
 def _detect_sensor_capabilities(exposes):
-    """Return dict of sensor capability flags for a z2mSensor device."""
+    """Return capability flags for a generic z2mSensor device (catch-all)."""
     names = {feat.get("name") for feat in _iter_features(exposes)}
     return {
         "has_temperature":  "temperature"  in names,
@@ -250,6 +321,39 @@ def _build_capabilities_display(device_type_id, caps):
             parts.append("power (W)")
         if caps.get("has_energy"):
             parts.append("energy (kWh)")
+    elif device_type_id == "z2mContactSensor":
+        parts.append("contact (open/closed)")
+        if caps.get("has_battery"):
+            parts.append("battery")
+    elif device_type_id == "z2mOccupancySensor":
+        parts.append("occupancy/presence")
+        if caps.get("has_illuminance"):
+            parts.append("illuminance")
+        if caps.get("has_temperature"):
+            parts.append("temperature")
+        if caps.get("has_humidity"):
+            parts.append("humidity")
+        if caps.get("has_battery"):
+            parts.append("battery")
+    elif device_type_id == "z2mWaterLeakSensor":
+        parts.append("water leak")
+        if caps.get("has_temperature"):
+            parts.append("temperature")
+        if caps.get("has_battery"):
+            parts.append("battery")
+    elif device_type_id == "z2mTemperatureSensor":
+        if caps.get("has_temperature"):
+            parts.append("temperature")
+        if caps.get("has_humidity"):
+            parts.append("humidity")
+        if caps.get("has_pressure"):
+            parts.append("pressure")
+        if caps.get("has_illuminance"):
+            parts.append("illuminance")
+        if caps.get("has_battery"):
+            parts.append("battery")
+        if not parts:
+            parts.append("environmental sensor")
     elif device_type_id == "z2mSensor":
         if caps.get("has_temperature"):
             parts.append("temperature")
@@ -303,12 +407,23 @@ class Plugin(indigo.PluginBase):
         # Active Indigo devices: friendly_name -> indigo device id
         self.friendly_name_map = {}  # type: dict[str, int]
 
+        # Active Indigo devices: ieee_address -> indigo device id
+        # Used for O(1) rename detection when Z2M changes a friendly_name
+        self.ieee_map = {}  # type: dict[str, int]
+
+        # Tracks which non-primary prefixes have produced at least one MQTT message.
+        # Used for diagnostic logging — fires once per prefix per session.
+        self._seen_prefixes = set()  # type: set[str]
+
         if log_startup_banner:
-            log_startup_banner(pluginId, pluginDisplayName, pluginVersion,
-                               extras=[
-                                   ("MQTT Broker:", f"{MQTT_BROKER or '(not set)'}:{MQTT_PORT or 1883}"),
-                                   ("Topic Prefix:", pluginPrefs.get("mqtt_topic_prefix", "zigbee2mqtt")),
-               ])
+            _extras = [
+                ("MQTT Broker:", f"{MQTT_BROKER or '(not set)'}:{MQTT_PORT or 1883}"),
+                ("Topic Prefix:", pluginPrefs.get("mqtt_topic_prefix", "zigbee2mqtt")),
+            ]
+            _garage = pluginPrefs.get("mqtt_garage_topic_prefix", "").strip()
+            if _garage:
+                _extras.append(("Garage Prefix:", _garage))
+            log_startup_banner(pluginId, pluginDisplayName, pluginVersion, extras=_extras)
         else:
             indigo.server.log(f"{pluginDisplayName} v{pluginVersion} starting")
 
@@ -363,30 +478,146 @@ class Plugin(indigo.PluginBase):
             return
 
         self.friendly_name_map[fname] = dev.id
+        ieee = props.get("ieee_address", "")
+        if ieee:
+            self.ieee_map[ieee] = dev.id
 
         # Apply stored color/capability flags to Indigo device
         if dev.deviceTypeId == "z2mLight":
             self._apply_light_capabilities(dev)
 
+        # Ensure all custom states exist — guards against states added to Devices.xml
+        # after a device was originally created (avoids "state key not defined" errors)
+        self._ensure_device_states(dev)
+
         if self.debug:
             log(f"Started device: {dev.name} (type={dev.deviceTypeId}, name={fname})")
 
         # Request current state after brief delay (MQTT needs time to settle)
-        threading.Timer(STATE_REQUEST_DELAY, self._request_state, args=(fname, dev.deviceTypeId)).start()
+        prefix = self._device_prefix(dev)
+        threading.Timer(STATE_REQUEST_DELAY, self._request_state, args=(fname, dev.deviceTypeId, prefix)).start()
+
+    # Default custom states for every device type.
+    # Key   = state id as declared in Devices.xml
+    # Value = safe initial value (correct Python type for the ValueType)
+    # Native states (onOffState, brightnessLevel, sensorValue) are NOT listed —
+    # Indigo owns those and they're always present.
+    _DEVICE_STATE_DEFAULTS = {
+        "z2mLight": [
+            ("colorMode",    ""),
+            ("colorTemp",    0),
+            ("availability", ""),
+            ("linkQuality",  0),
+        ],
+        "z2mRelay": [
+            ("power",        0.0),
+            ("energy",       0.0),
+            ("availability", ""),
+            ("linkQuality",  0),
+        ],
+        "z2mContactSensor": [
+            ("contact",      False),
+            ("battery",      0),
+            ("availability", ""),
+            ("linkQuality",  0),
+        ],
+        "z2mOccupancySensor": [
+            ("motion",       False),
+            ("occupancy",    False),
+            ("presence",     False),
+            ("illuminance",  0.0),
+            ("temperature",  0.0),
+            ("humidity",     0.0),
+            ("battery",      0),
+            ("availability", ""),
+            ("linkQuality",  0),
+        ],
+        "z2mWaterLeakSensor": [
+            ("waterLeak",    False),
+            ("temperature",  0.0),
+            ("battery",      0),
+            ("availability", ""),
+            ("linkQuality",  0),
+        ],
+        "z2mTemperatureSensor": [
+            ("temperature",  0.0),
+            ("humidity",     0.0),
+            ("pressure",     0.0),
+            ("illuminance",  0.0),
+            ("battery",      0),
+            ("availability", ""),
+            ("linkQuality",  0),
+        ],
+        "z2mCover": [
+            ("coverState",   ""),
+            ("tiltAngle",    0),
+            ("availability", ""),
+            ("linkQuality",  0),
+        ],
+        "z2mSensor": [
+            ("temperature",  0.0),
+            ("humidity",     0.0),
+            ("contact",      False),
+            ("motion",       False),
+            ("waterLeak",    False),
+            ("battery",      0),
+            ("pressure",     0.0),
+            ("illuminance",  0.0),
+            ("availability", ""),
+            ("linkQuality",  0),
+        ],
+    }
+
+    def _ensure_device_states(self, dev):
+        """Initialise any custom states that don't yet exist on this device.
+
+        Guards against the 'state key not defined' race that occurs when states are
+        added to Devices.xml after a device was originally created.  Called for every
+        device at deviceStartComm time so the state slots always exist before any
+        MQTT payload arrives.
+        """
+        defaults = self._DEVICE_STATE_DEFAULTS.get(dev.deviceTypeId)
+        if not defaults:
+            return  # unknown or native-only type — nothing to do
+
+        existing = set(dev.states.keys())
+        missing  = [(k, v) for k, v in defaults if k not in existing]
+        if not missing:
+            return
+
+        log(f"{dev.name}: initialising {len(missing)} missing state(s): "
+            f"{[k for k, _ in missing]}")
+        for key, val in missing:
+            try:
+                dev.updateStateOnServer(key, val)
+            except Exception as e:
+                log(f"{dev.name}: could not initialise state '{key}': {e}",
+                    level="WARNING")
 
     def deviceStopComm(self, dev):
         fname = dev.pluginProps.get("friendly_name", "")
         self.friendly_name_map.pop(fname, None)
+        ieee = dev.pluginProps.get("ieee_address", "")
+        self.ieee_map.pop(ieee, None)
         if self.debug:
             log(f"Stopped device: {dev.name}")
 
     # ── Action handlers ───────────────────────────────────────────────────────
 
     def actionControlDevice(self, action, dev):
-        """Handle relay-class device actions (z2mRelay)."""
+        """Handle all plugin device actions.
+
+        In Indigo 2025.x all plugin device actions are routed through actionControlDevice
+        regardless of device class.  Forward dimmer-class devices (z2mLight, z2mCover) to
+        actionControlDimmer so their SetBrightness / SetColorLevels / etc. are handled.
+        """
+        if dev.deviceTypeId in ("z2mLight", "z2mCover"):
+            self.actionControlDimmer(action, dev)
+            return
+
         cmd    = action.deviceAction
         fname  = dev.pluginProps.get("friendly_name", "")
-        prefix = self._topic_prefix()
+        prefix = self._device_prefix(dev)
 
         if cmd == indigo.kDeviceAction.TurnOn:
             self._publish(f"{prefix}/{fname}/set", {"state": "ON"})
@@ -399,7 +630,7 @@ class Plugin(indigo.PluginBase):
             self._publish(f"{prefix}/{fname}/set", {"state": new_state})
             log(f'sent "{dev.name}" toggle -> {new_state.lower()}')
         elif cmd == indigo.kDeviceAction.RequestStatus:
-            self._request_state(fname, dev.deviceTypeId)
+            self._request_state(fname, dev.deviceTypeId, prefix)
             log(f'sent "{dev.name}" status request')
         else:
             log(f"Unhandled relay action {cmd} for {dev.name}", level="WARNING")
@@ -408,7 +639,7 @@ class Plugin(indigo.PluginBase):
         """Handle dimmer-class device actions (z2mLight and z2mCover)."""
         cmd    = action.deviceAction
         fname  = dev.pluginProps.get("friendly_name", "")
-        prefix = self._topic_prefix()
+        prefix = self._device_prefix(dev)
         is_cover = (dev.deviceTypeId == "z2mCover")
 
         if cmd == indigo.kDimmerRelayAction.TurnOn:
@@ -472,14 +703,13 @@ class Plugin(indigo.PluginBase):
                 log(f"{dev.name}: SetColorLevels not applicable to cover", level="WARNING")
                 return
             color_vals = action.actionValue
-            if "whiteTemperature" in color_vals and getattr(dev, "supportsWhiteTemperature", False):
+            if "whiteTemperature" in color_vals:
                 kelvin = int(color_vals["whiteTemperature"])
                 kelvin = max(1000, min(10000, kelvin))
                 mireds = _kelvin_to_mireds(kelvin)
                 self._publish(f"{prefix}/{fname}/set", {"color_temp": mireds, "state": "ON"})
                 log(f'sent "{dev.name}" set color temp to {kelvin}K')
-            elif (all(k in color_vals for k in ("redLevel", "greenLevel", "blueLevel"))
-                  and getattr(dev, "supportsColor", False)):
+            elif all(k in color_vals for k in ("redLevel", "greenLevel", "blueLevel")):
                 r = int(round(float(color_vals["redLevel"])   / 100.0 * 255))
                 g = int(round(float(color_vals["greenLevel"]) / 100.0 * 255))
                 b = int(round(float(color_vals["blueLevel"])  / 100.0 * 255))
@@ -492,11 +722,12 @@ class Plugin(indigo.PluginBase):
             log(f"Unhandled dimmer action {cmd} for {dev.name}", level="WARNING")
 
     def actionControlUniversalDevices(self, action, dev):
-        cmd   = action.deviceAction
-        fname = dev.pluginProps.get("friendly_name", "")
+        cmd    = action.deviceAction
+        fname  = dev.pluginProps.get("friendly_name", "")
+        prefix = self._device_prefix(dev)
 
         if cmd == indigo.kUniversalAction.RequestStatus:
-            self._request_state(fname, dev.deviceTypeId)
+            self._request_state(fname, dev.deviceTypeId, prefix)
         else:
             log(f"Unhandled universal action {cmd} for {dev.name}", level="WARNING")
 
@@ -504,7 +735,7 @@ class Plugin(indigo.PluginBase):
         """Action: set light color temperature in Kelvin."""
         if dev is None:
             dev = indigo.devices[action.deviceId]
-        if not dev.pluginProps.get("has_color_temp", False):
+        if not (dev.pluginProps.get("has_color_temp", False) or dev.supportsWhiteTemperature):
             log(f"{dev.name}: color temperature not supported", level="WARNING")
             return
         try:
@@ -514,7 +745,7 @@ class Plugin(indigo.PluginBase):
             log(f"{dev.name}: invalid kelvin value", level="ERROR")
             return
         fname  = dev.pluginProps.get("friendly_name", "")
-        prefix = self._topic_prefix()
+        prefix = self._device_prefix(dev)
         mireds = _kelvin_to_mireds(kelvin)
         self._publish(f"{prefix}/{fname}/set", {"color_temp": mireds, "state": "ON"})
         if self.debug:
@@ -530,7 +761,7 @@ class Plugin(indigo.PluginBase):
             log(f"{dev.name}: invalid brightness value", level="ERROR")
             return
         fname  = dev.pluginProps.get("friendly_name", "")
-        prefix = self._topic_prefix()
+        prefix = self._device_prefix(dev)
         if dev.deviceTypeId == "z2mCover":
             self._publish(f"{prefix}/{fname}/set", {"position": level})
             if self.debug:
@@ -552,7 +783,7 @@ class Plugin(indigo.PluginBase):
             log(f"{dev.name}: invalid position value", level="ERROR")
             return
         fname  = dev.pluginProps.get("friendly_name", "")
-        prefix = self._topic_prefix()
+        prefix = self._device_prefix(dev)
         self._publish(f"{prefix}/{fname}/set", {"position": position})
         if self.debug:
             log(f"{dev.name}: set cover position {position}%")
@@ -561,104 +792,141 @@ class Plugin(indigo.PluginBase):
         """Action: request current state from device."""
         if dev is None:
             dev = indigo.devices[action.deviceId]
-        fname = dev.pluginProps.get("friendly_name", "")
-        self._request_state(fname, dev.deviceTypeId)
+        fname  = dev.pluginProps.get("friendly_name", "")
+        prefix = self._device_prefix(dev)
+        self._request_state(fname, dev.deviceTypeId, prefix)
 
     # ── Menu callbacks ────────────────────────────────────────────────────────
 
-    def discover_create_devices(self, valuesDict=None, typeId=None):
-        """
-        Scan the bridge device cache and auto-create Indigo devices for every
-        zigbee2mqtt device not already in Indigo.  All devices land in the
-        "Zigbee2MQTT" device folder (created if absent).
-        """
-        if not self.bridge_devices:
-            log("No bridge device data yet. "
-                "Wait for MQTT connection then use Refresh Device List, or wait ~10s.", level="WARNING")
-            return
+    def _rename_z2m_device(self, dev, old_fname, new_fname):
+        """Rename an Indigo device to match a Z2M friendly_name change.
 
-        folder_id = self._ensure_device_folder(DEVICE_FOLDER_NAME)
+        Updates the Indigo device name, the friendly_name plugin prop, and both
+        in-memory lookup maps so future MQTT messages route correctly.
+        """
+        try:
+            new_props = dict(dev.pluginProps)
+            new_props["friendly_name"] = new_fname
+            dev.replacePluginPropsOnServer(new_props)
+            dev.name = new_fname
+            dev.replaceOnServer()
+            self.friendly_name_map.pop(old_fname, None)
+            self.friendly_name_map[new_fname] = dev.id
+            log(f"Device renamed: '{old_fname}' -> '{new_fname}'")
+        except Exception as e:
+            log(f"Error renaming '{old_fname}' -> '{new_fname}': {e}", level="ERROR")
 
-        # Build set of friendly_names already owned by this plugin
-        existing_names = set()
+    def _get_existing_friendly_names(self):
+        """Return a set of friendly_names for all active devices owned by this plugin."""
+        names = set()
         for dev in indigo.devices.iter(self.pluginId):
             fn = dev.pluginProps.get("friendly_name", "")
             if fn:
-                existing_names.add(fn)
+                names.add(fn)
+        return names
 
-        created = skipped_exists = skipped_coord = skipped_no_def = errors = 0
+    def _try_create_device(self, device_data, folder_id, existing_names):
+        """Attempt to create a single Indigo device from Z2M device_data.
 
-        for ieee, device_data in self.bridge_devices.items():
-            fname   = device_data.get("friendly_name", "")
-            d_type  = device_data.get("type", "")
+        Returns one of: 'created', 'exists', 'coordinator', 'no_definition', 'error'.
+        existing_names is updated in-place when a device is successfully created.
+        """
+        fname  = device_data.get("friendly_name", "")
+        d_type = device_data.get("type", "")
 
-            # Skip coordinator
-            if d_type == "Coordinator":
-                skipped_coord += 1
-                continue
+        if d_type == "Coordinator":
+            return "coordinator"
+        if fname in existing_names:
+            return "exists"
 
-            # Skip already existing
-            if fname in existing_names:
-                skipped_exists += 1
-                if self.debug:
-                    log(f"  skip (exists): {fname}")
-                continue
+        definition = device_data.get("definition")
+        if definition is None:
+            log(f"  skip (not yet interviewed by z2m): {fname}", level="WARNING")
+            return "no_definition"
 
-            # Skip uninterviewed devices (definition is null)
-            definition = device_data.get("definition")
-            if definition is None:
-                log(f"  skip (not yet interviewed by z2m): {fname}", level="WARNING")
-                skipped_no_def += 1
-                continue
+        exposes        = definition.get("exposes", [])
+        device_type_id = _detect_device_type(exposes)
+        plugin_props   = self._build_plugin_props(device_type_id, device_data, definition, exposes)
+        plugin_props["mqtt_prefix"] = device_data.get("_mqtt_prefix", self._topic_prefix())
 
-            exposes = definition.get("exposes", [])
-            device_type_id = _detect_device_type(exposes)
-            plugin_props   = self._build_plugin_props(device_type_id, device_data, definition, exposes)
+        try:
+            new_dev = indigo.device.create(
+                protocol=indigo.kProtocol.Plugin,
+                name=fname,
+                pluginId=self.pluginId,
+                deviceTypeId=device_type_id,
+                folder=folder_id,
+                props=plugin_props,
+            )
+            vendor = definition.get("vendor", "")
+            model  = definition.get("model", "")
+            log(f"  created {device_type_id}: '{new_dev.name}'"
+                + (f" ({vendor} {model})" if vendor or model else ""))
+            existing_names.add(fname)  # prevent duplicate creation within same pass
+            return "created"
+        except Exception as e:
+            log(f"  error creating '{fname}': {e}", level="ERROR")
+            return "error"
 
-            try:
-                new_dev = indigo.device.create(
-                    protocol=indigo.kProtocol.Plugin,
-                    name=fname,
-                    pluginId=self.pluginId,
-                    deviceTypeId=device_type_id,
-                    folder=folder_id,
-                    props=plugin_props,
-                )
-                vendor = definition.get("vendor", "")
-                model  = definition.get("model", "")
-                log(f"  created {device_type_id}: '{new_dev.name}'"
-                    + (f" ({vendor} {model})" if vendor or model else ""))
-                created += 1
-            except Exception as e:
-                log(f"  error creating '{fname}': {e}", level="ERROR")
-                errors += 1
+    def discover_create_devices(self, valuesDict=None, typeId=None):
+        """Scan the bridge device cache and create an Indigo device for every
+        Z2M device not already in Indigo.  All devices land in the
+        'Zigbee2MQTT' device folder (created if absent).
+        """
+        if not self.bridge_devices:
+            log("No bridge device data yet. "
+                "Wait for MQTT connection then use Refresh Device List, or wait ~10s.",
+                level="WARNING")
+            return
 
-        parts = [f"{created} created", f"{skipped_exists} already existed"]
-        if skipped_coord:
-            parts.append(f"{skipped_coord} coordinator(s) skipped")
-        if skipped_no_def:
-            parts.append(f"{skipped_no_def} uninterviewed device(s) skipped")
-        if errors:
-            parts.append(f"{errors} error(s)")
+        folder_id      = self._ensure_device_folder(DEVICE_FOLDER_NAME)
+        existing_names = self._get_existing_friendly_names()
+
+        counts = {"created": 0, "exists": 0, "coordinator": 0,
+                  "no_definition": 0, "error": 0}
+        for device_data in self.bridge_devices.values():
+            result = self._try_create_device(device_data, folder_id, existing_names)
+            counts[result] += 1
+            if result == "exists" and self.debug:
+                log(f"  skip (exists): {device_data.get('friendly_name', '?')}")
+
+        parts = [f"{counts['created']} created",
+                 f"{counts['exists']} already existed"]
+        if counts["coordinator"]:
+            parts.append(f"{counts['coordinator']} coordinator(s) skipped")
+        if counts["no_definition"]:
+            parts.append(f"{counts['no_definition']} uninterviewed device(s) skipped")
+        if counts["error"]:
+            parts.append(f"{counts['error']} error(s)")
         log(f"Discover & Create complete: {', '.join(parts)}")
 
     def refresh_bridge_devices(self, valuesDict=None, typeId=None):
         """Menu item: republish a get request for bridge/devices."""
         prefix = self._topic_prefix()
         self._publish(f"{prefix}/bridge/request/devices", {})
-        log("Requested device list refresh from MQTT bridge")
+        garage = self._garage_prefix()
+        if garage:
+            self._publish(f"{garage}/bridge/request/devices", {})
+        log("Requested device list refresh from MQTT bridge"
+            + (f" (+ garage: {garage})" if garage else ""))
 
     def showPluginInfo(self, valuesDict=None, typeId=None):
         z2m_count = sum(1 for _ in indigo.devices.iter(self.pluginId))
         if log_startup_banner:
+            _extras = [
+                ("MQTT Broker:", f"{self._effective_broker()}:{self._effective_port()}"),
+                ("Topic Prefix:", self._topic_prefix()),
+            ]
+            _garage = self._garage_prefix()
+            if _garage:
+                _extras.append(("Garage Prefix:", _garage))
+            _extras += [
+                ("MQTT Status:", "connected" if self.mqtt_connected else "disconnected"),
+                ("Bridge Devices Cached:", str(len(self.bridge_devices))),
+                ("Z2M Indigo Devices:", str(z2m_count)),
+            ]
             log_startup_banner(self.pluginId, self.pluginDisplayName, self.pluginVersion,
-                               extras=[
-                                   ("MQTT Broker:", f"{self._effective_broker()}:{self._effective_port()}"),
-                                   ("Topic Prefix:", self._topic_prefix()),
-                                   ("MQTT Status:", "connected" if self.mqtt_connected else "disconnected"),
-                                   ("Bridge Devices Cached:", str(len(self.bridge_devices))),
-                                   ("Z2M Indigo Devices:", str(z2m_count)),
-                               ])
+                               extras=_extras)
         else:
             indigo.server.log(f"{self.pluginDisplayName} v{self.pluginVersion}")
 
@@ -672,6 +940,15 @@ class Plugin(indigo.PluginBase):
 
     def _topic_prefix(self):
         return self.pluginPrefs.get("mqtt_topic_prefix", "zigbee2mqtt").strip()
+
+    def _garage_prefix(self):
+        """Return the optional garage Z2M topic prefix, or None if not configured."""
+        p = self.pluginPrefs.get("mqtt_garage_topic_prefix", "").strip()
+        return p if p else None
+
+    def _device_prefix(self, dev):
+        """Return the MQTT topic prefix for a device (stored per-device, falls back to primary)."""
+        return dev.pluginProps.get("mqtt_prefix", self._topic_prefix())
 
     def _start_mqtt(self):
         if mqtt is None:
@@ -727,9 +1004,10 @@ class Plugin(indigo.PluginBase):
             except Exception as e:
                 log(f"MQTT publish error on {topic}: {e}", level="ERROR")
 
-    def _request_state(self, friendly_name, device_type_id="z2mSensor"):
+    def _request_state(self, friendly_name, device_type_id="z2mSensor", prefix=None):
         """Ask zigbee2mqtt to publish the current state for a device."""
-        prefix = self._topic_prefix()
+        if prefix is None:
+            prefix = self._topic_prefix()
         if device_type_id == "z2mLight":
             payload = {"state": "", "brightness": "", "color_temp": "", "color": "", "color_mode": ""}
         else:
@@ -743,6 +1021,12 @@ class Plugin(indigo.PluginBase):
             self.mqtt_connected = True
             prefix = self._topic_prefix()
             client.subscribe(f"{prefix}/#", qos=1)
+            subscribed = [f"{prefix}/#"]
+            garage = self._garage_prefix()
+            if garage:
+                client.subscribe(f"{garage}/#", qos=1)
+                subscribed.append(f"{garage}/#")
+            log(f"MQTT subscribed to: {', '.join(subscribed)}")
             self.msg_queue.put(("__connected__", {}))
         else:
             rc_labels = {
@@ -772,6 +1056,15 @@ class Plugin(indigo.PluginBase):
         # Internal control messages
         if topic == "__connected__":
             log(f"MQTT connected to {self._effective_broker()}:{self._effective_port()}")
+            # Actively request bridge/devices from every configured prefix.
+            # Retained messages alone are unreliable — the garage Z2M may not have
+            # published since broker restart, or retain may be disabled.
+            prefix = self._topic_prefix()
+            self._publish(f"{prefix}/bridge/request/devices", {})
+            garage = self._garage_prefix()
+            if garage:
+                self._publish(f"{garage}/bridge/request/devices", {})
+                log(f"Requested device list from garage bridge: {garage}/bridge/request/devices")
             return
         if topic == "__disconnected__":
             rc = payload.get("rc", "?")
@@ -784,18 +1077,30 @@ class Plugin(indigo.PluginBase):
             log(payload.get("msg", "MQTT error"), level="ERROR")
             return
 
-        prefix = self._topic_prefix()
         parts  = topic.split("/")
-        if not parts or parts[0] != prefix:
+        if not parts or len(parts) < 2:
             return
 
-        if len(parts) < 2:
+        # Determine which prefix this message belongs to
+        primary = self._topic_prefix()
+        garage  = self._garage_prefix()
+        if parts[0] == primary:
+            effective_prefix = primary
+        elif garage and parts[0] == garage:
+            effective_prefix = garage
+        else:
             return
+
+        # First-message diagnostic for non-primary prefixes
+        if effective_prefix != primary and effective_prefix not in self._seen_prefixes:
+            self._seen_prefixes.add(effective_prefix)
+            log(f"First MQTT message received from prefix '{effective_prefix}' — "
+                f"topic: {topic}")
 
         # Bridge topics: prefix/bridge/...
         if parts[1] == "bridge":
             if len(parts) >= 3 and parts[2] == "devices":
-                self._process_bridge_devices(payload)
+                self._process_bridge_devices(payload, effective_prefix)
             return
 
         # Availability: last path component is "availability"
@@ -809,22 +1114,70 @@ class Plugin(indigo.PluginBase):
         fname = "/".join(parts[1:])
         self._process_device_state(fname, payload)
 
-    def _process_bridge_devices(self, payload):
-        """Cache ALL non-coordinator, non-disabled zigbee2mqtt devices."""
+    def _process_bridge_devices(self, payload, prefix=None):
+        """Cache ALL non-coordinator, non-disabled zigbee2mqtt devices.
+
+        After updating the cache, auto-creates any device that is genuinely new
+        (i.e. its IEEE address was not present for this prefix before this update).
+        The startup flood is avoided by only acting when the cache already held
+        entries for this prefix — meaning we have a baseline to compare against.
+        """
         if not isinstance(payload, list):
             return
+        if prefix is None:
+            prefix = self._topic_prefix()
+
+        # Snapshot IEEE addresses known for this prefix before the update
+        old_ieee = {ieee for ieee, d in self.bridge_devices.items()
+                    if d.get("_mqtt_prefix") == prefix}
+
         old_count = len(self.bridge_devices)
-        self.bridge_devices = {}
+        # Preserve entries from the other prefix; replace only entries for this prefix
+        new_cache = {ieee: d for ieee, d in self.bridge_devices.items()
+                     if d.get("_mqtt_prefix") != prefix}
         for d in payload:
             ieee = d.get("ieee_address", "")
             if not ieee or d.get("disabled", False):
                 continue
             if d.get("type") == "Coordinator":
                 continue
-            self.bridge_devices[ieee] = d
+            entry = dict(d)
+            entry["_mqtt_prefix"] = prefix
+            new_cache[ieee] = entry
+        self.bridge_devices = new_cache
         count = len(self.bridge_devices)
         if self.debug or count != old_count:
-            log(f"Bridge device cache updated: {count} device(s)")
+            label = f" [{prefix}]" if prefix != self._topic_prefix() else ""
+            log(f"Bridge device cache updated{label}: {count} device(s) total")
+
+        # Detect friendly_name renames: same IEEE address, different friendly_name.
+        # Uses ieee_map for O(1) lookup — no full Indigo device iteration needed.
+        for ieee, data in new_cache.items():
+            if data.get("_mqtt_prefix") != prefix:
+                continue
+            dev_id = self.ieee_map.get(ieee)
+            if dev_id is None:
+                continue
+            try:
+                dev = indigo.devices[dev_id]
+            except KeyError:
+                continue
+            new_fname = data.get("friendly_name", "")
+            old_fname = dev.pluginProps.get("friendly_name", "")
+            if new_fname and old_fname and new_fname != old_fname:
+                self._rename_z2m_device(dev, old_fname, new_fname)
+
+        # Auto-create devices that are brand new to this prefix.
+        # Guard: old_ieee must be non-empty so we skip the initial startup load.
+        if old_ieee:
+            new_ieee = {ieee for ieee in new_cache
+                        if new_cache[ieee].get("_mqtt_prefix") == prefix
+                        and ieee not in old_ieee}
+            if new_ieee:
+                folder_id      = self._ensure_device_folder(DEVICE_FOLDER_NAME)
+                existing_names = self._get_existing_friendly_names()
+                for ieee in new_ieee:
+                    self._try_create_device(new_cache[ieee], folder_id, existing_names)
 
     def _process_availability(self, friendly_name, payload):
         """Handle availability message — update the 'availability' state."""
@@ -857,6 +1210,14 @@ class Plugin(indigo.PluginBase):
             self._process_light_state(dev, payload)
         elif type_id == "z2mRelay":
             self._process_relay_state(dev, payload)
+        elif type_id == "z2mContactSensor":
+            self._process_contact_sensor_state(dev, payload)
+        elif type_id == "z2mOccupancySensor":
+            self._process_occupancy_sensor_state(dev, payload)
+        elif type_id == "z2mWaterLeakSensor":
+            self._process_water_leak_sensor_state(dev, payload)
+        elif type_id == "z2mTemperatureSensor":
+            self._process_temperature_sensor_state(dev, payload)
         elif type_id == "z2mSensor":
             self._process_sensor_state(dev, payload)
         elif type_id == "z2mCover":
@@ -930,6 +1291,197 @@ class Plugin(indigo.PluginBase):
         if "linkquality" in payload:
             lq = int(payload["linkquality"])
             updates.append(("linkQuality", lq, f"{lq} / 255"))
+
+        self._apply_updates(dev, updates)
+
+    def _process_contact_sensor_state(self, dev, payload):
+        """Update z2mContactSensor device states from MQTT payload.
+
+        contact=True  → door/window closed → onOffState=False  (sensor at rest)
+        contact=False → door/window open   → onOffState=True   (sensor triggered)
+        """
+        updates = []
+
+        if "contact" in payload:
+            val     = bool(payload["contact"])
+            is_open = not val
+            updates.append(("contact",    val))
+            updates.append(("onOffState", is_open, "Open" if is_open else "Closed"))
+
+        if "battery" in payload:
+            try:
+                bat = int(payload["battery"])
+                updates.append(("battery", bat, f"{bat} %"))
+            except (ValueError, TypeError):
+                pass
+
+        if "linkquality" in payload:
+            try:
+                lq = int(payload["linkquality"])
+                updates.append(("linkQuality", lq, f"{lq} / 255"))
+            except (ValueError, TypeError):
+                pass
+
+        self._apply_updates(dev, updates)
+
+    def _process_occupancy_sensor_state(self, dev, payload):
+        """Update z2mOccupancySensor device states from MQTT payload.
+
+        Both 'occupancy' (PIR) and 'presence' (mmWave) map to onOffState.
+        Either being True sets onOffState=True so a fast PIR trigger is not lost.
+        """
+        updates = []
+
+        occ_raw  = payload.get("occupancy")
+        pres_raw = payload.get("presence")
+        if occ_raw is not None:
+            occ_bool = bool(occ_raw)
+            updates.append(("occupancy", occ_bool, "Detected" if occ_bool else "Clear"))
+        if pres_raw is not None:
+            pres_bool = bool(pres_raw)
+            updates.append(("presence",  pres_bool, "Detected" if pres_bool else "Clear"))
+        if occ_raw is not None or pres_raw is not None:
+            detected = bool(occ_raw) or bool(pres_raw)
+            updates.append(("motion",     detected))
+            updates.append(("onOffState", detected, "Detected" if detected else "Clear"))
+
+        # Self-heal capability flags if payload contains data the stored flags deny.
+        # This corrects devices created when exposes data was incomplete.
+        props = dev.ownerProps
+        heal = {}
+        if occ_raw  is not None and not props.get("has_pir",      False):
+            heal["has_pir"]      = True
+        if pres_raw is not None and not props.get("has_presence", False):
+            heal["has_presence"] = True
+        if heal:
+            new_props = dict(props)
+            new_props.update(heal)
+            dev.replacePluginPropsOnServer(new_props)
+            log(f"{dev.name}: corrected capability flags: {heal}")
+
+        if "illuminance_lux" in payload or "illuminance" in payload:
+            try:
+                raw = payload.get("illuminance_lux", payload.get("illuminance"))
+                illum = round(float(raw), 1)
+                updates.append(("illuminance", illum, f"{illum} lux"))
+            except (ValueError, TypeError):
+                pass
+
+        if "temperature" in payload:
+            try:
+                temp = round(float(payload["temperature"]), 1)
+                updates.append(("temperature", temp, f"{temp} C"))
+            except (ValueError, TypeError):
+                pass
+
+        if "humidity" in payload:
+            try:
+                hum = round(float(payload["humidity"]), 1)
+                updates.append(("humidity", hum, f"{hum} %"))
+            except (ValueError, TypeError):
+                pass
+
+        if "battery" in payload:
+            try:
+                bat = int(payload["battery"])
+                updates.append(("battery", bat, f"{bat} %"))
+            except (ValueError, TypeError):
+                pass
+
+        if "linkquality" in payload:
+            try:
+                lq = int(payload["linkquality"])
+                updates.append(("linkQuality", lq, f"{lq} / 255"))
+            except (ValueError, TypeError):
+                pass
+
+        self._apply_updates(dev, updates)
+
+    def _process_water_leak_sensor_state(self, dev, payload):
+        """Update z2mWaterLeakSensor device states from MQTT payload.
+
+        water_leak=True  → leak detected → onOffState=True
+        water_leak=False → all clear     → onOffState=False
+        """
+        updates = []
+
+        if "water_leak" in payload:
+            leak = bool(payload["water_leak"])
+            updates.append(("waterLeak",   leak))
+            updates.append(("onOffState",  leak, "Leak!" if leak else "OK"))
+
+        if "temperature" in payload:
+            try:
+                temp = round(float(payload["temperature"]), 1)
+                updates.append(("temperature", temp, f"{temp} C"))
+            except (ValueError, TypeError):
+                pass
+
+        if "battery" in payload:
+            try:
+                bat = int(payload["battery"])
+                updates.append(("battery", bat, f"{bat} %"))
+            except (ValueError, TypeError):
+                pass
+
+        if "linkquality" in payload:
+            try:
+                lq = int(payload["linkquality"])
+                updates.append(("linkQuality", lq, f"{lq} / 255"))
+            except (ValueError, TypeError):
+                pass
+
+        self._apply_updates(dev, updates)
+
+    def _process_temperature_sensor_state(self, dev, payload):
+        """Update z2mTemperatureSensor device states from MQTT payload.
+
+        Environmental sensor — no binary alarm state; onOffState is not used.
+        """
+        updates = []
+
+        if "temperature" in payload:
+            try:
+                temp = round(float(payload["temperature"]), 1)
+                updates.append(("temperature", temp, f"{temp} C"))
+            except (ValueError, TypeError):
+                pass
+
+        if "humidity" in payload:
+            try:
+                hum = round(float(payload["humidity"]), 1)
+                updates.append(("humidity", hum, f"{hum} %"))
+            except (ValueError, TypeError):
+                pass
+
+        if "pressure" in payload:
+            try:
+                pres = round(float(payload["pressure"]), 1)
+                updates.append(("pressure", pres, f"{pres} hPa"))
+            except (ValueError, TypeError):
+                pass
+
+        if "illuminance_lux" in payload or "illuminance" in payload:
+            try:
+                raw   = payload.get("illuminance_lux", payload.get("illuminance"))
+                illum = round(float(raw), 1)
+                updates.append(("illuminance", illum, f"{illum} lux"))
+            except (ValueError, TypeError):
+                pass
+
+        if "battery" in payload:
+            try:
+                bat = int(payload["battery"])
+                updates.append(("battery", bat, f"{bat} %"))
+            except (ValueError, TypeError):
+                pass
+
+        if "linkquality" in payload:
+            try:
+                lq = int(payload["linkquality"])
+                updates.append(("linkQuality", lq, f"{lq} / 255"))
+            except (ValueError, TypeError):
+                pass
 
         self._apply_updates(dev, updates)
 
@@ -1009,12 +1561,13 @@ class Plugin(indigo.PluginBase):
 
         # Assign onOffState: priority waterLeak > occupancy/presence > contact
         if water_leak is not None:
-            updates.append(("onOffState", water_leak))
+            updates.append(("onOffState", water_leak, "Leak!" if water_leak else "OK"))
         elif occupancy is not None:
-            updates.append(("onOffState", occupancy))
+            updates.append(("onOffState", occupancy, "Detected" if occupancy else "Clear"))
         elif contact is not None:
             # contact=False means open (door/window open) -> sensor triggered -> onOffState=True
-            updates.append(("onOffState", not contact))
+            is_open = not contact
+            updates.append(("onOffState", is_open, "Open" if is_open else "Closed"))
 
         self._apply_updates(dev, updates)
 
@@ -1026,9 +1579,9 @@ class Plugin(indigo.PluginBase):
             state_str = str(payload["state"]).upper()
             updates.append(("coverState", state_str.lower(), state_str.capitalize()))
             if state_str == "OPEN":
-                updates.append(("onOffState", True))
+                updates.append(("onOffState", True, "Open"))
             elif state_str in ("CLOSE", "CLOSED"):
-                updates.append(("onOffState", False))
+                updates.append(("onOffState", False, "Closed"))
             # STOP: leave onOffState unchanged
 
         if "position" in payload:
@@ -1038,7 +1591,8 @@ class Plugin(indigo.PluginBase):
                 updates.append(("brightnessLevel", pos))
                 # Sync onOffState with position if no explicit state key in this payload
                 if "state" not in payload:
-                    updates.append(("onOffState", pos > 0))
+                    is_open = pos > 0
+                    updates.append(("onOffState", is_open, "Open" if is_open else "Closed"))
             except (ValueError, TypeError):
                 pass
 
@@ -1102,6 +1656,22 @@ class Plugin(indigo.PluginBase):
             props["SupportsWhiteTemperature"] = caps["has_color_temp"]
             props["SupportsRGB"]              = caps["has_color"]
 
+        elif device_type_id == "z2mContactSensor":
+            caps = _detect_contact_sensor_capabilities(exposes)
+            props.update(caps)
+
+        elif device_type_id == "z2mOccupancySensor":
+            caps = _detect_occupancy_sensor_capabilities(exposes)
+            props.update(caps)
+
+        elif device_type_id == "z2mWaterLeakSensor":
+            caps = _detect_water_leak_sensor_capabilities(exposes)
+            props.update(caps)
+
+        elif device_type_id == "z2mTemperatureSensor":
+            caps = _detect_temperature_sensor_capabilities(exposes)
+            props.update(caps)
+
         elif device_type_id == "z2mSensor":
             caps = _detect_sensor_capabilities(exposes)
             props.update(caps)
@@ -1129,12 +1699,21 @@ class Plugin(indigo.PluginBase):
         has_col = props.get("has_color",      False)
         has_ct  = props.get("has_color_temp", False)
 
-        new_props = dict(props)
-        new_props["SupportsColor"]            = has_col
-        new_props["SupportsWhiteTemperature"] = has_ct
-        new_props["SupportsRGB"]              = has_col
+        # If both flags are absent pluginProps is likely empty/unreadable — skip to
+        # avoid clobbering existing capability flags with False values.
+        if not has_col and not has_ct:
+            return
 
-        if (new_props.get("SupportsColor")            != props.get("SupportsColor") or
-                new_props.get("SupportsWhiteTemperature") != props.get("SupportsWhiteTemperature") or
-                new_props.get("SupportsRGB")              != props.get("SupportsRGB")):
-            dev.replacePluginPropsOnServer(new_props)
+        new_props = dict(props)
+        # SupportsColor is the top-level flag — required as a prerequisite for both
+        # SupportsRGB and SupportsWhite. Must be True for any lamp with colour or CT.
+        new_props["SupportsColor"]            = has_col or has_ct
+        new_props["SupportsRGB"]              = has_col
+        # SupportsWhite must be True for SupportsWhiteTemperature to take effect
+        # (Indigo silently ignores SupportsWhiteTemperature if SupportsWhite is False)
+        new_props["SupportsWhite"]            = has_ct
+        new_props["SupportsWhiteTemperature"] = has_ct
+
+        # Always call replacePluginPropsOnServer when capability data is present.
+        # Indigo only propagates native attributes to the device via this call.
+        dev.replacePluginPropsOnServer(new_props)
