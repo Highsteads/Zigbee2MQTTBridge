@@ -6,8 +6,8 @@
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Sonnet 4.6
-# Date:        11-04-2026
-# Version:     1.3
+# Date:        13-04-2026
+# Version:     1.4
 
 import colorsys
 import json
@@ -150,14 +150,23 @@ def _iter_features(exposes):
             yield from _iter_features(sub)
 
 
-def _detect_device_type(exposes):
+def _detect_device_type(exposes, model=""):
     """
     Determine the best Indigo device type for a zigbee2mqtt device from its
-    exposes list.  Priority: Light > Cover > Relay > Sensor (default).
+    exposes list.  Priority: Repeater > Light > Cover > Relay > Sensor (default).
 
     Returns one of: "z2mLight", "z2mRelay", "z2mContactSensor", "z2mOccupancySensor",
-                    "z2mWaterLeakSensor", "z2mTemperatureSensor", "z2mSensor", "z2mCover"
+                    "z2mWaterLeakSensor", "z2mTemperatureSensor", "z2mSensor",
+                    "z2mCover", "z2mRepeater"
     """
+    # Repeater: only has linkquality in exposes and/or model name indicates repeater
+    if model and "repeater" in model.lower():
+        return "z2mRepeater"
+    if exposes:
+        feature_names = {feat.get("name") for feat in _iter_features(exposes)}
+        if feature_names <= {"linkquality", "link_quality"} or not feature_names:
+            return "z2mRepeater"
+
     if not exposes:
         return "z2mSensor"
 
@@ -373,6 +382,8 @@ def _build_capabilities_display(device_type_id, caps):
             parts.append("battery")
         if not parts:
             parts.append("generic sensor")
+    elif device_type_id == "z2mRepeater":
+        parts.append("repeater / router")
     elif device_type_id == "z2mCover":
         parts.append("position (0-100)")
         if caps.get("has_tilt"):
@@ -563,6 +574,10 @@ class Plugin(indigo.PluginBase):
             ("battery",      0),
             ("pressure",     0.0),
             ("illuminance",  0.0),
+            ("availability", ""),
+            ("linkQuality",  0),
+        ],
+        "z2mRepeater": [
             ("availability", ""),
             ("linkQuality",  0),
         ],
@@ -798,24 +813,6 @@ class Plugin(indigo.PluginBase):
 
     # ── Menu callbacks ────────────────────────────────────────────────────────
 
-    def _rename_z2m_device(self, dev, old_fname, new_fname):
-        """Rename an Indigo device to match a Z2M friendly_name change.
-
-        Updates the Indigo device name, the friendly_name plugin prop, and both
-        in-memory lookup maps so future MQTT messages route correctly.
-        """
-        try:
-            new_props = dict(dev.pluginProps)
-            new_props["friendly_name"] = new_fname
-            dev.replacePluginPropsOnServer(new_props)
-            dev.name = new_fname
-            dev.replaceOnServer()
-            self.friendly_name_map.pop(old_fname, None)
-            self.friendly_name_map[new_fname] = dev.id
-            log(f"Device renamed: '{old_fname}' -> '{new_fname}'")
-        except Exception as e:
-            log(f"Error renaming '{old_fname}' -> '{new_fname}': {e}", level="ERROR")
-
     def _get_existing_friendly_names(self):
         """Return a set of friendly_names for all active devices owned by this plugin."""
         names = set()
@@ -845,7 +842,7 @@ class Plugin(indigo.PluginBase):
             return "no_definition"
 
         exposes        = definition.get("exposes", [])
-        device_type_id = _detect_device_type(exposes)
+        device_type_id = _detect_device_type(exposes, model=definition.get("model", ""))
         plugin_props   = self._build_plugin_props(device_type_id, device_data, definition, exposes)
         plugin_props["mqtt_prefix"] = device_data.get("_mqtt_prefix", self._topic_prefix())
 
@@ -1150,7 +1147,7 @@ class Plugin(indigo.PluginBase):
             label = f" [{prefix}]" if prefix != self._topic_prefix() else ""
             log(f"Bridge device cache updated{label}: {count} device(s) total")
 
-        # Detect friendly_name renames: same IEEE address, different friendly_name.
+        # Detect friendly_name renames and prefix migrations for existing devices.
         # Uses ieee_map for O(1) lookup — no full Indigo device iteration needed.
         for ieee, data in new_cache.items():
             if data.get("_mqtt_prefix") != prefix:
@@ -1162,10 +1159,35 @@ class Plugin(indigo.PluginBase):
                 dev = indigo.devices[dev_id]
             except KeyError:
                 continue
-            new_fname = data.get("friendly_name", "")
-            old_fname = dev.pluginProps.get("friendly_name", "")
-            if new_fname and old_fname and new_fname != old_fname:
-                self._rename_z2m_device(dev, old_fname, new_fname)
+            new_fname      = data.get("friendly_name", "")
+            old_fname      = dev.pluginProps.get("friendly_name", "")
+            stored_prefix  = dev.pluginProps.get("mqtt_prefix", self._topic_prefix())
+            prefix_changed = stored_prefix != prefix
+            name_changed   = new_fname and old_fname and new_fname != old_fname
+
+            if prefix_changed or name_changed:
+                try:
+                    new_props = dict(dev.pluginProps)
+                    if prefix_changed:
+                        new_props["mqtt_prefix"] = prefix
+                    if name_changed:
+                        new_props["friendly_name"] = new_fname
+                    dev.replacePluginPropsOnServer(new_props)
+                    if name_changed:
+                        dev.name = new_fname
+                        dev.replaceOnServer()
+                        self.friendly_name_map.pop(old_fname, None)
+                        self.friendly_name_map[new_fname] = dev.id
+                    if prefix_changed and name_changed:
+                        log(f"Device moved+renamed: '{old_fname}' -> '{new_fname}' "
+                            f"(prefix: {stored_prefix} -> {prefix})")
+                    elif prefix_changed:
+                        log(f"Device moved: '{new_fname}' "
+                            f"(prefix: {stored_prefix} -> {prefix})")
+                    else:
+                        log(f"Device renamed: '{old_fname}' -> '{new_fname}'")
+                except Exception as e:
+                    log(f"Error updating device '{old_fname}': {e}", level="ERROR")
 
         # Auto-create devices that are brand new to this prefix.
         # Guard: old_ieee must be non-empty so we skip the initial startup load.
@@ -1188,6 +1210,16 @@ class Plugin(indigo.PluginBase):
             dev   = indigo.devices[dev_id]
             state = payload.get("state", "offline") if isinstance(payload, dict) else str(payload)
             dev.updateStateOnServer("availability", state, uiValue=state.capitalize())
+
+            # For z2mRepeater devices mirror availability into onOffState so the
+            # device list shows Online/Offline instead of the relay default On/Off.
+            if dev.deviceTypeId == "z2mRepeater":
+                is_online = (state == "online")
+                dev.updateStateOnServer(
+                    "onOffState", is_online,
+                    uiValue="Online" if is_online else "Offline"
+                )
+
             if self.debug:
                 log(f"{dev.name}: availability = {state}")
         except Exception as e:
@@ -1220,6 +1252,8 @@ class Plugin(indigo.PluginBase):
             self._process_temperature_sensor_state(dev, payload)
         elif type_id == "z2mSensor":
             self._process_sensor_state(dev, payload)
+        elif type_id == "z2mRepeater":
+            self._process_repeater_state(dev, payload)
         elif type_id == "z2mCover":
             self._process_cover_state(dev, payload)
 
@@ -1571,6 +1605,21 @@ class Plugin(indigo.PluginBase):
 
         self._apply_updates(dev, updates)
 
+    def _process_repeater_state(self, dev, payload):
+        """Update z2mRepeater device states from MQTT payload.
+
+        Repeaters only report linkquality. onOffState is driven by availability,
+        not by payload, so no onOffState update is made here.
+        """
+        updates = []
+        if "linkquality" in payload:
+            try:
+                lq = int(payload["linkquality"])
+                updates.append(("linkQuality", lq, f"{lq} / 255"))
+            except (ValueError, TypeError):
+                pass
+        self._apply_updates(dev, updates)
+
     def _process_cover_state(self, dev, payload):
         """Update z2mCover device states from MQTT payload."""
         updates = []
@@ -1679,6 +1728,9 @@ class Plugin(indigo.PluginBase):
         elif device_type_id == "z2mRelay":
             caps = _detect_relay_capabilities(exposes)
             props.update(caps)
+
+        elif device_type_id == "z2mRepeater":
+            caps = {}  # no sensor capabilities — availability + linkQuality only
 
         elif device_type_id == "z2mCover":
             names = {feat.get("name") for feat in _iter_features(exposes)}

@@ -8,6 +8,7 @@
 <!--   z2mWaterLeakSensor  : sensor  — water/flood alarm (leak/OK)             -->
 <!--   z2mTemperatureSensor: sensor  — environmental (temp/humidity/pressure)  -->
 <!--   z2mSensor           : sensor  — catch-all for mixed/unknown types       -->
+<!--   z2mRepeater         : relay   — signal repeaters/routers (online/offline)-->
 <!--   z2mCover            : dimmer  — blinds, shutters, covers                -->
 <Devices>
 
@@ -453,6 +454,46 @@
                 <TriggerLabel>Battery Changed</TriggerLabel>
                 <ControlPageLabel>Battery %</ControlPageLabel>
             </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="linkQuality">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Link Quality Changed</TriggerLabel>
+                <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         z2mRepeater — Zigbee signal repeater/router (relay class)
+         onOffState: True = online, False = offline (driven by availability)
+         No sensor states — repeaters only relay signals and report link quality.
+         ================================================================ -->
+    <Device type="relay" id="z2mRepeater">
+        <Name>Z2M Repeater</Name>
+        <ConfigUI>
+            <Field id="friendly_name" type="textfield" defaultValue="">
+                <Label>Friendly Name:</Label>
+                <Description>zigbee2mqtt friendly_name — must match exactly</Description>
+            </Field>
+            <Field id="ieee_address" type="textfield" readonly="true" defaultValue="">
+                <Label>IEEE Address:</Label>
+            </Field>
+            <Field id="vendor" type="textfield" readonly="true" defaultValue="">
+                <Label>Vendor:</Label>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="capabilities_display" type="textfield" readonly="true" defaultValue="">
+                <Label>Capabilities:</Label>
+            </Field>
+        </ConfigUI>
+        <States>
+            <!-- onOffState: native relay state (True=online, False=offline) — not declared here -->
             <State id="availability">
                 <ValueType>String</ValueType>
                 <TriggerLabel>Availability Changed</TriggerLabel>
