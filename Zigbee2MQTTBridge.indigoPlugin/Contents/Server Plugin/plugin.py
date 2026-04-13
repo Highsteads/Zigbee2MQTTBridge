@@ -7,7 +7,7 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Sonnet 4.6
 # Date:        13-04-2026
-# Version:     1.4
+# Version:     1.5
 
 import colorsys
 import json
@@ -159,8 +159,16 @@ def _detect_device_type(exposes, model=""):
                     "z2mWaterLeakSensor", "z2mTemperatureSensor", "z2mSensor",
                     "z2mCover", "z2mRepeater"
     """
-    # Repeater: only has linkquality in exposes and/or model name indicates repeater
-    if model and "repeater" in model.lower():
+    # Repeater: model name contains "repeater", or is a known coordinator/repeater
+    # model that exposes a writable state (e.g. SMLIGHT SLZB series).
+    _KNOWN_REPEATER_MODELS = {
+        "ts0207_repeater",  # Tuya USB repeater
+        "slzb-06p7",        # SMLIGHT Zigbee coordinator in repeater mode
+        "slzb-06",          # SMLIGHT SLZB-06 coordinator/repeater
+        "slzb-07",          # SMLIGHT SLZB-07
+    }
+    model_lower = model.lower() if model else ""
+    if "repeater" in model_lower or model_lower in _KNOWN_REPEATER_MODELS:
         return "z2mRepeater"
     if exposes:
         feature_names = {feat.get("name") for feat in _iter_features(exposes)}
