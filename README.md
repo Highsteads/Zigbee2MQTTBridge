@@ -7,11 +7,13 @@ An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zig
 - Connects to zigbee2mqtt via MQTT (paho-mqtt)
 - Auto-detects device type from zigbee2mqtt `exposes` array
 - **Discover & Create Devices** menu item: one click creates all Indigo devices, no manual setup
-- Four Indigo device types:
+- Six Indigo device types:
   - **Z2M Light** (dimmer) — bulbs, LED strips; brightness + optional colour/CCT
   - **Z2M Relay** (relay) — switches, outlets, plugs; on/off + optional power/energy
   - **Z2M Sensor** (sensor) — contact, motion, temperature, humidity, water leak, illuminance, battery
   - **Z2M Cover** (dimmer) — blinds, shutters; position 0-100% maps to Indigo brightness
+  - **Z2M Repeater** (switch) — Zigbee signal repeaters (SLZB, SMLIGHT); link quality + availability
+  - **Z2M Button / Scene** (sensor) — button/scene controllers; lastAction, pressCount, lastButton states
 - Availability and link quality tracked per device
 - Handles friendly names containing `/` (sub-room naming)
 - All devices created in a **Zigbee2MQTT** device folder

@@ -10,6 +10,7 @@
 <!--   z2mSensor           : sensor  — catch-all for mixed/unknown types       -->
 <!--   z2mRepeater         : relay   — signal repeaters/routers (online/offline)-->
 <!--   z2mCover            : dimmer  — blinds, shutters, covers                -->
+<!--   z2mButton           : sensor  — button/scene controllers (action events) -->
 <Devices>
 
     <!-- ================================================================
@@ -545,6 +546,73 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Tilt Angle Changed</TriggerLabel>
                 <ControlPageLabel>Tilt</ControlPageLabel>
+            </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="linkQuality">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Link Quality Changed</TriggerLabel>
+                <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+
+    <!-- ================================================================
+         z2mButton — Zigbee button / scene controller (sensor class)
+         Fires stateless action events (e.g. "1_single", "2_double").
+         lastAction  : most recent action string from zigbee2mqtt
+         lastButton  : numeric button index extracted from action (1, 2, ...)
+         pressCount  : increments on every press — use this state in Indigo
+                       triggers to guarantee firing even on repeated same-button presses
+         onOffState  : True on any press (may not change on back-to-back presses;
+                       use pressCount changed trigger instead for reliability)
+         ================================================================ -->
+    <Device type="sensor" id="z2mButton">
+        <Name>Z2M Button / Scene</Name>
+        <ConfigUI>
+            <Field id="friendly_name" type="textfield" defaultValue="">
+                <Label>Friendly Name:</Label>
+                <Description>zigbee2mqtt friendly_name — must match exactly (e.g. Hall Switch)</Description>
+            </Field>
+            <Field id="ieee_address" type="textfield" readonly="true" defaultValue="">
+                <Label>IEEE Address:</Label>
+            </Field>
+            <Field id="vendor" type="textfield" readonly="true" defaultValue="">
+                <Label>Vendor:</Label>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="capabilities_display" type="textfield" readonly="true" defaultValue="">
+                <Label>Capabilities:</Label>
+            </Field>
+            <Field id="has_battery" type="checkbox" hidden="true" defaultValue="false"/>
+        </ConfigUI>
+        <States>
+            <!-- onOffState: native sensor state (True=pressed) — not declared here -->
+            <State id="lastAction">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Button Action Changed</TriggerLabel>
+                <ControlPageLabel>Last Action</ControlPageLabel>
+            </State>
+            <State id="lastButton">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Last Button Changed</TriggerLabel>
+                <ControlPageLabel>Last Button</ControlPageLabel>
+            </State>
+            <State id="pressCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Press Count Changed</TriggerLabel>
+                <ControlPageLabel>Press Count</ControlPageLabel>
+            </State>
+            <State id="battery">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Battery Changed</TriggerLabel>
+                <ControlPageLabel>Battery %</ControlPageLabel>
             </State>
             <State id="availability">
                 <ValueType>String</ValueType>

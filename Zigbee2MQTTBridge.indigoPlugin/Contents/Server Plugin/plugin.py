@@ -53,7 +53,7 @@ except ImportError:
 # ── Constants ─────────────────────────────────────────────────────────────────
 PLUGIN_ID      = "com.clives.indigoplugin.z2mbridge"
 PLUGIN_NAME    = "Zigbee2MQTT Bridge"
-PLUGIN_VERSION = "1.1"
+PLUGIN_VERSION = "1.6"
 
 RECONNECT_DELAY      = 30   # seconds between MQTT reconnect attempts
 STATE_REQUEST_DELAY  = 2    # seconds after deviceStartComm before requesting state
@@ -195,6 +195,11 @@ def _detect_device_type(exposes, model=""):
         if feat.get("name") == "position":
             return "z2mCover"
 
+    # Check for Button/Scene controller (has "action" enum feature — TuYa TS0042, Ikea remotes etc.)
+    for feat in _iter_features(exposes):
+        if feat.get("name") == "action" and feat.get("type") == "enum":
+            return "z2mButton"
+
     # Check for Relay (writable binary "state" feature at top level or inside "switch" composite)
     for entry in exposes:
         if entry.get("type") == "switch":
@@ -304,7 +309,7 @@ def _detect_sensor_capabilities(exposes):
         "has_temperature":  "temperature"  in names,
         "has_humidity":     "humidity"     in names,
         "has_contact":      "contact"      in names,
-        "has_occupancy":    ("occupancy" in names or "presence" in names),
+        "has_occupancy":    ("occupancy" in names or "presence" in names or "motion" in names),
         "has_water_leak":   "water_leak"   in names,
         "has_battery":      "battery"      in names,
         "has_pressure":     "pressure"     in names,
@@ -396,6 +401,10 @@ def _build_capabilities_display(device_type_id, caps):
         parts.append("position (0-100)")
         if caps.get("has_tilt"):
             parts.append("tilt")
+    elif device_type_id == "z2mButton":
+        parts.append("button actions")
+        if caps.get("has_battery"):
+            parts.append("battery")
     return ", ".join(parts) if parts else device_type_id
 
 
@@ -433,6 +442,12 @@ class Plugin(indigo.PluginBase):
         # Tracks which non-primary prefixes have produced at least one MQTT message.
         # Used for diagnostic logging — fires once per prefix per session.
         self._seen_prefixes = set()  # type: set[str]
+
+        # Per-device motion component states for occupancy sensors.
+        # Stores last known bool for each motion-related key the device has ever sent
+        # (motion, occupancy, presence, pir, ...).  Partial payloads only update the
+        # keys they contain, so the OR across all stored values is always correct.
+        self._motion_states = {}  # type: dict[int, dict[str, bool]]
 
         if log_startup_banner:
             _extras = [
@@ -622,6 +637,7 @@ class Plugin(indigo.PluginBase):
         self.friendly_name_map.pop(fname, None)
         ieee = dev.pluginProps.get("ieee_address", "")
         self.ieee_map.pop(ieee, None)
+        self._motion_states.pop(dev.id, None)
         if self.debug:
             log(f"Stopped device: {dev.name}")
 
@@ -1245,6 +1261,14 @@ class Plugin(indigo.PluginBase):
         except Exception:
             return
 
+        # Auto-reclassify: if any non-button device receives an action payload
+        # (e.g. a TuYa button misidentified as relay by zigbee2mqtt), delete
+        # the wrong device and recreate it as z2mButton automatically.
+        if "action" in payload and payload["action"] not in (None, ""):
+            if dev.deviceTypeId != "z2mButton":
+                self._reclassify_as_button(dev, payload)
+                return
+
         type_id = dev.deviceTypeId
         if type_id == "z2mLight":
             self._process_light_state(dev, payload)
@@ -1264,6 +1288,8 @@ class Plugin(indigo.PluginBase):
             self._process_repeater_state(dev, payload)
         elif type_id == "z2mCover":
             self._process_cover_state(dev, payload)
+        elif type_id == "z2mButton":
+            self._process_button_state(dev, payload)
 
     def _process_light_state(self, dev, payload):
         """Update z2mLight device states from MQTT payload."""
@@ -1374,26 +1400,40 @@ class Plugin(indigo.PluginBase):
         """
         updates = []
 
-        occ_raw  = payload.get("occupancy")
-        pres_raw = payload.get("presence")
-        if occ_raw is not None:
-            occ_bool = bool(occ_raw)
-            updates.append(("occupancy", occ_bool, "Detected" if occ_bool else "Clear"))
-        if pres_raw is not None:
-            pres_bool = bool(pres_raw)
-            updates.append(("presence",  pres_bool, "Detected" if pres_bool else "Clear"))
-        if occ_raw is not None or pres_raw is not None:
-            detected = bool(occ_raw) or bool(pres_raw)
+        # Motion-related keys that different sensors use under different names.
+        # We track the last known value of every key a device has ever sent so
+        # partial payloads (only one key changing) don't lose the other sensors' state.
+        MOTION_KEYS = ("motion", "occupancy", "presence", "pir")
+
+        store = self._motion_states.setdefault(dev.id, {})
+        motion_updated = False
+        for key in MOTION_KEYS:
+            if key in payload:
+                store[key] = bool(payload[key])
+                motion_updated = True
+
+        if motion_updated:
+            detected = any(store.values())
+            # Update named custom states for keys the device actually sends
+            if "occupancy" in store:
+                updates.append(("occupancy", store["occupancy"],
+                                "Detected" if store["occupancy"] else "Clear"))
+            if "presence" in store:
+                updates.append(("presence",  store["presence"],
+                                "Detected" if store["presence"]  else "Clear"))
             updates.append(("motion",     detected))
             updates.append(("onOffState", detected, "Detected" if detected else "Clear"))
+
+            if self.debug:
+                log(f"{dev.name}: motion store={store} -> detected={detected}")
 
         # Self-heal capability flags if payload contains data the stored flags deny.
         # This corrects devices created when exposes data was incomplete.
         props = dev.ownerProps
         heal = {}
-        if occ_raw  is not None and not props.get("has_pir",      False):
+        if "occupancy" in store and not props.get("has_pir",      False):
             heal["has_pir"]      = True
-        if pres_raw is not None and not props.get("has_presence", False):
+        if "presence"  in store and not props.get("has_presence", False):
             heal["has_presence"] = True
         if heal:
             new_props = dict(props)
@@ -1541,13 +1581,17 @@ class Plugin(indigo.PluginBase):
             water_leak = val
             updates.append(("waterLeak", val))
 
-        # Handle "occupancy" (PIR — fast trigger) and/or "presence" (mmWave — persistent).
-        # On combined sensors both keys appear in the same payload; either being True
-        # sets motion=True so the PIR's faster response is not lost.
-        occ_raw  = payload.get("occupancy")
-        pres_raw = payload.get("presence")
-        if occ_raw is not None or pres_raw is not None:
-            combined = bool(occ_raw) or bool(pres_raw)
+        # Handle motion/occupancy/presence — different sensors use different key names:
+        #   "motion"     — Aqara FP300 and similar (fires on movement, clears quickly)
+        #   "occupancy"  — PIR sensors (fast trigger, clears after timeout)
+        #   "presence"   — mmWave/radar sensors (slower trigger, stays True while stationary)
+        # Any of the three being True sets the Indigo motion state True.
+        # Only clears when all present keys are False.
+        motion_raw = payload.get("motion")
+        occ_raw    = payload.get("occupancy")
+        pres_raw   = payload.get("presence")
+        if motion_raw is not None or occ_raw is not None or pres_raw is not None:
+            combined = bool(motion_raw) or bool(occ_raw) or bool(pres_raw)
             occupancy = combined
             updates.append(("motion", combined))
 
@@ -1626,6 +1670,109 @@ class Plugin(indigo.PluginBase):
                 updates.append(("linkQuality", lq, f"{lq} / 255"))
             except (ValueError, TypeError):
                 pass
+        self._apply_updates(dev, updates)
+
+    def _reclassify_as_button(self, dev, payload):
+        """Delete a misclassified device and recreate it as z2mButton.
+
+        Called when an action payload arrives on a non-button device —
+        typically a TuYa/Ikea button that zigbee2mqtt fingerprinted as relay.
+        After recreation the action is processed immediately on the new device.
+        """
+        action_val    = str(payload.get("action", ""))
+        old_id        = dev.id
+        dev_name      = dev.name
+        folder_id     = dev.folderId
+        friendly_name = dev.pluginProps.get("friendly_name", "")
+        ieee_address  = dev.pluginProps.get("ieee_address", "")
+        vendor        = dev.pluginProps.get("vendor", "")
+        model         = dev.pluginProps.get("model", "")
+        mqtt_prefix   = dev.pluginProps.get("mqtt_prefix", self._topic_prefix())
+
+        log(f"Auto-reclassify: '{dev_name}' received action='{action_val}' "
+            f"but is type '{dev.deviceTypeId}'. Recreating as Z2M Button...", level="WARNING")
+
+        try:
+            indigo.device.delete(dev)
+        except Exception as e:
+            log(f"Reclassify: could not delete '{dev_name}': {e}", level="ERROR")
+            return
+
+        # Remove stale mapping
+        self.friendly_name_map = {
+            k: v for k, v in self.friendly_name_map.items() if v != old_id
+        }
+
+        new_props = {
+            "friendly_name":      friendly_name,
+            "ieee_address":       ieee_address,
+            "vendor":             vendor,
+            "model":              model,
+            "has_battery":        False,
+            "capabilities_display": "button actions",
+            "mqtt_prefix":        mqtt_prefix,
+        }
+
+        try:
+            folder_id_to_use = folder_id if folder_id else self._ensure_device_folder()
+            new_dev = indigo.device.create(
+                protocol=indigo.kProtocol.Plugin,
+                name=dev_name,
+                pluginId=self.pluginId,
+                deviceTypeId="z2mButton",
+                folder=folder_id_to_use,
+                props=new_props,
+            )
+            self.friendly_name_map[friendly_name] = new_dev.id
+            log(f"Reclassify complete: '{dev_name}' is now Z2M Button (id={new_dev.id})")
+            self._process_button_state(new_dev, payload)
+        except Exception as e:
+            log(f"Reclassify: could not create button device '{dev_name}': {e}", level="ERROR")
+
+    def _process_button_state(self, dev, payload):
+        """Update z2mButton device states from MQTT action payload.
+
+        action payloads are stateless events (e.g. {"action": "1_single"}).
+        pressCount always increments so Indigo triggers fire even on repeated
+        presses of the same button (lastAction alone would not change value).
+        """
+        updates = []
+
+        if "action" in payload and payload["action"] not in (None, ""):
+            action = str(payload["action"])
+
+            # Extract button number: "1_single" → 1, "2_double" → 2, "on" → 0
+            btn = 0
+            try:
+                btn = int(action.split("_")[0])
+            except (ValueError, IndexError):
+                pass
+
+            current_count = dev.states.get("pressCount", 0)
+            new_count = (int(current_count) % 9999) + 1
+
+            updates.append(("lastAction",  action,     action))
+            updates.append(("lastButton",  btn,        str(btn)))
+            updates.append(("pressCount",  new_count,  str(new_count)))
+            updates.append(("onOffState",  True,       "Pressed"))
+
+            if self.debug:
+                log(f"{dev.name}: action={action} button={btn} count={new_count}")
+
+        if "battery" in payload:
+            try:
+                batt = int(float(payload["battery"]))
+                updates.append(("battery", batt, f"{batt}%"))
+            except (ValueError, TypeError):
+                pass
+
+        if "linkquality" in payload:
+            try:
+                lq = int(payload["linkquality"])
+                updates.append(("linkQuality", lq, f"{lq} / 255"))
+            except (ValueError, TypeError):
+                pass
+
         self._apply_updates(dev, updates)
 
     def _process_cover_state(self, dev, payload):
@@ -1743,6 +1890,11 @@ class Plugin(indigo.PluginBase):
         elif device_type_id == "z2mCover":
             names = {feat.get("name") for feat in _iter_features(exposes)}
             caps  = {"has_tilt": "tilt" in names}
+            props.update(caps)
+
+        elif device_type_id == "z2mButton":
+            names = {feat.get("name") for feat in _iter_features(exposes)}
+            caps  = {"has_battery": "battery" in names}
             props.update(caps)
 
         else:
