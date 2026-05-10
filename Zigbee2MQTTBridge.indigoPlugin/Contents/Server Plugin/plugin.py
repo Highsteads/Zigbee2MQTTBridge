@@ -6,8 +6,24 @@
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Sonnet 4.6
-# Date:        13-04-2026
-# Version:     1.6
+# Date:        10-05-2026
+# Version:     1.7
+#
+# v1.7 (10-05-2026):
+# - Show only the entities each device actually supports.  Pre-init of default
+#   states is now filtered by the device's `has_*` capability flags instead of
+#   blindly seeding every state from Devices.xml.  Per the Indigo state-visibility
+#   rule (memory: feedback_indigo_state_visibility.md), states that are never
+#   written do not appear in the Custom States panel — so unused states are now
+#   hidden automatically.
+# - Capture ALL Z2M data: any MQTT payload field not handled by the type-
+#   specific dispatcher is now imported as a dynamic Indigo state.  First time a
+#   field is seen for a device, the state list is refreshed via
+#   stateListOrDisplayStateIdChanged() and the device's seen-fields union is
+#   persisted in pluginProps so they survive restarts.  getDeviceStateList() is
+#   overridden to advertise the dynamic states to Indigo's state machinery.
+# - Reserved-state guard: dynamic state names are mangled to avoid colliding
+#   with native or reserved Indigo state IDs (batteryLevel, brightnessLevel etc).
 
 import colorsys
 import json
@@ -53,11 +69,45 @@ except ImportError:
 # ── Constants ─────────────────────────────────────────────────────────────────
 PLUGIN_ID      = "com.clives.indigoplugin.z2mbridge"
 PLUGIN_NAME    = "Zigbee2MQTT Bridge"
-PLUGIN_VERSION = "1.6"
+# Plugin version is read dynamically from Info.plist via self.pluginVersion;
+# do NOT hardcode here — Info.plist is the single source of truth.
 
 RECONNECT_DELAY      = 30   # seconds between MQTT reconnect attempts
 STATE_REQUEST_DELAY  = 2    # seconds after deviceStartComm before requesting state
 DEVICE_FOLDER_NAME   = "Zigbee2MQTT"
+
+# MQTT payload keys handled semantically by type-specific _process_*_state methods.
+# Anything NOT in this set is captured as a dynamic state by _capture_raw_fields.
+_HANDLED_PAYLOAD_KEYS = {
+    # binary / state
+    "state", "contact", "occupancy", "presence", "motion", "pir", "water_leak",
+    "smoke", "vibration", "tamper",
+    # light
+    "brightness", "color_temp", "color_mode", "color",
+    # numeric metering
+    "power", "energy", "voltage", "current",
+    # environmental (handled per-type)
+    "temperature", "humidity", "pressure", "illuminance", "illuminance_lux",
+    # cover
+    "position", "tilt",
+    # button
+    "action",
+    # battery / health (handled per-type)
+    "battery", "battery_low",
+    # mesh
+    "linkquality", "last_seen", "update_available", "update",
+    # reclassification trigger only — ignored for state writes
+    "click",
+}
+
+# Indigo-reserved state names to avoid as dynamic state IDs (silently shadow
+# native device properties — see global CLAUDE.md and feedback_indigo_state_visibility).
+_RESERVED_STATE_NAMES = {
+    "batteryLevel", "brightnessLevel", "onOffState", "sensorValue",
+    "whiteTemperature", "redLevel", "greenLevel", "blueLevel",
+    "coolerIsOn", "heaterIsOn", "hvacOperationMode", "temperatureInput1",
+    "setpointHeat", "setpointCool",
+}
 
 
 # ── Pure helper functions (no Indigo dependency) ─────────────────────────────
@@ -606,31 +656,261 @@ class Plugin(indigo.PluginBase):
         ],
     }
 
-    def _ensure_device_states(self, dev):
-        """Initialise any custom states that don't yet exist on this device.
+    # Map of state-id -> (capability flag(s) that must be true for the state to be
+    # pre-initialised).  None means "always init for this device type" (universal
+    # states like availability/linkQuality).  Used to filter _DEVICE_STATE_DEFAULTS
+    # so unsupported entities don't appear in the Custom States panel.
+    _STATE_CAPABILITY_GATE = {
+        "z2mLight":            {"colorMode": "has_color", "colorTemp": "has_color_temp"},
+        "z2mRelay":            {"power": "has_power", "energy": "has_energy",
+                                "voltage": "has_voltage", "current": "has_current"},
+        "z2mContactSensor":    {"battery": "has_battery"},
+        "z2mOccupancySensor":  {"occupancy": "has_pir", "presence": "has_presence",
+                                "illuminance": "has_illuminance",
+                                "temperature": "has_temperature",
+                                "humidity": "has_humidity",
+                                "battery": "has_battery"},
+        "z2mWaterLeakSensor":  {"battery": "has_battery", "temperature": "has_temperature"},
+        "z2mTemperatureSensor": {"temperature": "has_temperature",
+                                 "humidity": "has_humidity",
+                                 "pressure": "has_pressure",
+                                 "illuminance": "has_illuminance",
+                                 "battery": "has_battery"},
+        "z2mSensor":           {"temperature": "has_temperature",
+                                "humidity": "has_humidity",
+                                "contact": "has_contact",
+                                "motion": "has_occupancy",
+                                "waterLeak": "has_water_leak",
+                                "pressure": "has_pressure",
+                                "illuminance": "has_illuminance",
+                                "battery": "has_battery"},
+    }
 
-        Guards against the 'state key not defined' race that occurs when states are
-        added to Devices.xml after a device was originally created.  Called for every
-        device at deviceStartComm time so the state slots always exist before any
-        MQTT payload arrives.
+    def _ensure_device_states(self, dev):
+        """Initialise the states this device's hardware actually supports.
+
+        Filters _DEVICE_STATE_DEFAULTS by the device's `has_*` capability flags
+        (set at create-time from zigbee2mqtt's exposes data) so the Custom States
+        panel only shows entities the physical Zigbee device reports.  States with
+        no gating in _STATE_CAPABILITY_GATE are universal (availability / linkQuality
+        / motion-mirror / etc.) and are always initialised.
+
+        Per Indigo's state-visibility rule (memory: feedback_indigo_state_visibility),
+        states that are never written never appear in the panel — so simply NOT
+        pre-initialising unsupported states is enough to hide them.
         """
         defaults = self._DEVICE_STATE_DEFAULTS.get(dev.deviceTypeId)
         if not defaults:
             return  # unknown or native-only type — nothing to do
 
+        gates = self._STATE_CAPABILITY_GATE.get(dev.deviceTypeId, {})
+        props = dev.ownerProps
         existing = set(dev.states.keys())
-        missing  = [(k, v) for k, v in defaults if k not in existing]
-        if not missing:
+        to_write = []
+        for key, val in defaults:
+            if key in existing:
+                # State already exists on the device record.  We DO NOT clear it back
+                # to default — preserves any value already received.
+                continue
+            gate_prop = gates.get(key)
+            if gate_prop and not props.get(gate_prop, False):
+                continue  # capability not advertised — leave the state hidden
+            to_write.append((key, val))
+
+        if not to_write:
             return
 
-        log(f"{dev.name}: initialising {len(missing)} missing state(s): "
-            f"{[k for k, _ in missing]}")
-        for key, val in missing:
+        log(f"{dev.name}: initialising {len(to_write)} supported state(s): "
+            f"{[k for k, _ in to_write]}")
+        for key, val in to_write:
             try:
                 dev.updateStateOnServer(key, val)
             except Exception as e:
                 log(f"{dev.name}: could not initialise state '{key}': {e}",
                     level="WARNING")
+
+    # ── Dynamic state capture ───────────────────────────────────────────────
+    # Any MQTT payload field not listed in _HANDLED_PAYLOAD_KEYS (and not handled
+    # by a type-specific dispatcher) is captured as a dynamic Indigo state.  The
+    # union of all keys ever seen for a device is persisted in pluginProps as
+    # seenDynamicKeys (CSV).  getDeviceStateList() advertises these to Indigo
+    # so they appear in the Custom States panel after stateListOrDisplayStateIdChanged.
+
+    def _sanitise_state_key(self, key):
+        """Convert an MQTT field name into a valid Indigo state ID (camelCase).
+
+        Indigo's XML state-id validator rejects any non-ASCII-alphanumeric
+        character including the underscore — even though XML itself allows them
+        — with LowLevelBadParameterError 'illegal XML tag name character'.
+        We therefore convert snake_case to camelCase (the SDK convention used
+        in Devices.xml everywhere) so MQTT names like `color_temp_startup` and
+        `power_on_behavior` become `colorTempStartup` and `powerOnBehavior`.
+        """
+        if not key:
+            return ""
+        # Split on any non-alnum (underscore, dash, dot, space, etc.) to get parts
+        parts = []
+        cur = []
+        for c in key:
+            if c.isascii() and c.isalnum():
+                cur.append(c)
+            else:
+                if cur:
+                    parts.append("".join(cur))
+                    cur = []
+        if cur:
+            parts.append("".join(cur))
+        if not parts:
+            return ""
+        # First part lowercase, subsequent parts Capitalised — camelCase
+        sk = parts[0][0].lower() + parts[0][1:] + "".join(p[:1].upper() + p[1:] for p in parts[1:])
+        # Strip any remaining non-ASCII-alnum (defensive — should be impossible after split)
+        sk = "".join(c for c in sk if c.isascii() and c.isalnum())
+        # Must start with an ASCII letter
+        if not sk or not sk[0].isalpha():
+            sk = "z2m" + (sk[:1].upper() + sk[1:] if sk else "")
+        # XML reserves names starting with "xml" (case-insensitive)
+        if sk[:3].lower() == "xml":
+            sk = "z" + sk[0].upper() + sk[1:]
+        if sk in _RESERVED_STATE_NAMES:
+            sk = "z2m" + sk[0].upper() + sk[1:]
+        return sk
+
+    def _capture_raw_fields(self, dev, payload):
+        """Write every payload field that the type-specific dispatcher did not
+        already handle.  First-time keys are added to pluginProps and the device's
+        state list is refreshed.
+
+        Boolean -> Indigo Boolean state; numeric -> Number; string -> String.
+        Complex types (dict, list) are JSON-stringified.  None values are skipped.
+
+        State IDs are tightly validated against Indigo's XML element rules; any
+        key that fails validation is dropped with a debug log so it never gets
+        persisted to seen-set and corrupts subsequent stateListOrDisplay calls.
+        """
+        if not isinstance(payload, dict):
+            return
+
+        seen_csv = dev.pluginProps.get("seenDynamicKeys", "")
+        seen = set(s for s in seen_csv.split(",") if s and self._is_valid_state_id(s))
+        new_keys = []
+
+        for raw_key, raw_val in payload.items():
+            if raw_key in _HANDLED_PAYLOAD_KEYS or raw_key.startswith("_"):
+                continue
+            if raw_val is None:
+                continue
+            state_key = self._sanitise_state_key(raw_key)
+            if not state_key or not self._is_valid_state_id(state_key):
+                if self.debug:
+                    log(f"{dev.name}: dropping invalid state-id derived from '{raw_key}' -> '{state_key}'",
+                        level="WARNING")
+                continue
+
+            # Coerce the value to a state-friendly form
+            if isinstance(raw_val, (dict, list)):
+                try:
+                    state_val = json.dumps(raw_val, separators=(",", ":"), default=str)[:512]
+                except Exception:
+                    state_val = str(raw_val)[:512]
+            elif isinstance(raw_val, bool):
+                state_val = bool(raw_val)
+            elif isinstance(raw_val, (int, float)):
+                state_val = float(raw_val) if isinstance(raw_val, float) else int(raw_val)
+            else:
+                state_val = str(raw_val)
+
+            try:
+                dev.updateStateOnServer(state_key, state_val)
+            except Exception as e:
+                if self.debug:
+                    log(f"{dev.name}: dynamic state '{state_key}' write failed: {e}", level="WARNING")
+                continue
+
+            if state_key not in seen:
+                seen.add(state_key)
+                new_keys.append(state_key)
+
+        if new_keys:
+            try:
+                new_props = dict(dev.pluginProps)
+                new_props["seenDynamicKeys"] = ",".join(sorted(seen))
+                dev.replacePluginPropsOnServer(new_props)
+                # Re-fetch so the snapshot reflects the saved props, then refresh
+                # the state list so Indigo registers the new state IDs we now
+                # advertise via getDeviceStateList().
+                refreshed = indigo.devices[dev.id]
+                refreshed.stateListOrDisplayStateIdChanged()
+                log(f"{dev.name}: imported {len(new_keys)} new field(s): {new_keys}")
+            except Exception as e:
+                log(f"{dev.name}: dynamic-state refresh failed; rolling back. err={e}; "
+                    f"new_keys={new_keys}", level="ERROR")
+                try:
+                    rollback_props = dict(dev.pluginProps)
+                    rollback_props["seenDynamicKeys"] = seen_csv  # original
+                    dev.replacePluginPropsOnServer(rollback_props)
+                except Exception:
+                    pass
+
+    def getDeviceStateList(self, dev):
+        """Override Indigo's static state list with the static + dynamic union.
+
+        Static states come from Devices.xml.  Dynamic states are added on the fly
+        as the device reports new fields via MQTT.  Every dynamic state ID is
+        re-validated here as a defensive measure — even if a corrupted entry
+        somehow lands in `seenDynamicKeys`, it cannot poison this list.
+
+        IMPORTANT: indigo.PluginBase.getDeviceStateList returns the LIVE list
+        object from the parser's internal devices_type_dict.  Mutating that
+        list permanently corrupts subsequent reads (the same dynamic states
+        get appended on every call, accumulating duplicates and eventually
+        triggering "illegal XML tag name character" in Indigo's XML
+        serialiser).  We therefore work on a fresh copy and return that.
+        """
+        original = indigo.PluginBase.getDeviceStateList(self, dev)
+        if original is None:
+            return original
+
+        # Make a shallow copy.  indigo.List/indigo.Dict items inside are reused
+        # by reference — that's fine; we only need the OUTER list to be a
+        # distinct object so append() doesn't mutate the parser's cache.
+        state_list = list(original)
+
+        seen_csv = dev.pluginProps.get("seenDynamicKeys", "")
+        if not seen_csv:
+            return state_list
+
+        # Build the set of static-state IDs already in the list.
+        existing_ids = set()
+        try:
+            for s in state_list:
+                k = s.get("Key") if hasattr(s, "get") else s["Key"]
+                if k:
+                    existing_ids.add(k)
+        except Exception:
+            existing_ids = set()
+
+        for key in seen_csv.split(","):
+            key = key.strip()
+            if not key or key in existing_ids:
+                continue
+            if not self._is_valid_state_id(key):
+                continue  # paranoid — should already be filtered by writer
+            label = key[:1].upper() + key[1:]  # cosmetic camelCase -> CamelCase
+            current = dev.states.get(key) if hasattr(dev, "states") else None
+            try:
+                if isinstance(current, bool):
+                    state_list.append(self.getDeviceStateDictForBoolTrueFalseType(key, label, label))
+                elif isinstance(current, (int, float)):
+                    state_list.append(self.getDeviceStateDictForNumberType(key, label, label))
+                else:
+                    state_list.append(self.getDeviceStateDictForStringType(key, label, label))
+                existing_ids.add(key)
+            except Exception:
+                # Skip silently — the writer logs detail; this method must return
+                # a clean list every time getDeviceStateList is called.
+                continue
+        return state_list
 
     def deviceStopComm(self, dev):
         fname = dev.pluginProps.get("friendly_name", "")
@@ -1290,6 +1570,29 @@ class Plugin(indigo.PluginBase):
             self._process_cover_state(dev, payload)
         elif type_id == "z2mButton":
             self._process_button_state(dev, payload)
+
+        # After type-specific handling, capture any remaining payload fields as
+        # dynamic states so all Z2M data is imported (not just the semantically-
+        # mapped subset).  See _capture_raw_fields docstring.
+        try:
+            self._capture_raw_fields(dev, payload)
+        except Exception as e:
+            if self.debug:
+                log(f"{dev.name}: raw-field capture error: {e}", level="WARNING")
+
+    def _is_valid_state_id(self, key):
+        """Indigo XML state IDs must start with an ASCII letter and contain only
+        ASCII letters and digits.  Underscores are NOT accepted — Indigo's XML
+        validator rejects them with LowLevelBadParameterError 'illegal XML tag
+        name character' even though XML itself permits them.  Convention in the
+        Indigo SDK is camelCase (linkQuality, colorMode, batteryLevel, etc.).
+        """
+        if not key or not key[0].isascii() or not key[0].isalpha():
+            return False
+        for c in key:
+            if not (c.isascii() and c.isalnum()):
+                return False
+        return True
 
     def _process_light_state(self, dev, payload):
         """Update z2mLight device states from MQTT payload."""
