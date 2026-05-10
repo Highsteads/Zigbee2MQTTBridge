@@ -794,6 +794,12 @@ class Plugin(indigo.PluginBase):
         seen_csv = dev.pluginProps.get("seenDynamicKeys", "")
         seen = set(s for s in seen_csv.split(",") if s and self._is_valid_state_id(s))
         new_keys = []
+        # Phase 1: identify keys + values WITHOUT writing.  We must NOT call
+        # updateStateOnServer for any state that isn't already declared in our
+        # state list — Indigo logs a top-level "state key not defined" error
+        # the first time, and we get one error per new key per device per session.
+        # Collect them all, then declare in Phase 2, then write in Phase 3.
+        pending = []  # list of (state_key, state_val)
 
         for raw_key, raw_val in payload.items():
             if raw_key in _HANDLED_PAYLOAD_KEYS or raw_key.startswith("_"):
@@ -820,25 +826,18 @@ class Plugin(indigo.PluginBase):
             else:
                 state_val = str(raw_val)
 
-            try:
-                dev.updateStateOnServer(state_key, state_val)
-            except Exception as e:
-                if self.debug:
-                    log(f"{dev.name}: dynamic state '{state_key}' write failed: {e}", level="WARNING")
-                continue
-
+            pending.append((state_key, state_val))
             if state_key not in seen:
                 seen.add(state_key)
                 new_keys.append(state_key)
 
+        # Phase 2: if there are new keys, persist + refresh state list FIRST so
+        # the writes in Phase 3 don't trigger "state key not defined" errors.
         if new_keys:
             try:
                 new_props = dict(dev.pluginProps)
                 new_props["seenDynamicKeys"] = ",".join(sorted(seen))
                 dev.replacePluginPropsOnServer(new_props)
-                # Re-fetch so the snapshot reflects the saved props, then refresh
-                # the state list so Indigo registers the new state IDs we now
-                # advertise via getDeviceStateList().
                 refreshed = indigo.devices[dev.id]
                 refreshed.stateListOrDisplayStateIdChanged()
                 log(f"{dev.name}: imported {len(new_keys)} new field(s): {new_keys}")
@@ -851,6 +850,17 @@ class Plugin(indigo.PluginBase):
                     dev.replacePluginPropsOnServer(rollback_props)
                 except Exception:
                     pass
+                # Skip Phase 3: writes for the new keys would fail anyway.
+                # Old keys' writes are also skipped to keep the message atomic.
+                return
+
+        # Phase 3: now safe to write all pending values.
+        for state_key, state_val in pending:
+            try:
+                dev.updateStateOnServer(state_key, state_val)
+            except Exception as e:
+                if self.debug:
+                    log(f"{dev.name}: dynamic state '{state_key}' write failed: {e}", level="WARNING")
 
     def getDeviceStateList(self, dev):
         """Override Indigo's static state list with the static + dynamic union.
