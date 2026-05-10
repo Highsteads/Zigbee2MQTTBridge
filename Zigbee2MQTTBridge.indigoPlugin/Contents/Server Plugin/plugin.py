@@ -7,7 +7,7 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Sonnet 4.6
 # Date:        10-05-2026
-# Version:     1.7
+# Version:     1.7.1
 #
 # v1.7 (10-05-2026):
 # - Show only the entities each device actually supports.  Pre-init of default
