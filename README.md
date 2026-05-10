@@ -22,7 +22,7 @@ An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zig
 
 - Indigo 2025.1 or later
 - zigbee2mqtt running and accessible via MQTT
-- MQTT credentials in `/Library/Application Support/Perceptive Automation/secrets.py`
+- MQTT credentials in `/Library/Application Support/Perceptive Automation/IndigoSecrets.py`
 
 ## Installation
 
@@ -35,10 +35,10 @@ An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zig
 This plugin reads MQTT credentials from the shared secrets file:
 
 ```
-/Library/Application Support/Perceptive Automation/secrets.py
+/Library/Application Support/Perceptive Automation/IndigoSecrets.py
 ```
 
-Copy `secrets_example.py` (inside the bundle) to that path and fill in your details:
+Copy `IndigoSecrets_example.py` (inside the bundle) to that path and fill in your details:
 
 ```python
 MQTT_BROKER   = "192.168.1.x"    # IP of your MQTT broker

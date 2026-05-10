@@ -27,7 +27,7 @@ except ImportError:
 
 _sys.path.insert(0, "/Library/Application Support/Perceptive Automation")
 try:
-    from secrets import MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD
+    from IndigoSecrets import MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD
 except ImportError:
     MQTT_BROKER   = ""
     MQTT_PORT     = 1883
