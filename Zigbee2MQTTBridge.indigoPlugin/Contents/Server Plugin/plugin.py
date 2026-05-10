@@ -7,7 +7,7 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Sonnet 4.6
 # Date:        13-04-2026
-# Version:     1.5
+# Version:     1.6
 
 import colorsys
 import json
