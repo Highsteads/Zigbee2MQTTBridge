@@ -20,7 +20,7 @@ An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zig
 
 ## Requirements
 
-- Indigo 2025.1 or later
+- Indigo 2023.2 or later (Python 3.11+)
 - zigbee2mqtt running and accessible via MQTT
 - MQTT credentials in `/Library/Application Support/Perceptive Automation/IndigoSecrets.py`
 
