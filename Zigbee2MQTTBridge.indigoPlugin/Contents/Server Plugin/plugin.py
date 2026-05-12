@@ -1272,7 +1272,7 @@ class Plugin(indigo.PluginBase):
         password = MQTT_PASSWORD
 
         if not broker:
-            log("MQTT broker not configured. Set MQTT_BROKER in secrets.py.", level="ERROR")
+            log("MQTT broker not configured. Set MQTT_BROKER in IndigoSecrets.py.", level="ERROR")
             return
 
         with self.mqtt_lock:

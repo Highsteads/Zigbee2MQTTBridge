@@ -30,25 +30,26 @@ An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zig
 2. Unzip the downloaded file — you will get `Zigbee2MQTTBridge.indigoPlugin`
 3. Double-click `Zigbee2MQTTBridge.indigoPlugin` — Indigo will install it automatically
 
-## Credentials
+## Credentials — `IndigoSecrets.py` vs `IndigoSecrets_example.py`
 
-This plugin reads MQTT credentials from the shared secrets file:
+This plugin (along with all CliveS Indigo plugins) reads sensitive values from
+a shared master credentials file at:
 
-```
-/Library/Application Support/Perceptive Automation/IndigoSecrets.py
-```
+`/Library/Application Support/Perceptive Automation/IndigoSecrets.py`
 
-Copy `IndigoSecrets_example.py` (inside the bundle) to that path and fill in your details:
+| File | Purpose | Real data? | Committed to GitHub? |
+|------|---------|------------|----------------------|
+| `IndigoSecrets.py` | Working file the plugin reads at runtime. Keep a backup in a password manager. | YES | **NO** — listed in `.gitignore` |
+| `IndigoSecrets_example.py` | Template only — empty placeholders. Shipped in the plugin bundle. | NO | YES |
 
-```python
-MQTT_BROKER   = "192.168.1.x"    # IP of your MQTT broker
-MQTT_PORT     = 1883
-MQTT_USERNAME = ""                # leave blank if no auth
-MQTT_PASSWORD = ""
-```
+If you do not have `IndigoSecrets.py`, copy `IndigoSecrets_example.py` from
+the plugin bundle to that location and fill in your values. Or skip
+`IndigoSecrets.py` entirely and enter values via the plugin's configuration
+dialog — `IndigoSecrets.py` wins over the dialog when both are set.
 
-If you already have these keys set for HueMQTT, no changes are needed.
-
+If a required value is set in NEITHER source the plugin logs an ERROR
+pointing the user to either fill in the matching field or add the key to
+`IndigoSecrets.py`.
 ## Usage
 
 1. Enable the plugin in Indigo (Plugins > Manage Plugins)
