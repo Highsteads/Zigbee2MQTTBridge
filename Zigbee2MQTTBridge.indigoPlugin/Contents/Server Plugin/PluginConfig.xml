@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Zigbee2MQTT Bridge Plugin - PluginConfig.xml -->
-<!-- MQTT credentials (broker IP, port, username, password) are read exclusively from IndigoSecrets.py -->
+<!-- MQTT credentials (broker IP, port, username, password) are read exclusively from secrets.py -->
 <PluginConfig>
     <Field id="mqtt_topic_prefix" type="textfield" defaultValue="zigbee2mqtt">
         <Label>Topic Prefix:</Label>

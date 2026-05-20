@@ -6,8 +6,14 @@
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Sonnet 4.6
-# Date:        10-05-2026
-# Version:     1.7.1
+# Date:        13-05-2026
+# Version:     1.7.2
+#
+# v1.7.2 (13-05-2026):
+# - Secrets import split into per-key try/except blocks. Previous single-line
+#   `from IndigoSecrets import MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD`
+#   would fail entirely if any one key was missing, blanking all four. Now
+#   each key falls back independently per CLAUDE.md secrets policy.
 #
 # v1.7 (10-05-2026):
 # - Show only the entities each device actually supports.  Pre-init of default
@@ -42,12 +48,23 @@ except ImportError:
     log_startup_banner = None
 
 _sys.path.insert(0, "/Library/Application Support/Perceptive Automation")
+# Per-key try/except so a single missing key doesn't blank all four
+# (per CLAUDE.md secrets policy).
 try:
-    from IndigoSecrets import MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD
+    from IndigoSecrets import MQTT_BROKER
 except ImportError:
-    MQTT_BROKER   = ""
-    MQTT_PORT     = 1883
+    MQTT_BROKER = ""
+try:
+    from IndigoSecrets import MQTT_PORT
+except ImportError:
+    MQTT_PORT = 1883
+try:
+    from IndigoSecrets import MQTT_USERNAME
+except ImportError:
     MQTT_USERNAME = ""
+try:
+    from IndigoSecrets import MQTT_PASSWORD
+except ImportError:
     MQTT_PASSWORD = ""
 
 import indigo  # noqa: E402  (Indigo injects this at runtime)
@@ -1272,7 +1289,7 @@ class Plugin(indigo.PluginBase):
         password = MQTT_PASSWORD
 
         if not broker:
-            log("MQTT broker not configured. Set MQTT_BROKER in IndigoSecrets.py.", level="ERROR")
+            log("MQTT broker not configured. Set MQTT_BROKER in secrets.py.", level="ERROR")
             return
 
         with self.mqtt_lock:
