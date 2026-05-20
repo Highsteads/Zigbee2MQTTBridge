@@ -7,6 +7,7 @@ __pycache__/
 *.pyo
 .DS_Store
 Contents/Packages/
+**/Contents/Packages/
 
 # Claude Code context file — local only
 CLAUDE.md
