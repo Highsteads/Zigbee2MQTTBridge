@@ -5,9 +5,49 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Sonnet 4.6
-# Date:        13-05-2026
-# Version:     1.7.2
+# Author:      CliveS & Claude Opus 4.7
+# Date:        22-05-2026
+# Version:     1.9.1
+#
+# v1.9.1 (22-05-2026):
+# - z2mSensor catch-all now gets a backfilled Indigo subType. Devices created
+#   before the v1.8.0 specific sensor types existed (z2mContactSensor /
+#   z2mOccupancySensor / z2mTemperatureSensor) stayed on z2mSensor and so got
+#   no subType — meaning HomeKitLink-Siri, control pages and Indigo's UI all
+#   treated them as generic. _apply_indigo_subtype() now infers the correct
+#   subType from the device's stored capability flags (has_contact / has_occupancy
+#   / has_temperature etc.): pure-contact → DoorWindow, pure-occupancy → Motion,
+#   pure-environmental → Temperature. Mixed-capability sensors stay unset
+#   (they ARE genuinely generic). Device IDs are preserved — no triggers or
+#   control pages break, unlike a delete-and-recreate migration.
+#
+# v1.9.0 (22-05-2026):
+# - New z2mCoordinator custom device representing the Z2M bridge itself
+#   (one per MQTT prefix — supports multi-bridge setups like CliveS's
+#   zigbee2mqtt + zigbee2mqtt_garage). States: status, version, coordinator,
+#   permitJoin, permitJoinEnd, networkChannel, panId, extendedPanId,
+#   deviceCount, restartRequired, logLevel, lastUpdate. Populated from
+#   prefix/bridge/state and prefix/bridge/info MQTT topics. deviceCount is
+#   kept fresh from the existing bridge/devices cache.
+# - New menu item "Create Coordinator Devices" — auto-creates one device
+#   per configured prefix (primary + garage). Idempotent.
+# - _on_mqtt_message now passes bare-string payloads through (older Z2M
+#   bridge/state publishes "online" without JSON quotes) instead of dropping.
+#
+# v1.8.0 (22-05-2026):
+# - Indigo device subType applied to every device type (was 0 — confirmed gap
+#   vs autolog Zigbee2mqtt Bridge).  Lights, relays, contacts, occupancy,
+#   temperature sensors and covers now get the right SDK subType so
+#   HomeKitLink-Siri, control pages and Indigo's UI render the right icon /
+#   accessory kind.  Set statically in Devices.xml + dynamically in
+#   _apply_indigo_subtype() (z2mLight → ColorDimmer vs Dimmer based on
+#   has_color; also backfills devices created before 1.8.0).
+# - UiDisplayStateId added to z2mTemperatureSensor (temperature) and z2mButton
+#   (lastAction) so the device list shows the actually-useful state.
+# - exception_handler() helper added — logs traceback PLUS the failing source
+#   line and function name extracted from the deepest traceback frame.  Wired
+#   into the high-traffic raw-field capture path and availability handler so
+#   per-device failures finally name themselves.  Pattern lifted from autolog.
 #
 # v1.7.2 (13-05-2026):
 # - Secrets import split into per-key try/except blocks. Previous single-line
@@ -510,6 +550,18 @@ class Plugin(indigo.PluginBase):
         # Used for diagnostic logging — fires once per prefix per session.
         self._seen_prefixes = set()  # type: set[str]
 
+        # Coordinator devices: mqtt_prefix -> indigo device id (one per Z2M bridge)
+        self.coordinator_map = {}  # type: dict[str, int]
+
+        # Latest bridge/info payload per prefix (cached so menu items / refresh can
+        # re-populate states without round-tripping MQTT).
+        self._bridge_info_cache = {}  # type: dict[str, dict]
+
+        # Latest bridge/state per prefix — cached because the retained MQTT message
+        # may arrive before any coordinator device exists.  Replayed on
+        # deviceStartComm so the freshly created device picks up online/offline.
+        self._bridge_state_cache = {}  # type: dict[str, str]
+
         # Per-device motion component states for occupancy sensors.
         # Stores last known bool for each motion-related key the device has ever sent
         # (motion, occupancy, presence, pir, ...).  Partial payloads only update the
@@ -572,6 +624,33 @@ class Plugin(indigo.PluginBase):
     # ── Device lifecycle ──────────────────────────────────────────────────────
 
     def deviceStartComm(self, dev):
+        # Coordinator devices have no friendly_name — they're indexed by mqtt_prefix
+        if dev.deviceTypeId == "z2mCoordinator":
+            prefix = dev.pluginProps.get("mqtt_prefix", "").strip()
+            if not prefix:
+                log(f"Coordinator '{dev.name}' has no mqtt_prefix — skipping",
+                    level="WARNING")
+                return
+            self.coordinator_map[prefix] = dev.id
+            self._ensure_device_states(dev)
+            # If we already have a cached bridge/info or bridge/state for this
+            # prefix (retained MQTT may have arrived before this device existed),
+            # push them now so the device populates immediately.
+            cached_info = self._bridge_info_cache.get(prefix)
+            if cached_info:
+                self._process_bridge_info(cached_info, prefix)
+            cached_state = self._bridge_state_cache.get(prefix)
+            if cached_state:
+                self._update_coordinator(prefix, status=cached_state)
+            # Backfill deviceCount from current cache
+            count = sum(1 for d in self.bridge_devices.values()
+                        if d.get("_mqtt_prefix") == prefix)
+            if count:
+                dev.updateStateOnServer("deviceCount", value=count)
+            if self.debug:
+                log(f"Started coordinator: {dev.name} (prefix={prefix})")
+            return
+
         props = dev.pluginProps
         fname = props.get("friendly_name", "").strip()
         if not fname:
@@ -582,6 +661,11 @@ class Plugin(indigo.PluginBase):
         ieee = props.get("ieee_address", "")
         if ieee:
             self.ieee_map[ieee] = dev.id
+
+        # Apply Indigo subType — dynamic for lights (Dimmer vs ColorDimmer);
+        # static for everything else.  Also backfills devices created before
+        # subType was declared in Devices.xml.
+        self._apply_indigo_subtype(dev)
 
         # Apply stored color/capability flags to Indigo device
         if dev.deviceTypeId == "z2mLight":
@@ -670,6 +754,20 @@ class Plugin(indigo.PluginBase):
         "z2mRepeater": [
             ("availability", ""),
             ("linkQuality",  0),
+        ],
+        "z2mCoordinator": [
+            ("status",          "unknown"),
+            ("version",         ""),
+            ("coordinator",     ""),
+            ("permitJoin",      False),
+            ("permitJoinEnd",   ""),
+            ("networkChannel",  0),
+            ("panId",           0),
+            ("extendedPanId",   ""),
+            ("deviceCount",     0),
+            ("restartRequired", False),
+            ("logLevel",        ""),
+            ("lastUpdate",      ""),
         ],
     }
 
@@ -940,6 +1038,12 @@ class Plugin(indigo.PluginBase):
         return state_list
 
     def deviceStopComm(self, dev):
+        if dev.deviceTypeId == "z2mCoordinator":
+            prefix = dev.pluginProps.get("mqtt_prefix", "")
+            self.coordinator_map.pop(prefix, None)
+            if self.debug:
+                log(f"Stopped coordinator: {dev.name}")
+            return
         fname = dev.pluginProps.get("friendly_name", "")
         self.friendly_name_map.pop(fname, None)
         ieee = dev.pluginProps.get("ieee_address", "")
@@ -1228,6 +1332,47 @@ class Plugin(indigo.PluginBase):
             parts.append(f"{counts['error']} error(s)")
         log(f"Discover & Create complete: {', '.join(parts)}")
 
+    def create_coordinator_devices(self, valuesDict=None, typeId=None):
+        """Create a z2mCoordinator device for every configured MQTT prefix
+        that doesn't already have one. Names are 'Z2M Bridge (<prefix>)'."""
+        folder_id = self._ensure_device_folder(DEVICE_FOLDER_NAME)
+        prefixes  = [self._topic_prefix()]
+        garage    = self._garage_prefix()
+        if garage:
+            prefixes.append(garage)
+
+        created = 0
+        existed = 0
+        for prefix in prefixes:
+            if prefix in self.coordinator_map:
+                log(f"  exists: coordinator for prefix '{prefix}'")
+                existed += 1
+                continue
+            name = f"Z2M Bridge ({prefix})"
+            # Avoid duplicate name collision
+            base = name
+            i = 2
+            while name in indigo.devices:
+                name = f"{base} #{i}"
+                i += 1
+            try:
+                new_dev = indigo.device.create(
+                    protocol     = indigo.kProtocol.Plugin,
+                    address      = prefix,
+                    name         = name,
+                    description  = f"Z2M bridge / coordinator status — prefix {prefix}",
+                    pluginId     = self.pluginId,
+                    deviceTypeId = "z2mCoordinator",
+                    folder       = folder_id,
+                    props        = {"mqtt_prefix": prefix},
+                )
+                log(f"  created coordinator: '{new_dev.name}' (prefix={prefix})")
+                created += 1
+            except Exception as e:
+                self.exception_handler(e, log_failing_statement=True,
+                                       context=f"create coordinator for '{prefix}'")
+        log(f"Create Coordinator Devices complete: {created} created, {existed} already existed")
+
     def refresh_bridge_devices(self, valuesDict=None, typeId=None):
         """Menu item: republish a get request for bridge/devices."""
         prefix = self._topic_prefix()
@@ -1372,9 +1517,15 @@ class Plugin(indigo.PluginBase):
 
     def _on_mqtt_message(self, client, userdata, msg):
         try:
-            payload = json.loads(msg.payload.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return  # ignore non-JSON (e.g. binary bridge messages)
+            raw = msg.payload.decode("utf-8")
+        except UnicodeDecodeError:
+            return  # binary payload
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            # Older Z2M publishes bare strings like `online` on bridge/state.
+            # Pass the raw decoded string through so handlers can deal with it.
+            payload = raw
         self.msg_queue.put((msg.topic, payload))
 
     # ── Message processing (Indigo main thread) ───────────────────────────────
@@ -1427,8 +1578,14 @@ class Plugin(indigo.PluginBase):
 
         # Bridge topics: prefix/bridge/...
         if parts[1] == "bridge":
-            if len(parts) >= 3 and parts[2] == "devices":
-                self._process_bridge_devices(payload, effective_prefix)
+            if len(parts) >= 3:
+                bt = parts[2]
+                if bt == "devices":
+                    self._process_bridge_devices(payload, effective_prefix)
+                elif bt == "state":
+                    self._process_bridge_state(payload, effective_prefix)
+                elif bt == "info":
+                    self._process_bridge_info(payload, effective_prefix)
             return
 
         # Availability: last path component is "availability"
@@ -1532,6 +1689,88 @@ class Plugin(indigo.PluginBase):
                 for ieee in new_ieee:
                     self._try_create_device(new_cache[ieee], folder_id, existing_names)
 
+        # Update the coordinator's deviceCount + lastUpdate (if one exists for this prefix)
+        self._update_coordinator(prefix, deviceCount=sum(
+            1 for d in self.bridge_devices.values()
+            if d.get("_mqtt_prefix") == prefix))
+
+    def _process_bridge_state(self, payload, prefix):
+        """Handle prefix/bridge/state.  Payload is either a JSON dict
+        {"state": "online"} (newer Z2M) or a bare string "online" (older)."""
+        if isinstance(payload, dict):
+            state = payload.get("state", "")
+        elif isinstance(payload, str):
+            state = payload.strip().strip('"')
+        else:
+            return
+        if not state:
+            return
+        self._bridge_state_cache[prefix] = state
+        self._update_coordinator(prefix, status=state)
+        if self.debug:
+            log(f"Bridge '{prefix}' state: {state}")
+
+    def _process_bridge_info(self, payload, prefix):
+        """Handle prefix/bridge/info — comprehensive bridge metadata."""
+        if not isinstance(payload, dict):
+            return
+        self._bridge_info_cache[prefix] = payload
+
+        kv = {}
+        version = payload.get("version", "")
+        if version:
+            kv["version"] = str(version)
+        coord = payload.get("coordinator", {})
+        if isinstance(coord, dict):
+            ctype = coord.get("type", "")
+            if ctype:
+                kv["coordinator"] = str(ctype)
+        kv["permitJoin"]      = bool(payload.get("permit_join", False))
+        permit_end = payload.get("permit_join_end")
+        kv["permitJoinEnd"]   = "" if permit_end is None else str(permit_end)
+        kv["restartRequired"] = bool(payload.get("restart_required", False))
+        log_level = payload.get("log_level", "")
+        if log_level:
+            kv["logLevel"] = str(log_level)
+        net = payload.get("network", {})
+        if isinstance(net, dict):
+            if "channel" in net:
+                try:
+                    kv["networkChannel"] = int(net["channel"])
+                except (TypeError, ValueError):
+                    pass
+            if "pan_id" in net:
+                try:
+                    kv["panId"] = int(net["pan_id"])
+                except (TypeError, ValueError):
+                    pass
+            if "extended_pan_id" in net:
+                kv["extendedPanId"] = str(net["extended_pan_id"])
+
+        self._update_coordinator(prefix, **kv)
+
+    def _update_coordinator(self, prefix, **state_kv):
+        """Push a batch of state updates to the coordinator device bound to
+        this MQTT prefix. Silently no-ops if no coordinator device exists
+        for the prefix (user hasn't created one yet)."""
+        dev_id = self.coordinator_map.get(prefix)
+        if dev_id is None:
+            return
+        try:
+            dev = indigo.devices[dev_id]
+        except KeyError:
+            self.coordinator_map.pop(prefix, None)
+            return
+        state_kv["lastUpdate"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        updates = [{"key": k, "value": v} for k, v in state_kv.items()
+                   if k in dev.states]
+        if updates:
+            try:
+                dev.updateStatesOnServer(updates)
+            except Exception as e:
+                self.exception_handler(e, log_failing_statement=True,
+                                       context=f"coordinator '{dev.name}' update")
+
     def _process_availability(self, friendly_name, payload):
         """Handle availability message — update the 'availability' state."""
         dev_id = self.friendly_name_map.get(friendly_name)
@@ -1554,7 +1793,8 @@ class Plugin(indigo.PluginBase):
             if self.debug:
                 log(f"{dev.name}: availability = {state}")
         except Exception as e:
-            log(f"Availability update error for '{friendly_name}': {e}", level="ERROR")
+            self.exception_handler(e, log_failing_statement=True,
+                                   context=f"availability update for '{friendly_name}'")
 
     def _process_device_state(self, friendly_name, payload):
         """Dispatch a device state payload to the type-specific handler."""
@@ -1604,8 +1844,8 @@ class Plugin(indigo.PluginBase):
         try:
             self._capture_raw_fields(dev, payload)
         except Exception as e:
-            if self.debug:
-                log(f"{dev.name}: raw-field capture error: {e}", level="WARNING")
+            self.exception_handler(e, log_failing_statement=True,
+                                   context=f"{dev.name} raw-field capture")
 
     def _is_valid_state_id(self, key):
         """Indigo XML state IDs must start with an ASCII letter and contain only
@@ -2234,6 +2474,86 @@ class Plugin(indigo.PluginBase):
         return props
 
     # ── Light capability helpers ──────────────────────────────────────────────
+
+    def exception_handler(self, exc, log_failing_statement=False, context=""):
+        """Log an exception with full traceback. When log_failing_statement is
+        True, also extract the actual source line that raised from the deepest
+        traceback frame — invaluable when one device out of dozens triggers a
+        failure and the bare message doesn't say which line in which method
+        blew up. Modelled on autolog's exception_handler pattern.
+        """
+        import traceback
+        tb = exc.__traceback__
+        last_frame = None
+        while tb is not None:
+            last_frame = tb
+            tb = tb.tb_next
+        prefix = f"{context}: " if context else ""
+        log(f"{prefix}{type(exc).__name__}: {exc}", level="ERROR")
+        if log_failing_statement and last_frame is not None:
+            fname    = last_frame.tb_frame.f_code.co_filename
+            lineno   = last_frame.tb_lineno
+            funcname = last_frame.tb_frame.f_code.co_name
+            try:
+                # encoding="utf-8" — Indigo's open() defaults to ASCII and
+                # plugin source contains em-dashes (CLAUDE.md gotcha)
+                with open(fname, encoding="utf-8") as f:
+                    src_line = f.readlines()[lineno - 1].strip()
+            except Exception:
+                src_line = "(source unavailable)"
+            short = fname.rsplit("/", 1)[-1]
+            log(f"  at {short}:{lineno} in {funcname}() -> {src_line}", level="ERROR")
+        log(traceback.format_exc(), level="ERROR")
+
+    def _apply_indigo_subtype(self, dev):
+        """Set dev.subType so Indigo, HomeKitLink-Siri and control pages get the
+        right semantic class (icon + accessory kind). Dynamic for lights (colour
+        capability) and for z2mSensor catch-all (inferred from capability flags).
+        Static for everything else. Skips devices without a clean SDK match
+        (z2mWaterLeakSensor, z2mRepeater, z2mButton, and mixed-capability z2mSensor).
+        """
+        target = None
+        type_id = dev.deviceTypeId
+
+        if type_id == "z2mLight":
+            has_col = dev.pluginProps.get("has_color", False)
+            target = (indigo.kDimmerDeviceSubType.ColorDimmer if has_col
+                      else indigo.kDimmerDeviceSubType.Dimmer)
+        elif type_id == "z2mRelay":
+            target = indigo.kRelayDeviceSubType.Outlet
+        elif type_id == "z2mContactSensor":
+            target = indigo.kSensorDeviceSubType.DoorWindow
+        elif type_id == "z2mOccupancySensor":
+            target = indigo.kSensorDeviceSubType.Motion
+        elif type_id == "z2mTemperatureSensor":
+            target = indigo.kSensorDeviceSubType.Temperature
+        elif type_id == "z2mCover":
+            target = indigo.kDimmerDeviceSubType.Blind
+        elif type_id == "z2mSensor":
+            # Backfill: devices created before the specific sensor types existed
+            # are still on the catch-all but their capability flags reveal which
+            # specific subType they would have got under the v1.8.0 classifier.
+            # Setting subType in place keeps the deviceId intact (no trigger /
+            # control page breakage) while giving HomeKitLink-Siri the right
+            # accessory routing. Mixed-capability sensors get no subType.
+            props        = dev.pluginProps
+            has_contact  = props.get("has_contact",    False)
+            has_occ      = props.get("has_occupancy",  False)
+            has_leak     = props.get("has_water_leak", False)
+            has_env      = (props.get("has_temperature", False)
+                            or props.get("has_humidity",    False)
+                            or props.get("has_pressure",    False)
+                            or props.get("has_illuminance", False))
+            if has_contact and not has_occ and not has_leak:
+                target = indigo.kSensorDeviceSubType.DoorWindow
+            elif has_occ and not has_contact and not has_leak:
+                target = indigo.kSensorDeviceSubType.Motion
+            elif has_env and not has_contact and not has_occ and not has_leak:
+                target = indigo.kSensorDeviceSubType.Temperature
+
+        if target is not None and dev.subType != target:
+            dev.subType = target
+            dev.replaceOnServer()
 
     def _apply_light_capabilities(self, dev):
         """Set Indigo color capability flags from stored pluginProps (z2mLight only)."""

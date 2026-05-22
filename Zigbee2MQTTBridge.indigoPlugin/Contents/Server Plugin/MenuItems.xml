@@ -6,6 +6,11 @@
         <CallbackMethod>discover_create_devices</CallbackMethod>
     </MenuItem>
     <MenuItem id="sep1" isSeparator="true"/>
+    <MenuItem id="createCoordinatorDevices">
+        <Name>Create Coordinator Devices</Name>
+        <CallbackMethod>create_coordinator_devices</CallbackMethod>
+    </MenuItem>
+    <MenuItem id="sepCoord" isSeparator="true"/>
     <MenuItem id="refreshBridgeDevices">
         <Name>Refresh Device List from MQTT</Name>
         <CallbackMethod>refresh_bridge_devices</CallbackMethod>

@@ -19,7 +19,7 @@
          Optional native: redLevel/greenLevel/blueLevel (SupportsColor=true)
                           whiteTemperature (SupportsWhiteTemperature=true)
          ================================================================ -->
-    <Device type="dimmer" id="z2mLight">
+    <Device type="dimmer" id="z2mLight" subType="indigo.kDimmerDeviceSubType.Dimmer">
         <Name>Z2M Light</Name>
         <ConfigUI>
             <Field id="friendly_name" type="textfield" defaultValue="">
@@ -72,7 +72,7 @@
          z2mRelay — Zigbee relay/switch/outlet (relay class)
          Native states: onOffState
          ================================================================ -->
-    <Device type="relay" id="z2mRelay">
+    <Device type="relay" id="z2mRelay" subType="indigo.kRelayDeviceSubType.Outlet">
         <Name>Z2M Relay</Name>
         <ConfigUI>
             <Field id="friendly_name" type="textfield" defaultValue="">
@@ -214,7 +214,7 @@
          z2mContactSensor — Zigbee door/window contact sensor (sensor class)
          onOffState: True = open, False = closed
          ================================================================ -->
-    <Device type="sensor" id="z2mContactSensor">
+    <Device type="sensor" id="z2mContactSensor" subType="indigo.kSensorDeviceSubType.DoorWindow">
         <Name>Z2M Contact Sensor</Name>
         <ConfigUI>
             <Field id="friendly_name" type="textfield" defaultValue="">
@@ -267,7 +267,7 @@
          presence  : raw mmWave detection (slow, persistent)
          motion    : combined — True if either occupancy OR presence is True
          ================================================================ -->
-    <Device type="sensor" id="z2mOccupancySensor">
+    <Device type="sensor" id="z2mOccupancySensor" subType="indigo.kSensorDeviceSubType.Motion">
         <Name>Z2M Occupancy Sensor</Name>
         <ConfigUI>
             <Field id="friendly_name" type="textfield" defaultValue="">
@@ -404,7 +404,7 @@
          Reports temperature, humidity, pressure, illuminance (any combo).
          No binary alarm states — onOffState is not meaningful (stays False).
          ================================================================ -->
-    <Device type="sensor" id="z2mTemperatureSensor">
+    <Device type="sensor" id="z2mTemperatureSensor" subType="indigo.kSensorDeviceSubType.Temperature">
         <Name>Z2M Temperature Sensor</Name>
         <ConfigUI>
             <Field id="friendly_name" type="textfield" defaultValue="">
@@ -466,6 +466,7 @@
                 <ControlPageLabel>Link Quality</ControlPageLabel>
             </State>
         </States>
+        <UiDisplayStateId>temperature</UiDisplayStateId>
     </Device>
 
     <!-- ================================================================
@@ -514,7 +515,7 @@
          onOffState: True=open (position>0), False=closed (position=0)
          Commands use OPEN/CLOSE/STOP (not ON/OFF)
          ================================================================ -->
-    <Device type="dimmer" id="z2mCover">
+    <Device type="dimmer" id="z2mCover" subType="indigo.kDimmerDeviceSubType.Blind">
         <Name>Z2M Cover</Name>
         <ConfigUI>
             <Field id="friendly_name" type="textfield" defaultValue="">
@@ -625,6 +626,87 @@
                 <ControlPageLabel>Link Quality</ControlPageLabel>
             </State>
         </States>
+        <UiDisplayStateId>lastAction</UiDisplayStateId>
+    </Device>
+
+    <!-- ================================================================
+         z2mCoordinator — Z2M bridge itself (custom device class)
+         One per MQTT prefix (e.g. zigbee2mqtt + zigbee2mqtt_garage).
+         Aggregates bridge/state, bridge/info and bridge/devices into a single
+         Indigo device so the bridge can be triggered on / shown on control
+         pages without scraping the underlying MQTT messages each time.
+         ================================================================ -->
+    <Device type="custom" id="z2mCoordinator">
+        <Name>Z2M Coordinator</Name>
+        <ConfigUI>
+            <Field id="mqtt_prefix" type="textfield" defaultValue="zigbee2mqtt">
+                <Label>MQTT Prefix:</Label>
+                <Description>Z2M topic prefix this coordinator represents (e.g. zigbee2mqtt, zigbee2mqtt_garage). Must match a prefix configured in Plugin Preferences.</Description>
+            </Field>
+        </ConfigUI>
+        <States>
+            <State id="status">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Bridge Status Changed</TriggerLabel>
+                <ControlPageLabel>Status</ControlPageLabel>
+            </State>
+            <State id="version">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Z2M Version Changed</TriggerLabel>
+                <ControlPageLabel>Z2M Version</ControlPageLabel>
+            </State>
+            <State id="coordinator">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Coordinator Type Changed</TriggerLabel>
+                <ControlPageLabel>Coordinator Type</ControlPageLabel>
+            </State>
+            <State id="permitJoin">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Permit Join Changed</TriggerLabel>
+                <ControlPageLabel>Permit Join</ControlPageLabel>
+            </State>
+            <State id="permitJoinEnd">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Permit Join End Changed</TriggerLabel>
+                <ControlPageLabel>Permit Join End</ControlPageLabel>
+            </State>
+            <State id="networkChannel">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Channel Changed</TriggerLabel>
+                <ControlPageLabel>Network Channel</ControlPageLabel>
+            </State>
+            <State id="panId">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>PAN ID Changed</TriggerLabel>
+                <ControlPageLabel>PAN ID</ControlPageLabel>
+            </State>
+            <State id="extendedPanId">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Extended PAN ID Changed</TriggerLabel>
+                <ControlPageLabel>Extended PAN ID</ControlPageLabel>
+            </State>
+            <State id="deviceCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Device Count Changed</TriggerLabel>
+                <ControlPageLabel>Device Count</ControlPageLabel>
+            </State>
+            <State id="restartRequired">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Restart Required Changed</TriggerLabel>
+                <ControlPageLabel>Restart Required</ControlPageLabel>
+            </State>
+            <State id="logLevel">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Log Level Changed</TriggerLabel>
+                <ControlPageLabel>Log Level</ControlPageLabel>
+            </State>
+            <State id="lastUpdate">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Update Changed</TriggerLabel>
+                <ControlPageLabel>Last Update</ControlPageLabel>
+            </State>
+        </States>
+        <UiDisplayStateId>status</UiDisplayStateId>
     </Device>
 
 </Devices>
