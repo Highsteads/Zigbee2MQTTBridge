@@ -15,6 +15,10 @@
         <Name>Refresh Device List from MQTT</Name>
         <CallbackMethod>refresh_bridge_devices</CallbackMethod>
     </MenuItem>
+    <MenuItem id="refreshDeviceCapabilities">
+        <Name>Refresh Device Capabilities</Name>
+        <CallbackMethod>refresh_device_capabilities</CallbackMethod>
+    </MenuItem>
     <MenuItem id="sep2" isSeparator="true"/>
     <MenuItem id="showPluginInfo">
         <Name>Show Plugin Info</Name>

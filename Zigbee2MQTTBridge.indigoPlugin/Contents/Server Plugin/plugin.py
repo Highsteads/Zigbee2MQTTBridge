@@ -7,7 +7,54 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        22-05-2026
-# Version:     1.9.1
+# Version:     1.9.5
+#
+# v1.9.5 (22-05-2026):
+# - Refactor from code-review pass (no behaviour change):
+#   * Extracted `_compute_light_native_flags(has_color, has_color_temp)`
+#     @staticmethod — single source of truth for SupportsColor / SupportsRGB /
+#     SupportsWhite / SupportsWhiteTemperature. Both _apply_light_capabilities
+#     (deviceStartComm path) and refresh_device_capabilities (menu path) now
+#     call this helper, eliminating the flip-flop risk noted in v1.9.3.
+#   * Unified the two diff-detection loops in refresh_device_capabilities
+#     into a single pass over a merged `target` dict.
+#   * Moved `_build_capabilities_display` call inside the `if diffs:` guard —
+#     skips ~50 string-format calls per menu invocation on no-op refreshes.
+#   * Pruned the 14-line contradictory comment above the displayStateId guard
+#     in deviceStartComm; investigation history stays in the v1.9.4 changelog.
+#
+# v1.9.4 (22-05-2026):
+# - deviceStartComm now logs a WARNING when an existing device's cached
+#   displayStateId disagrees with the current Devices.xml <UiDisplayStateId>.
+#   For z2mButton (lastAction) and z2mTemperatureSensor (temperature) the XML
+#   value was updated in v1.8.0, but Indigo caches displayStateId on the
+#   device record at create time — it is a read-only attribute on existing
+#   devices and stateListOrDisplayStateIdChanged() does NOT update it.
+#   Confirmed: assignment raises "the attribute \"displayStateId\" is read-only
+#   on this instance". The only fix for an existing device is delete +
+#   recreate via Plugins -> Discover & Create Devices. The new
+#   _EXPECTED_DISPLAY_STATE map drives the per-device check and a clear
+#   user-facing warning that names the affected devices.
+#
+# v1.9.3 (22-05-2026):
+# - "Refresh Device Capabilities" now sets SupportsColor / SupportsRGB /
+#   SupportsWhite / SupportsWhiteTemperature on z2mLight using the SAME formula
+#   as _apply_light_capabilities (SupportsColor = has_color OR has_color_temp,
+#   because CT-only bulbs need it as the prereq for SupportsWhiteTemperature).
+#   v1.9.2 used create-time logic (SupportsColor = has_color alone) and so
+#   downgraded CT-only Hue White Ambiance bulbs on first refresh; the
+#   subsequent deviceStartComm would then re-set them, causing a flip-flop.
+#
+# v1.9.2 (22-05-2026):
+# - New menu item "Refresh Device Capabilities" — walks every existing Z2M
+#   Indigo device, looks it up in self.bridge_devices by ieee_address (then
+#   friendly_name as fallback), re-runs the per-type _detect_*_capabilities()
+#   against the live exposes, and merges any has_* / capabilities_display
+#   changes via replacePluginPropsOnServer. Then re-applies _apply_indigo_subtype
+#   so the catch-all z2mSensor subType backfill runs after the flags update.
+#   Logs per-device diffs. Idempotent. Fixes devices created before Z2M had
+#   emitted a full exposes definition (e.g. Aqara FP1 presence sensors, contact
+#   sensors with empty has_* flags but real state values).
 #
 # v1.9.1 (22-05-2026):
 # - z2mSensor catch-all now gets a backfilled Indigo subType. Devices created
@@ -675,12 +722,30 @@ class Plugin(indigo.PluginBase):
         # after a device was originally created (avoids "state key not defined" errors)
         self._ensure_device_states(dev)
 
+        # displayStateId is cached on the device record at create time and is
+        # read-only on existing instances — only fix for a stale value after a
+        # <UiDisplayStateId> change in Devices.xml is delete + recreate.
+        expected_display = self._EXPECTED_DISPLAY_STATE.get(dev.deviceTypeId)
+        if expected_display and dev.displayStateId != expected_display:
+            log(f"{dev.name}: displayStateId is {dev.displayStateId!r} but XML "
+                f"now declares {expected_display!r} — delete + recreate this "
+                f"device to pick up the new primary display state",
+                level="WARNING")
+
         if self.debug:
             log(f"Started device: {dev.name} (type={dev.deviceTypeId}, name={fname})")
 
         # Request current state after brief delay (MQTT needs time to settle)
         prefix = self._device_prefix(dev)
         threading.Timer(STATE_REQUEST_DELAY, self._request_state, args=(fname, dev.deviceTypeId, prefix)).start()
+
+    # Expected displayStateId per device type — must match <UiDisplayStateId> in
+    # Devices.xml.  Used by deviceStartComm to retroactively repair the cached
+    # displayStateId on devices created before the XML value was changed.
+    _EXPECTED_DISPLAY_STATE = {
+        "z2mButton":            "lastAction",
+        "z2mTemperatureSensor": "temperature",
+    }
 
     # Default custom states for every device type.
     # Key   = state id as declared in Devices.xml
@@ -1382,6 +1447,157 @@ class Plugin(indigo.PluginBase):
             self._publish(f"{garage}/bridge/request/devices", {})
         log("Requested device list refresh from MQTT bridge"
             + (f" (+ garage: {garage})" if garage else ""))
+
+    _CAP_DETECTORS = {
+        "z2mLight":             _detect_light_capabilities,
+        "z2mContactSensor":     _detect_contact_sensor_capabilities,
+        "z2mOccupancySensor":   _detect_occupancy_sensor_capabilities,
+        "z2mWaterLeakSensor":   _detect_water_leak_sensor_capabilities,
+        "z2mTemperatureSensor": _detect_temperature_sensor_capabilities,
+        "z2mSensor":            _detect_sensor_capabilities,
+        "z2mRelay":             _detect_relay_capabilities,
+    }
+
+    def refresh_device_capabilities(self, valuesDict=None, typeId=None):
+        """Menu item: re-detect has_* / capabilities_display for every existing
+        Z2M Indigo device by re-running the per-type capability detector against
+        the live exposes in self.bridge_devices. Then re-apply the Indigo subType
+        so devices created before a capability landed (or before z2mSensor
+        subType backfill arrived in v1.8.0/1.9.1) get their flags + subType
+        corrected without delete-and-recreate. Idempotent.
+        """
+        if not self.bridge_devices:
+            log("No bridge device data yet — wait for MQTT or run "
+                "'Refresh Device List from MQTT' first.", level="WARNING")
+            return
+
+        # Index bridge cache by both ieee and friendly_name for fast lookup
+        by_ieee = {}
+        by_fname = {}
+        for d in self.bridge_devices.values():
+            ieee = (d.get("ieee_address") or "").strip()
+            fn   = (d.get("friendly_name") or "").strip()
+            if ieee:
+                by_ieee[ieee] = d
+            if fn:
+                by_fname[fn] = d
+
+        changed = unchanged = missing = no_def = skipped = 0
+        for dev in indigo.devices.iter(self.pluginId):
+            type_id = dev.deviceTypeId
+            if type_id == "z2mCoordinator":
+                skipped += 1
+                continue
+
+            detector = self._CAP_DETECTORS.get(type_id)
+            if detector is None:
+                # No capability detector for this type (z2mRepeater, z2mCover,
+                # z2mButton handled inline at create time). Still re-apply
+                # subType in case it's missing.
+                self._apply_indigo_subtype(dev)
+                skipped += 1
+                continue
+
+            props = dev.pluginProps
+            ieee  = (props.get("ieee_address") or "").strip()
+            fname = (props.get("friendly_name") or "").strip()
+
+            data = by_ieee.get(ieee) if ieee else None
+            if data is None and fname:
+                data = by_fname.get(fname)
+
+            if data is None:
+                log(f"  {dev.name}: not in bridge cache (ieee={ieee or '?'}, "
+                    f"fname={fname or '?'}) — skipping", level="WARNING")
+                missing += 1
+                continue
+
+            definition = data.get("definition")
+            if definition is None:
+                log(f"  {dev.name}: no Z2M definition (uninterviewed) — skipping",
+                    level="WARNING")
+                no_def += 1
+                continue
+
+            exposes = definition.get("exposes", []) or []
+            try:
+                caps = detector(exposes)
+            except Exception as e:
+                self.exception_handler(e, log_failing_statement=True,
+                                       context=f"refresh caps for {dev.name}")
+                continue
+
+            # Build the full set of target props in one dict, then diff in one pass.
+            # For z2mLight we add the Indigo-native colour flags using the SAME
+            # helper as _apply_light_capabilities to prevent the two paths drifting
+            # apart (would cause a deviceStartComm <-> refresh flip-flop).
+            target = dict(caps)
+            if type_id == "z2mLight":
+                target.update(self._compute_light_native_flags(
+                    caps.get("has_color",      False),
+                    caps.get("has_color_temp", False),
+                ))
+
+            new_props = dict(props)
+            diffs = []
+            for k, v in target.items():
+                old = new_props.get(k)
+                if old != v:
+                    diffs.append((k, old, v))
+                    new_props[k] = v
+
+            if diffs:
+                # Only worth rebuilding capabilities_display if a capability flag
+                # actually changed — skips ~50 string-format calls on a no-op refresh.
+                new_display = _build_capabilities_display(type_id, new_props)
+                if new_props.get("capabilities_display") != new_display:
+                    diffs.append(("capabilities_display",
+                                  new_props.get("capabilities_display"),
+                                  new_display))
+                    new_props["capabilities_display"] = new_display
+
+            if diffs:
+                try:
+                    dev.replacePluginPropsOnServer(new_props)
+                except Exception as e:
+                    self.exception_handler(e, log_failing_statement=True,
+                                           context=f"replacePluginProps {dev.name}")
+                    continue
+                # Re-fetch so _apply_indigo_subtype sees the new props
+                refreshed = indigo.devices[dev.id]
+                old_subtype = refreshed.subType
+                self._apply_indigo_subtype(refreshed)
+                refreshed = indigo.devices[refreshed.id]
+                summary = ", ".join(
+                    f"{k}: {old!r}->{new!r}" for k, old, new in diffs
+                )
+                subtype_note = ""
+                if refreshed.subType != old_subtype:
+                    subtype_note = f"; subType {old_subtype or '∅'!r}->{refreshed.subType!r}"
+                log(f"  {dev.name}: updated [{summary}]{subtype_note}")
+                changed += 1
+            else:
+                # Props unchanged, but subType might still need backfilling
+                old_subtype = dev.subType
+                self._apply_indigo_subtype(dev)
+                refreshed = indigo.devices[dev.id]
+                if refreshed.subType != old_subtype:
+                    log(f"  {dev.name}: no capability changes; "
+                        f"subType {old_subtype or '∅'!r}->{refreshed.subType!r}")
+                    changed += 1
+                else:
+                    if self.debug:
+                        log(f"  {dev.name}: no change")
+                    unchanged += 1
+
+        parts = [f"{changed} updated", f"{unchanged} unchanged"]
+        if missing:
+            parts.append(f"{missing} not in bridge cache")
+        if no_def:
+            parts.append(f"{no_def} uninterviewed")
+        if skipped:
+            parts.append(f"{skipped} skipped (no detector)")
+        log(f"Refresh Device Capabilities complete: {', '.join(parts)}")
 
     def showPluginInfo(self, valuesDict=None, typeId=None):
         z2m_count = sum(1 for _ in indigo.devices.iter(self.pluginId))
@@ -2555,6 +2771,19 @@ class Plugin(indigo.PluginBase):
             dev.subType = target
             dev.replaceOnServer()
 
+    @staticmethod
+    def _compute_light_native_flags(has_color, has_color_temp):
+        # SupportsColor must be True for any lamp with colour OR CT — it's the
+        # top-level prerequisite for both SupportsRGB and SupportsWhiteTemperature.
+        # A CT-only bulb still needs SupportsColor=True or Indigo silently ignores
+        # SupportsWhiteTemperature.
+        return {
+            "SupportsColor":            has_color or has_color_temp,
+            "SupportsRGB":              has_color,
+            "SupportsWhite":            has_color_temp,
+            "SupportsWhiteTemperature": has_color_temp,
+        }
+
     def _apply_light_capabilities(self, dev):
         """Set Indigo color capability flags from stored pluginProps (z2mLight only)."""
         props   = dev.pluginProps
@@ -2567,14 +2796,7 @@ class Plugin(indigo.PluginBase):
             return
 
         new_props = dict(props)
-        # SupportsColor is the top-level flag — required as a prerequisite for both
-        # SupportsRGB and SupportsWhite. Must be True for any lamp with colour or CT.
-        new_props["SupportsColor"]            = has_col or has_ct
-        new_props["SupportsRGB"]              = has_col
-        # SupportsWhite must be True for SupportsWhiteTemperature to take effect
-        # (Indigo silently ignores SupportsWhiteTemperature if SupportsWhite is False)
-        new_props["SupportsWhite"]            = has_ct
-        new_props["SupportsWhiteTemperature"] = has_ct
+        new_props.update(self._compute_light_native_flags(has_col, has_ct))
 
         # Always call replacePluginPropsOnServer when capability data is present.
         # Indigo only propagates native attributes to the device via this call.
