@@ -6,8 +6,13 @@
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 4.7
-# Date:        22-05-2026
-# Version:     1.9.6
+# Date:        23-05-2026
+# Version:     1.9.7
+#
+# v1.9.7 (23-05-2026): Millisecond timestamp [HH:MM:SS.mmm] prefix on every
+# log line via plugin_utils.install_timestamp_filter() — matches Device
+# Activity Monitor convention. Module-level log() helper bumped to ms.
+# New "Toggle Timestamps in Log" menu item.
 #
 # v1.9.5 (22-05-2026):
 # - Refactor from code-review pass (no behaviour change):
@@ -133,6 +138,10 @@ try:
     from plugin_utils import log_startup_banner
 except ImportError:
     log_startup_banner = None
+try:
+    from plugin_utils import install_timestamp_filter
+except ImportError:
+    install_timestamp_filter = None
 
 _sys.path.insert(0, "/Library/Application Support/Perceptive Automation")
 # Per-key try/except so a single missing key doesn't blank all four
@@ -217,7 +226,7 @@ _RESERVED_STATE_NAMES = {
 # ── Pure helper functions (no Indigo dependency) ─────────────────────────────
 
 def log(message, level="INFO"):
-    indigo.server.log(f"[{datetime.now().strftime('%H:%M:%S')}] {message}", level=level)
+    indigo.server.log(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] {message}", level=level)
 
 
 def _xy_to_rgb(x, y):
@@ -572,6 +581,12 @@ class Plugin(indigo.PluginBase):
         self.pluginId          = pluginId
         self.pluginDisplayName = pluginDisplayName
         self.pluginVersion     = pluginVersion
+
+        self.timestamp_enabled = bool(pluginPrefs.get("timestampEnabled", True))
+        if install_timestamp_filter:
+            self._ts_filter = install_timestamp_filter(self, enabled=self.timestamp_enabled)
+        else:
+            self._ts_filter = None
 
         self.debug = pluginPrefs.get("showDebugInfo", False)
 
@@ -1613,11 +1628,20 @@ class Plugin(indigo.PluginBase):
                 ("MQTT Status:", "connected" if self.mqtt_connected else "disconnected"),
                 ("Bridge Devices Cached:", str(len(self.bridge_devices))),
                 ("Z2M Indigo Devices:", str(z2m_count)),
+                ("Timestamps in Log:", "ON" if self.timestamp_enabled else "OFF"),
             ]
             log_startup_banner(self.pluginId, self.pluginDisplayName, self.pluginVersion,
                                extras=_extras)
         else:
             indigo.server.log(f"{self.pluginDisplayName} v{self.pluginVersion}")
+
+    def menuToggleTimestamps(self):
+        self.timestamp_enabled = not self.timestamp_enabled
+        self.pluginPrefs["timestampEnabled"] = self.timestamp_enabled
+        if self._ts_filter:
+            self._ts_filter.enabled = self.timestamp_enabled
+        state = "ON" if self.timestamp_enabled else "OFF"
+        indigo.server.log(f"[{self.pluginDisplayName}] Timestamps in Log -> {state}")
 
     # ── MQTT internals ────────────────────────────────────────────────────────
 

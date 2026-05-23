@@ -63,8 +63,22 @@ MQTT_PASSWORD = ""
 All four have matching PluginConfig fields under **Plugins → Zigbee2MQTT
 Bridge → Configure** *(fallback added in v1.9.6)*.
 
+## Logging
+
+Every log line is prefixed with a millisecond timestamp `[HH:MM:SS.mmm]` so
+events can be correlated tightly with other CliveS plugins (Device Activity
+Monitor uses the same convention).
+
+To turn the prefix off (or back on) at any time:
+
+**Plugins → Zigbee2MQTT Bridge → Toggle Timestamps in Log (on/off)**
+
+The setting is stored in `pluginPrefs` (`timestampEnabled`) and persists across
+restarts. Defaults to ON.
+
 ## Version history
 
+- **1.9.7** (23-05-2026) — millisecond timestamp `[HH:MM:SS.mmm]` prefix on every `self.logger` line via `plugin_utils.install_timestamp_filter()`; new "Toggle Timestamps in Log" menu item.
 - **1.9.6** (23-05-2026) — PluginConfig fallback for MQTT broker/port/username/password (secrets-policy: users without `IndigoSecrets.py` can now configure entirely via the GUI). Legacy `secrets.py` wording updated to `IndigoSecrets.py` in labels and error messages.
 - **1.9.5** — current release feature set.
 
