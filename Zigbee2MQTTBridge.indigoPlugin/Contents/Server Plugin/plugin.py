@@ -7,7 +7,7 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        22-05-2026
-# Version:     1.9.5
+# Version:     1.9.6
 #
 # v1.9.5 (22-05-2026):
 # - Refactor from code-review pass (no behaviour change):
@@ -1622,10 +1622,16 @@ class Plugin(indigo.PluginBase):
     # ── MQTT internals ────────────────────────────────────────────────────────
 
     def _effective_broker(self):
-        return MQTT_BROKER or ""
+        # IndigoSecrets first, PluginConfig fallback, "" if neither set.
+        return MQTT_BROKER or self.pluginPrefs.get("mqtt_broker", "").strip()
 
     def _effective_port(self):
-        return MQTT_PORT if MQTT_PORT else 1883
+        if MQTT_PORT:
+            return MQTT_PORT
+        try:
+            return int(self.pluginPrefs.get("mqtt_port", "1883") or 1883)
+        except (TypeError, ValueError):
+            return 1883
 
     def _topic_prefix(self):
         return self.pluginPrefs.get("mqtt_topic_prefix", "zigbee2mqtt").strip()
@@ -1646,11 +1652,13 @@ class Plugin(indigo.PluginBase):
 
         broker   = self._effective_broker()
         port     = self._effective_port()
-        username = MQTT_USERNAME
-        password = MQTT_PASSWORD
+        username = MQTT_USERNAME or self.pluginPrefs.get("mqtt_username", "").strip()
+        password = MQTT_PASSWORD or self.pluginPrefs.get("mqtt_password", "")
 
         if not broker:
-            log("MQTT broker not configured. Set MQTT_BROKER in secrets.py.", level="ERROR")
+            log("MQTT broker not configured. Set MQTT_BROKER in IndigoSecrets.py OR "
+                "fill Broker Host in Plugins -> Zigbee2MQTT Bridge -> Configure.",
+                level="ERROR")
             return
 
         with self.mqtt_lock:

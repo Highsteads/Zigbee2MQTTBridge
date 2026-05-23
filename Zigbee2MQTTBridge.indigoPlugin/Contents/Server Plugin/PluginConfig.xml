@@ -1,7 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Zigbee2MQTT Bridge Plugin - PluginConfig.xml -->
-<!-- MQTT credentials (broker IP, port, username, password) are read exclusively from secrets.py -->
+<!-- MQTT credentials are read from IndigoSecrets.py first (MQTT_BROKER /
+     MQTT_PORT / MQTT_USERNAME / MQTT_PASSWORD); the fields below are the
+     fallback for users without IndigoSecrets.py. -->
 <PluginConfig>
+
+    <Field id="mqttCredsLabel" type="label">
+        <Label>--- MQTT Broker (IndigoSecrets-first) ---</Label>
+    </Field>
+    <Field id="mqttCredsHelp" type="label" fontSize="mini" alignWithControl="true">
+        <Label>Read from IndigoSecrets.py first (MQTT_BROKER / MQTT_PORT / MQTT_USERNAME / MQTT_PASSWORD). Leave fields below blank if IndigoSecrets is set.</Label>
+    </Field>
+
+    <Field id="mqtt_broker" type="textfield" defaultValue="">
+        <Label>Broker Host:</Label>
+        <Description>Hostname or IP of your MQTT broker. Fallback only — IndigoSecrets.MQTT_BROKER takes precedence.</Description>
+    </Field>
+    <Field id="mqtt_port" type="textfield" defaultValue="1883">
+        <Label>Broker Port:</Label>
+    </Field>
+    <Field id="mqtt_username" type="textfield" defaultValue="">
+        <Label>Username:</Label>
+        <Description>Blank = no auth (or use IndigoSecrets.MQTT_USERNAME).</Description>
+    </Field>
+    <Field id="mqtt_password" type="textfield" secure="true" defaultValue="">
+        <Label>Password:</Label>
+        <Description>Blank = no auth (or use IndigoSecrets.MQTT_PASSWORD).</Description>
+    </Field>
+
+    <Field id="topicLabel" type="label">
+        <Label>--- Topic Configuration ---</Label>
+    </Field>
     <Field id="mqtt_topic_prefix" type="textfield" defaultValue="zigbee2mqtt">
         <Label>Topic Prefix:</Label>
         <Description>The main zigbee2mqtt root topic. Must match your z2m config (usually "zigbee2mqtt").</Description>
