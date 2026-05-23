@@ -22,7 +22,7 @@ An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zig
 
 - Indigo 2023.2 or later (Python 3.11+)
 - zigbee2mqtt running and accessible via MQTT
-- MQTT credentials in `/Library/Application Support/Perceptive Automation/IndigoSecrets.py`
+- MQTT credentials in `IndigoSecrets.py` OR in PluginConfig (v1.9.6+)
 
 ## Installation
 
@@ -50,6 +50,24 @@ dialog — `IndigoSecrets.py` wins over the dialog when both are set.
 If a required value is set in NEITHER source the plugin logs an ERROR
 pointing the user to either fill in the matching field or add the key to
 `IndigoSecrets.py`.
+
+**Keys read by Zigbee2MQTTBridge:**
+
+```python
+MQTT_BROKER   = "192.168.x.x"   # hostname or IP of your MQTT broker
+MQTT_PORT     = 1883
+MQTT_USERNAME = ""              # blank = no auth
+MQTT_PASSWORD = ""
+```
+
+All four have matching PluginConfig fields under **Plugins → Zigbee2MQTT
+Bridge → Configure** *(fallback added in v1.9.6)*.
+
+## Version history
+
+- **1.9.6** (23-05-2026) — PluginConfig fallback for MQTT broker/port/username/password (secrets-policy: users without `IndigoSecrets.py` can now configure entirely via the GUI). Legacy `secrets.py` wording updated to `IndigoSecrets.py` in labels and error messages.
+- **1.9.5** — current release feature set.
+
 ## Usage
 
 1. Enable the plugin in Indigo (Plugins > Manage Plugins)
