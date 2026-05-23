@@ -92,6 +92,10 @@ restarts. Defaults to ON.
 
 Re-run **Discover & Create Devices** any time you add new Zigbee devices.
 
+## Acknowledgements
+
+With thanks to **Autolog** for the [zigbee2mqtt plugin](https://github.com/autolog/zigbee2mqtt) — studying its design showed us the way to build this plugin, and the project would not exist without that prior work.
+
 ## Authors
 
-CliveS & Claude Sonnet 4.6
+CliveS & Claude Opus 4.7
