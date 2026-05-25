@@ -6,8 +6,17 @@
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 4.7
-# Date:        23-05-2026
-# Version:     1.9.7
+# Date:        25-05-2026
+# Version:     1.9.8
+#
+# v1.9.8 (25-05-2026): Added actionControlSensor() — sensor-class devices
+# (z2mSensor, z2mContactSensor, z2mOccupancySensor, z2mWaterLeakSensor,
+# z2mTemperatureSensor, z2mButton) had no handler, so any "Send Status
+# Request" action against them logged
+#   "plugin does not define method actionControlSensor"
+# in the event log. New method handles indigo.kSensorAction.RequestStatus
+# by re-publishing the z2m /get topic; all other sensor actions log a
+# WARNING (sensors are read-only — no commands flow back to the network).
 #
 # v1.9.7 (23-05-2026): Millisecond timestamp [HH:MM:SS.mmm] prefix on every
 # log line via plugin_utils.install_timestamp_filter() — matches Device
@@ -1260,6 +1269,33 @@ class Plugin(indigo.PluginBase):
             self._request_state(fname, dev.deviceTypeId, prefix)
         else:
             log(f"Unhandled universal action {cmd} for {dev.name}", level="WARNING")
+
+    def actionControlSensor(self, action, dev):
+        """Handle sensor-class device actions.
+
+        z2m sensors are read-only — the network does not accept commands back
+        to them — so the only meaningful action is RequestStatus, which we
+        service by re-publishing the /get topic so z2mqtt resends the
+        retained payload. Implementing this method silences the
+        'plugin does not define method actionControlSensor' error that
+        Indigo logs whenever any Send Status Request (or similar) action
+        is fired against a z2m sensor device.
+
+        NOTE: SensorAction uses .sensorAction (NOT .deviceAction — that
+        attribute only exists on DeviceAction / DimmerAction). Confirmed
+        25-05-2026: passing action.deviceAction raises
+        "'SensorAction' object has no attribute 'deviceAction'".
+        """
+        cmd    = action.sensorAction
+        fname  = dev.pluginProps.get("friendly_name", "")
+        prefix = self._device_prefix(dev)
+
+        if cmd == indigo.kSensorAction.RequestStatus:
+            self._request_state(fname, dev.deviceTypeId, prefix)
+            log(f'sent "{dev.name}" status request')
+        else:
+            log(f"Unhandled sensor action {cmd} for {dev.name} "
+                f"(sensors are read-only)", level="WARNING")
 
     def action_set_color_temperature(self, action, dev=None, callerWaitingForResult=None):
         """Action: set light color temperature in Kelvin."""
