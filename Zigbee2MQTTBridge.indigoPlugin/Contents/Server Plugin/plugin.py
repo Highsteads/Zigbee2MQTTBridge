@@ -650,17 +650,7 @@ class Plugin(indigo.PluginBase):
         # keys they contain, so the OR across all stored values is always correct.
         self._motion_states = {}  # type: dict[int, dict[str, bool]]
 
-        if log_startup_banner:
-            _extras = [
-                ("MQTT Broker:", f"{MQTT_BROKER or '(not set)'}:{MQTT_PORT or 1883}"),
-                ("Topic Prefix:", pluginPrefs.get("mqtt_topic_prefix", "zigbee2mqtt")),
-            ]
-            _garage = pluginPrefs.get("mqtt_garage_topic_prefix", "").strip()
-            if _garage:
-                _extras.append(("Garage Prefix:", _garage))
-            log_startup_banner(pluginId, pluginDisplayName, pluginVersion, extras=_extras)
-        else:
-            indigo.server.log(f"{pluginDisplayName} v{pluginVersion} starting")
+        # Startup banner moved to showPluginInfo on demand (revised 25-May-2026 per Jay).
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
