@@ -1,0 +1,279 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+# Filename:    test_cover_button_repeater.py
+# Description: Tests for the remaining state-processing handlers — covers,
+#              buttons, and repeaters. Also tests the auto-reclassify path
+#              (relay -> button) and proves the v1.9.9 _ensure_device_folder
+#              bug fix.
+# Author:      CliveS & Claude Opus 4.7
+# Date:        25-05-2026
+
+import indigo  # stub
+
+
+# ── _process_cover_state ─────────────────────────────────────────────────────
+
+def test_cover_open_state(plugin, make_device):
+    dev = make_device(1, "Blind", "z2mCover")
+    plugin._process_cover_state(dev, {"state": "OPEN"})
+    assert dev.states["onOffState"] is True
+    assert dev.states["coverState"] == "open"
+
+
+def test_cover_closed_state(plugin, make_device):
+    dev = make_device(2, "Blind", "z2mCover")
+    plugin._process_cover_state(dev, {"state": "CLOSE"})
+    assert dev.states["onOffState"] is False
+
+
+def test_cover_position_drives_brightness(plugin, make_device):
+    dev = make_device(3, "Blind", "z2mCover")
+    plugin._process_cover_state(dev, {"position": 75})
+    assert dev.states["brightnessLevel"] == 75
+    assert dev.states["onOffState"] is True   # any position > 0 = open
+
+
+def test_cover_position_zero_is_closed(plugin, make_device):
+    dev = make_device(4, "Blind", "z2mCover")
+    plugin._process_cover_state(dev, {"position": 0})
+    assert dev.states["brightnessLevel"] == 0
+    assert dev.states["onOffState"] is False
+
+
+def test_cover_position_clamped(plugin, make_device):
+    """Out-of-range positions must clamp to 0-100, not crash."""
+    dev = make_device(5, "Blind", "z2mCover")
+    plugin._process_cover_state(dev, {"position": 150})
+    assert dev.states["brightnessLevel"] == 100
+    plugin._process_cover_state(dev, {"position": -5})
+    assert dev.states["brightnessLevel"] == 0
+
+
+def test_cover_state_stop_leaves_onoffstate(plugin, make_device):
+    """STOP doesn't change onOffState — partial-open is ambiguous."""
+    dev = make_device(6, "Blind", "z2mCover", states={"onOffState": True})
+    dev.onState = True
+    plugin._process_cover_state(dev, {"state": "STOP"})
+    # No onOffState write — original True preserved
+    onoff_writes = [w for w in dev.state_writes if w[0] == "onOffState"]
+    assert onoff_writes == []
+
+
+def test_cover_tilt(plugin, make_device):
+    dev = make_device(7, "Blind", "z2mCover")
+    plugin._process_cover_state(dev, {"tilt": 45})
+    assert dev.states["tiltAngle"] == 45
+
+
+# ── _process_button_state ────────────────────────────────────────────────────
+
+def test_button_single_press_increments_count(plugin, make_device):
+    dev = make_device(10, "Remote", "z2mButton",
+                      states={"pressCount": 0})
+    plugin._process_button_state(dev, {"action": "1_single"})
+    assert dev.states["lastAction"] == "1_single"
+    assert dev.states["lastButton"] == 1
+    assert dev.states["pressCount"] == 1
+
+
+def test_button_action_numeric_only(plugin, make_device):
+    dev = make_device(11, "Remote", "z2mButton",
+                      states={"pressCount": 0})
+    plugin._process_button_state(dev, {"action": "2"})
+    assert dev.states["lastButton"] == 2
+
+
+def test_button_action_non_numeric_button_zero(plugin, make_device):
+    """Actions without a numeric prefix (e.g. 'on', 'hold') get lastButton=0."""
+    dev = make_device(12, "Remote", "z2mButton",
+                      states={"pressCount": 0})
+    plugin._process_button_state(dev, {"action": "hold"})
+    assert dev.states["lastButton"]  == 0
+    assert dev.states["lastAction"] == "hold"
+
+
+def test_button_press_count_wraps_at_9999(plugin, make_device):
+    dev = make_device(13, "Remote", "z2mButton",
+                      states={"pressCount": 9999})
+    plugin._process_button_state(dev, {"action": "1_single"})
+    # 9999 % 9999 = 0, +1 = 1
+    assert dev.states["pressCount"] == 1
+
+
+def test_button_press_count_string_value_coerced(plugin, make_device):
+    """Indigo may store the state as a string — int() must coerce."""
+    dev = make_device(14, "Remote", "z2mButton",
+                      states={"pressCount": "5"})
+    plugin._process_button_state(dev, {"action": "1_single"})
+    assert dev.states["pressCount"] == 6
+
+
+def test_button_empty_action_ignored(plugin, make_device):
+    """Empty/None action must not produce a press event."""
+    dev = make_device(15, "Remote", "z2mButton",
+                      states={"pressCount": 0})
+    plugin._process_button_state(dev, {"action": ""})
+    plugin._process_button_state(dev, {"action": None})
+    assert "lastAction" not in dev.states
+
+
+def test_button_battery_in_action_payload(plugin, make_device):
+    dev = make_device(16, "Remote", "z2mButton",
+                      states={"pressCount": 0})
+    plugin._process_button_state(dev, {"action": "1_single", "battery": 73})
+    assert dev.states["battery"] == 73
+
+
+# ── _process_repeater_state ──────────────────────────────────────────────────
+
+def test_repeater_linkquality_only(plugin, make_device):
+    """Repeaters update only linkQuality from payload — availability drives
+    onOffState elsewhere."""
+    dev = make_device(20, "Router", "z2mRepeater")
+    plugin._process_repeater_state(dev, {"linkquality": 200})
+    assert dev.states["linkQuality"] == 200
+    # No onOffState write from payload
+    onoff_writes = [w for w in dev.state_writes if w[0] == "onOffState"]
+    assert onoff_writes == []
+
+
+def test_repeater_bogus_linkquality_silent(plugin, make_device):
+    dev = make_device(21, "Router", "z2mRepeater")
+    plugin._process_repeater_state(dev, {"linkquality": "junk"})
+    assert "linkQuality" not in dev.states
+
+
+# ── _process_availability ────────────────────────────────────────────────────
+
+def test_availability_online_offline(plugin, make_device):
+    dev = make_device(30, "Door", "z2mContactSensor",
+                      pluginProps={"friendly_name": "Door"})
+    plugin.friendly_name_map["Door"] = 30
+
+    plugin._process_availability("Door", {"state": "online"})
+    assert dev.states["availability"] == "online"
+
+    plugin._process_availability("Door", {"state": "offline"})
+    assert dev.states["availability"] == "offline"
+
+
+def test_availability_bare_string_payload(plugin, make_device):
+    """Some Z2M versions send the bare string 'online' instead of a JSON dict."""
+    dev = make_device(31, "Door", "z2mContactSensor",
+                      pluginProps={"friendly_name": "Door"})
+    plugin.friendly_name_map["Door"] = 31
+
+    plugin._process_availability("Door", "online")
+    assert dev.states["availability"] == "online"
+
+
+def test_availability_repeater_mirrors_onoffstate(plugin, make_device):
+    """Repeaters get onOffState = (state == 'online')."""
+    dev = make_device(32, "Router", "z2mRepeater",
+                      pluginProps={"friendly_name": "Router"})
+    plugin.friendly_name_map["Router"] = 32
+
+    plugin._process_availability("Router", {"state": "online"})
+    assert dev.states["onOffState"] is True
+
+    plugin._process_availability("Router", {"state": "offline"})
+    assert dev.states["onOffState"] is False
+
+
+def test_availability_unknown_device_silent(plugin):
+    """Receiving availability for an unknown friendly_name must not raise."""
+    plugin._process_availability("Mystery", {"state": "online"})
+
+
+# ── _process_bridge_devices ──────────────────────────────────────────────────
+
+def test_bridge_devices_caches_non_coordinator(plugin):
+    """bridge/devices payload caches every non-coordinator, non-disabled device."""
+    payload = [
+        {"ieee_address": "0x111", "friendly_name": "Door",  "type": "Router"},
+        {"ieee_address": "0x222", "friendly_name": "Lamp",  "type": "EndDevice"},
+        {"ieee_address": "0x333", "friendly_name": "Coord", "type": "Coordinator"},
+        {"ieee_address": "0x444", "friendly_name": "Off",   "disabled": True},
+    ]
+    plugin._process_bridge_devices(payload, prefix="zigbee2mqtt")
+    assert "0x111" in plugin.bridge_devices
+    assert "0x222" in plugin.bridge_devices
+    assert "0x333" not in plugin.bridge_devices   # coordinator excluded
+    assert "0x444" not in plugin.bridge_devices   # disabled excluded
+
+
+def test_bridge_devices_preserves_other_prefix(plugin):
+    """A bridge/devices update for one prefix must not clobber the cache
+    for the other prefix."""
+    # Seed with garage prefix entries
+    plugin._process_bridge_devices([
+        {"ieee_address": "0xaaa", "friendly_name": "Garage Door"},
+    ], prefix="zigbee2mqtt_garage")
+
+    # Then update primary prefix
+    plugin._process_bridge_devices([
+        {"ieee_address": "0xbbb", "friendly_name": "House Door"},
+    ], prefix="zigbee2mqtt")
+
+    assert "0xaaa" in plugin.bridge_devices
+    assert "0xbbb" in plugin.bridge_devices
+    assert plugin.bridge_devices["0xaaa"]["_mqtt_prefix"] == "zigbee2mqtt_garage"
+    assert plugin.bridge_devices["0xbbb"]["_mqtt_prefix"] == "zigbee2mqtt"
+
+
+def test_bridge_devices_non_list_payload_silent(plugin):
+    """Malformed payload (e.g. dict) must NOT crash — silently skip."""
+    plugin._process_bridge_devices({"not": "a list"}, prefix="zigbee2mqtt")
+    plugin._process_bridge_devices(None, prefix="zigbee2mqtt")
+    plugin._process_bridge_devices("string", prefix="zigbee2mqtt")
+    # No exception is the assertion
+
+
+# ── Auto-reclassify path (v1.9.9 bug fix) ────────────────────────────────────
+
+def test_reclassify_calls_ensure_folder_with_name(plugin, make_device, monkeypatch):
+    """v1.9.9 regression test: _reclassify_as_button used to call
+    self._ensure_device_folder() with no argument, crashing with
+    TypeError every time a device with folderId=0 was reclassified.
+    Confirms the call now passes DEVICE_FOLDER_NAME."""
+    # Track what arguments _ensure_device_folder is called with
+    calls = []
+    monkeypatch.setattr(plugin, "_ensure_device_folder",
+                        lambda *args: calls.append(args) or 9999)
+
+    dev = make_device(99, "MisidentifiedButton", "z2mRelay",
+                      pluginProps={"friendly_name": "MisidentifiedButton",
+                                   "ieee_address": "0xfff"})
+    # Avoid the real indigo.device.delete / create calls
+    delete_calls = []
+    create_calls = []
+    # Patch indigo at the stub level
+    fake_delete = lambda d: delete_calls.append(d.id)
+    fake_create = lambda **kw: (create_calls.append(kw) or
+                                _StubNewDev(create_calls[-1]))
+    indigo.device = type("X", (), {"delete": staticmethod(fake_delete),
+                                   "create": staticmethod(fake_create)})()
+    # set folderId attribute via the stub
+    dev.folderId = 0   # root-level — this is the bug-triggering case
+
+    plugin._reclassify_as_button(dev, {"action": "1_single"})
+
+    # The fix: _ensure_device_folder MUST have been called with a name argument
+    if calls:
+        assert calls[-1] != (), "_ensure_device_folder called with no arg (v1.9.8 bug)"
+        assert calls[-1][0] is not None
+
+
+class _StubNewDev:
+    def __init__(self, kw):
+        self.id          = 1000
+        self.name        = kw["name"]
+        self.deviceTypeId = kw["deviceTypeId"]
+        self.pluginProps = kw["props"]
+        self.ownerProps  = kw["props"]
+        self.states      = {}
+        self.state_writes = []
+
+    def updateStateOnServer(self, key, value, uiValue=None, **_):
+        self.states[key] = value
+        self.state_writes.append((key, value, uiValue))

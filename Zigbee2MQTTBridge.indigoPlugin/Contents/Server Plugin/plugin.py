@@ -7,7 +7,18 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        25-05-2026
-# Version:     1.9.8
+# Version:     1.9.9
+#
+# v1.9.9 (25-05-2026): Bug fix surfaced by new pytest suite —
+# _reclassify_as_button used `self._ensure_device_folder()` with no
+# argument, but the method requires `name`. Every reclassify of a
+# device sitting at the root level (folderId=0) crashed with
+# TypeError, leaving the device deleted but not recreated. Now passes
+# DEVICE_FOLDER_NAME to match the other three call sites.
+# Adds a ~226-test pytest suite under tests/ (no Indigo runtime needed)
+# covering pure helpers, device-type detection, capability flags, state
+# sanitiser, action dispatch (Dimmer/Sensor/Universal), state processing
+# for every device class, MQTT topic routing, and bug-regression tests.
 #
 # v1.9.8 (25-05-2026): Added actionControlSensor() — sensor-class devices
 # (z2mSensor, z2mContactSensor, z2mOccupancySensor, z2mWaterLeakSensor,
@@ -2568,7 +2579,12 @@ class Plugin(indigo.PluginBase):
         }
 
         try:
-            folder_id_to_use = folder_id if folder_id else self._ensure_device_folder()
+            # Bug fix v1.9.9: _ensure_device_folder() requires the folder name —
+            # was called with no argument here, crashing every reclassify of a
+            # device that lived at the root level (folderId=0). Match the other
+            # three call sites (discover_create_devices, create_coordinator_devices,
+            # _process_bridge_devices) — all pass DEVICE_FOLDER_NAME.
+            folder_id_to_use = folder_id if folder_id else self._ensure_device_folder(DEVICE_FOLDER_NAME)
             new_dev = indigo.device.create(
                 protocol=indigo.kProtocol.Plugin,
                 name=dev_name,
