@@ -7,7 +7,7 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        25-05-2026
-# Version:     1.9.9
+# Version:     1.9.10
 #
 # v1.9.9 (25-05-2026): Bug fix surfaced by new pytest suite —
 # _reclassify_as_button used `self._ensure_device_folder()` with no
@@ -1151,6 +1151,23 @@ class Plugin(indigo.PluginBase):
         self._motion_states.pop(dev.id, None)
         if self.debug:
             log(f"Stopped device: {dev.name}")
+
+    @staticmethod
+    def didDeviceCommPropertyChange(oldDevice, newDevice):
+        """Restart device comm only for changes that materially affect the MQTT
+        subscription or device identity.
+
+        Z2M devices route via MQTT topics built from `friendly_name` and are
+        identified by `ieee_address`; a change to either requires a fresh comm
+        cycle so subscriptions and lookup maps track. The coordinator's
+        `mqtt_prefix` defines the topic root.
+
+        All other pluginProps — `vendor`, `model`, `capabilities_display`,
+        internal capability flags, `seenDynamicKeys` — are cosmetic or healing
+        writes that should NOT cycle comm.
+        """
+        keys = ("friendly_name", "ieee_address", "mqtt_prefix")
+        return any(oldDevice.pluginProps.get(k) != newDevice.pluginProps.get(k) for k in keys)
 
     # ── Action handlers ───────────────────────────────────────────────────────
 
