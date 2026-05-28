@@ -6,8 +6,19 @@
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 4.7
-# Date:        27-05-2026
-# Version:     1.9.11
+# Date:        28-05-2026
+# Version:     1.9.12
+#
+# v1.9.12 (28-05-2026): z2mButton lastAction migrated from a plain String
+# state to a List enumeration. Indigo now auto-generates per-value boolean
+# sub-states (lastAction.single, lastAction.double, lastAction.hold, ...) so
+# users can trigger on a specific action straight from the Triggers UI rather
+# than writing an `if action == "double"` string compare. The raw z2m action
+# is normalised before writing (the leading "<n>_" button-index prefix — kept
+# separately in lastButton — is stripped and remaining underscore tokens are
+# camelCased) so the value is a legal enum sub-state suffix: "1_single" ->
+# "single", "brightness_move_up" -> "brightnessMoveUp". Existing button devices
+# get a one-time stateListOrDisplayStateIdChanged() refresh in deviceStartComm.
 #
 # v1.9.11 (27-05-2026): Added prepare_to_sleep / wake_up overrides
 # harvested from the 27-May plugin_base.py sweep. Mac sleep used to leave
@@ -779,6 +790,24 @@ class Plugin(indigo.PluginBase):
                 f"device to pick up the new primary display state",
                 level="WARNING")
 
+        # v1.9.12 one-time migration: lastAction became a List enumeration, so
+        # Indigo now auto-generates lastAction.<value> boolean sub-states. A
+        # device created before the change keeps its old (String) cached state
+        # list until we refresh it. Detect by the absence of a known sub-state:
+        # stateListOrDisplayStateIdChanged() surfaces the sub-states and they
+        # persist on the device record, so this skips on subsequent starts.
+        # (A guard pluginProp is NOT used — replacePluginPropsOnServer during
+        # deviceStartComm doesn't reliably persist.)
+        if dev.deviceTypeId == "z2mButton" and "lastAction.single" not in dev.states:
+            try:
+                dev.stateListOrDisplayStateIdChanged()
+                log(f"{dev.name}: migrated lastAction to enumeration — per-action "
+                    f"sub-states (lastAction.single/.double/.hold/...) now "
+                    f"available; the matching one goes true on the next press")
+            except Exception as e:
+                log(f"{dev.name}: lastAction enum state-list refresh failed: {e}",
+                    level="WARNING")
+
         if self.debug:
             log(f"Started device: {dev.name} (type={dev.deviceTypeId}, name={fname})")
 
@@ -962,6 +991,37 @@ class Plugin(indigo.PluginBase):
     # union of all keys ever seen for a device is persisted in pluginProps as
     # seenDynamicKeys (CSV).  getDeviceStateList() advertises these to Indigo
     # so they appear in the Custom States panel after stateListOrDisplayStateIdChanged.
+
+    @staticmethod
+    def _normalise_action(action):
+        """Reduce a raw z2m button action to a clean camelCase token for the
+        lastAction enumeration state and its auto-generated boolean sub-states.
+
+        Indigo builds enum sub-state IDs as "lastAction.<value>", and a state-id
+        segment must be camelCase ASCII — no leading digit, no underscore (see
+        the state-id naming rules). Raw z2m actions break that in two ways:
+        a leading "<n>_" button-index prefix ("1_single") and underscore-joined
+        compound names ("brightness_move_up"). We therefore drop the button
+        index (it is captured separately in lastButton) and camelCase whatever
+        remains:
+            "1_single"            -> "single"
+            "single"              -> "single"
+            "2_double"            -> "double"
+            "brightness_move_up"  -> "brightnessMoveUp"
+            "hold"                -> "hold"
+        An action that reduces to nothing usable (e.g. a bare "2") returns
+        "unknown" — it simply won't match any declared Option, which the enum
+        state handles gracefully (no sub-state fires).
+        """
+        parts = [p for p in str(action).split("_") if p != ""]
+        if parts and parts[0].isdigit():
+            parts = parts[1:]  # drop button-index prefix — kept in lastButton
+        if not parts:
+            return "unknown"
+        token = parts[0] + "".join(p[:1].upper() + p[1:] for p in parts[1:])
+        token = "".join(c for c in token if c.isascii() and c.isalnum())
+        token = token.lstrip("0123456789")
+        return token or "unknown"
 
     def _sanitise_state_key(self, key):
         """Convert an MQTT field name into a valid Indigo state ID (camelCase).
@@ -2647,16 +2707,22 @@ class Plugin(indigo.PluginBase):
             except (ValueError, IndexError):
                 pass
 
+            # lastAction is a List enumeration (v1.9.12) — write the normalised
+            # camelCase token so Indigo's auto-generated lastAction.<value>
+            # boolean sub-states fire. The button index lives in lastButton.
+            norm_action = self._normalise_action(action)
+
             current_count = dev.states.get("pressCount", 0)
             new_count = (int(current_count) % 9999) + 1
 
-            updates.append(("lastAction",  action,     action))
-            updates.append(("lastButton",  btn,        str(btn)))
-            updates.append(("pressCount",  new_count,  str(new_count)))
-            updates.append(("onOffState",  True,       "Pressed"))
+            updates.append(("lastAction",  norm_action, norm_action))
+            updates.append(("lastButton",  btn,         str(btn)))
+            updates.append(("pressCount",  new_count,   str(new_count)))
+            updates.append(("onOffState",  True,        "Pressed"))
 
             if self.debug:
-                log(f"{dev.name}: action={action} button={btn} count={new_count}")
+                log(f"{dev.name}: action={action!r} -> {norm_action!r} "
+                    f"button={btn} count={new_count}")
 
         if "battery" in payload:
             try:

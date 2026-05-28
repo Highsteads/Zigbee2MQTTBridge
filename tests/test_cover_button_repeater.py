@@ -8,6 +8,7 @@
 # Author:      CliveS & Claude Opus 4.7
 # Date:        25-05-2026
 
+import pytest
 import indigo  # stub
 
 
@@ -71,7 +72,9 @@ def test_button_single_press_increments_count(plugin, make_device):
     dev = make_device(10, "Remote", "z2mButton",
                       states={"pressCount": 0})
     plugin._process_button_state(dev, {"action": "1_single"})
-    assert dev.states["lastAction"] == "1_single"
+    # lastAction stores the NORMALISED action token (button index stripped — it
+    # lives in lastButton) so it matches a List enum Option / sub-state.
+    assert dev.states["lastAction"] == "single"
     assert dev.states["lastButton"] == 1
     assert dev.states["pressCount"] == 1
 
@@ -90,6 +93,30 @@ def test_button_action_non_numeric_button_zero(plugin, make_device):
     plugin._process_button_state(dev, {"action": "hold"})
     assert dev.states["lastButton"]  == 0
     assert dev.states["lastAction"] == "hold"
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("1_single",            "single"),    # button-index prefix stripped
+    ("single",              "single"),    # already clean
+    ("2_double",            "double"),
+    ("hold",                "hold"),
+    ("release",             "release"),
+    ("brightness_move_up",  "brightnessMoveUp"),  # compound -> camelCase
+    ("3_brightness_step_up", "brightnessStepUp"),
+    ("2",                   "unknown"),    # bare button number, no action name
+    ("",                    "unknown"),    # empty
+])
+def test_normalise_action(plugin, raw, expected):
+    """_normalise_action must yield a legal enum sub-state suffix: camelCase
+    ASCII, no leading digit, no underscore."""
+    assert plugin._normalise_action(raw) == expected
+
+
+def test_button_compound_action_written_normalised(plugin, make_device):
+    dev = make_device(17, "Dimmer", "z2mButton", states={"pressCount": 0})
+    plugin._process_button_state(dev, {"action": "1_brightness_move_up"})
+    assert dev.states["lastAction"] == "brightnessMoveUp"
+    assert dev.states["lastButton"] == 1
 
 
 def test_button_press_count_wraps_at_9999(plugin, make_device):

@@ -595,10 +595,28 @@
         </ConfigUI>
         <States>
             <!-- onOffState: native sensor state (True=pressed) — not declared here -->
+            <!-- lastAction is a List enumeration so Indigo auto-generates a
+                 boolean sub-state per Option (lastAction.single, .double, ...),
+                 letting users trigger on a specific action with no string
+                 compare. The plugin writes the NORMALISED action token (raw z2m
+                 actions like "1_single" are reduced to "single"; the button
+                 index is kept in lastButton) so the written value always
+                 matches an Option value / sub-state suffix. -->
             <State id="lastAction">
-                <ValueType>String</ValueType>
+                <ValueType>
+                    <List>
+                        <Option value="single">Single</Option>
+                        <Option value="double">Double</Option>
+                        <Option value="triple">Triple</Option>
+                        <Option value="quadruple">Quadruple</Option>
+                        <Option value="hold">Hold</Option>
+                        <Option value="release">Release</Option>
+                    </List>
+                </ValueType>
                 <TriggerLabel>Button Action Changed</TriggerLabel>
+                <TriggerLabelPrefix>Button Action</TriggerLabelPrefix>
                 <ControlPageLabel>Last Action</ControlPageLabel>
+                <ControlPageLabelPrefix>Action</ControlPageLabelPrefix>
             </State>
             <State id="lastButton">
                 <ValueType>Integer</ValueType>
