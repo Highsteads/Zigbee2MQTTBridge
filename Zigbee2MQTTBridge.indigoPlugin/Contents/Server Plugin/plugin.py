@@ -6,8 +6,15 @@
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 4.7
-# Date:        25-05-2026
-# Version:     1.9.10
+# Date:        27-05-2026
+# Version:     1.9.11
+#
+# v1.9.11 (27-05-2026): Added prepare_to_sleep / wake_up overrides
+# harvested from the 27-May plugin_base.py sweep. Mac sleep used to leave
+# Mosquitto holding our previous session as a stale ghost client until
+# paho's keepalive fired (60s); on wake the bridge would just sit there
+# until the Mac re-noticed the broker. Now MQTT disconnects cleanly on
+# sleep, reconnects on wake.
 #
 # v1.9.9 (25-05-2026): Bug fix surfaced by new pytest suite —
 # _reclassify_as_button used `self._ensure_device_folder()` with no
@@ -661,6 +668,21 @@ class Plugin(indigo.PluginBase):
     def shutdown(self):
         log(f"{PLUGIN_NAME} shutting down")
         self._stop_mqtt()
+
+    # ── Mac sleep / wake — disconnect MQTT cleanly on sleep so Mosquitto
+    # ── doesn't hold the previous session as a stale ghost client. On wake
+    # ── reconnect; retained messages will reseed device state.
+    def prepare_to_sleep(self):
+        log("Mac going to sleep — disconnecting from Mosquitto cleanly")
+        self._stop_mqtt()
+        super().prepare_to_sleep()
+    prepareToSleep = prepare_to_sleep
+
+    def wake_up(self):
+        log("Mac woke — reconnecting to Mosquitto")
+        super().wake_up()
+        self._start_mqtt()
+    wakeUp = wake_up
 
     def runConcurrentThread(self):
         """Drain the MQTT message queue on the Indigo main thread."""
