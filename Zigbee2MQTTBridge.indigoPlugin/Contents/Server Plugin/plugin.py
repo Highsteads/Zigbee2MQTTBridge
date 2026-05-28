@@ -7,7 +7,21 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        28-05-2026
-# Version:     1.9.12
+# Version:     1.9.13
+#
+# v1.9.13 (28-05-2026): Dynamic state-type inference for captured z2m payload
+# fields. Each dynamic key is tagged with a type token (bool/onoff/int/real/str)
+# persisted in the new dynamicKeyTypes pluginProp, so getDeviceStateList declares
+# it with the correct Indigo state type (BoolTrueFalse / BoolOnOff / Integer /
+# Real / String) instead of declaring everything as String. The type is inferred
+# when the raw value is in hand (in _capture_raw_fields) — getDeviceStateList
+# runs at declaration time when dev.states is still None, so it reads the
+# persisted token map rather than the (absent) value. Type drift (int then
+# float) widens to Real; genuine disagreement falls back to String. Existing
+# String states migrate to their proper type on the next payload that includes
+# them. dynamicKeyTypes is excluded from didDeviceCommPropertyChange (cosmetic
+# healing write, must not cycle comm). Reconciled from the stash that was parked
+# alongside the v1.9.12 enum work so the two coexist cleanly.
 #
 # v1.9.12 (28-05-2026): z2mButton lastAction migrated from a plain String
 # state to a List enumeration. Indigo now auto-generates per-value boolean
@@ -1063,13 +1077,117 @@ class Plugin(indigo.PluginBase):
             sk = "z2m" + sk[0].upper() + sk[1:]
         return sk
 
+    # ── Dynamic state type inference ─────────────────────────────────────────
+    # Each captured field is tagged with a type token so getDeviceStateList can
+    # declare it with the correct Indigo state type (Integer / Real / BoolOnOff /
+    # BoolTrueFalse) instead of String.  Tokens are persisted per-device in the
+    # dynamicKeyTypes pluginProp (JSON), because the value itself isn't written
+    # until AFTER the state list is refreshed — so at declaration time dev.states
+    # holds None and the type can only be known from the recorded token.
+
+    @staticmethod
+    def _infer_state_type(raw_val):
+        """Map a raw payload value to a state-type token.
+
+        bool           -> "bool"  (BoolTrueFalse)
+        "ON" / "OFF"   -> "onoff" (BoolOnOff)
+        int            -> "int"   (Integer)
+        float          -> "real"  (Real)
+        anything else  -> "str"   (String; dicts/lists are JSON-stringified)
+
+        bool is checked before int because bool is a subclass of int.
+        """
+        if isinstance(raw_val, bool):
+            return "bool"
+        if isinstance(raw_val, int):
+            return "int"
+        if isinstance(raw_val, float):
+            return "real"
+        if isinstance(raw_val, str) and raw_val.strip().upper() in ("ON", "OFF"):
+            return "onoff"
+        return "str"
+
+    @staticmethod
+    def _merge_state_type(old, new):
+        """Combine a previously recorded token with a freshly observed one.
+
+        Same token wins.  int/real widen to "real" (a Real state holds whole
+        numbers too).  Every other disagreement (bool vs number, onoff vs
+        anything, etc.) is type drift — fall back to the most permissive type,
+        "str", so no typed write is ever rejected.
+        """
+        if old == new:
+            return new
+        if {old, new} == {"int", "real"}:
+            return "real"
+        return "str"
+
+    @staticmethod
+    def _coerce_dynamic_value(raw_val, token):
+        """Coerce a raw payload value to match its declared state-type token.
+
+        The write value MUST match the declared type, so we coerce by the
+        merged/declared token rather than the per-payload Python type.
+        """
+        if isinstance(raw_val, (dict, list)):
+            try:
+                return json.dumps(raw_val, separators=(",", ":"), default=str)[:512]
+            except Exception:
+                return str(raw_val)[:512]
+        if token == "bool":
+            return bool(raw_val)
+        if token == "onoff":
+            return str(raw_val).strip().upper() == "ON"
+        if token == "int":
+            try:
+                return int(raw_val)
+            except (TypeError, ValueError):
+                return str(raw_val)
+        if token == "real":
+            try:
+                return float(raw_val)
+            except (TypeError, ValueError):
+                return str(raw_val)
+        return str(raw_val)
+
+    def _load_dynamic_types(self, dev):
+        """Return the persisted {state_id: type_token} map for a device."""
+        raw = dev.pluginProps.get("dynamicKeyTypes", "")
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def _state_dict_for_token(self, key, label, token):
+        """Build the Indigo state-list entry for a dynamic key, choosing the
+        type-specific builder that matches its recorded type token."""
+        if token == "bool":
+            return self.getDeviceStateDictForBoolTrueFalseType(key, label, label)
+        if token == "onoff":
+            return self.getDeviceStateDictForBoolOnOffType(key, label, label)
+        if token == "int":
+            return self.getDeviceStateDictForIntegerType(key, label, label)
+        if token == "real":
+            return self.getDeviceStateDictForRealType(key, label, label)
+        return self.getDeviceStateDictForStringType(key, label, label)
+
     def _capture_raw_fields(self, dev, payload):
         """Write every payload field that the type-specific dispatcher did not
         already handle.  First-time keys are added to pluginProps and the device's
         state list is refreshed.
 
-        Boolean -> Indigo Boolean state; numeric -> Number; string -> String.
-        Complex types (dict, list) are JSON-stringified.  None values are skipped.
+        Each key's type is inferred from its value and persisted in
+        dynamicKeyTypes so getDeviceStateList declares it with the correct Indigo
+        state type.  bool -> BoolTrueFalse, "ON"/"OFF" -> BoolOnOff, int ->
+        Integer, float -> Real, else String.  Complex types (dict, list) are
+        JSON-stringified.  None values are skipped.  Type drift across payloads
+        (e.g. int then float) is merged toward the most permissive type seen
+        (see _merge_state_type); a refresh is triggered whenever a key is new OR
+        its type token changes, so an existing String state migrates to its
+        proper type on the next payload that includes it.
 
         State IDs are tightly validated against Indigo's XML element rules; any
         key that fails validation is dropped with a debug log so it never gets
@@ -1078,9 +1196,12 @@ class Plugin(indigo.PluginBase):
         if not isinstance(payload, dict):
             return
 
-        seen_csv = dev.pluginProps.get("seenDynamicKeys", "")
+        orig_props = dict(dev.pluginProps)
+        seen_csv = orig_props.get("seenDynamicKeys", "")
         seen = set(s for s in seen_csv.split(",") if s and self._is_valid_state_id(s))
+        type_map = self._load_dynamic_types(dev)
         new_keys = []
+        type_changed = False
         # Phase 1: identify keys + values WITHOUT writing.  We must NOT call
         # updateStateOnServer for any state that isn't already declared in our
         # state list — Indigo logs a top-level "state key not defined" error
@@ -1100,41 +1221,50 @@ class Plugin(indigo.PluginBase):
                         level="WARNING")
                 continue
 
-            # Coerce the value to a state-friendly form
-            if isinstance(raw_val, (dict, list)):
-                try:
-                    state_val = json.dumps(raw_val, separators=(",", ":"), default=str)[:512]
-                except Exception:
-                    state_val = str(raw_val)[:512]
-            elif isinstance(raw_val, bool):
-                state_val = bool(raw_val)
-            elif isinstance(raw_val, (int, float)):
-                state_val = float(raw_val) if isinstance(raw_val, float) else int(raw_val)
-            else:
-                state_val = str(raw_val)
-
-            pending.append((state_key, state_val))
+            token = self._infer_state_type(raw_val)
             if state_key not in seen:
                 seen.add(state_key)
                 new_keys.append(state_key)
+                type_map[state_key] = token
+            else:
+                old_token = type_map.get(state_key)
+                if old_token is None:
+                    # Migration: key seen before dynamicKeyTypes existed.  Adopt
+                    # the first observed type so a legacy String state gets
+                    # re-declared with its proper type on this refresh.
+                    type_map[state_key] = token
+                    type_changed = True
+                else:
+                    merged = self._merge_state_type(old_token, token)
+                    if merged != old_token:
+                        type_map[state_key] = merged
+                        type_changed = True
 
-        # Phase 2: if there are new keys, persist + refresh state list FIRST so
-        # the writes in Phase 3 don't trigger "state key not defined" errors.
-        if new_keys:
+            # Coerce by the final/declared token so the write matches the type.
+            state_val = self._coerce_dynamic_value(raw_val, type_map[state_key])
+            pending.append((state_key, state_val))
+
+        # Phase 2: if any key is new OR changed type, persist + refresh the state
+        # list FIRST so the writes in Phase 3 don't trigger "state key not
+        # defined" errors and any retyped state is re-declared before reseeding.
+        if new_keys or type_changed:
             try:
                 new_props = dict(dev.pluginProps)
                 new_props["seenDynamicKeys"] = ",".join(sorted(seen))
+                new_props["dynamicKeyTypes"] = json.dumps(
+                    type_map, separators=(",", ":"), sort_keys=True)
                 dev.replacePluginPropsOnServer(new_props)
                 refreshed = indigo.devices[dev.id]
                 refreshed.stateListOrDisplayStateIdChanged()
-                log(f"{dev.name}: imported {len(new_keys)} new field(s): {new_keys}")
+                if new_keys:
+                    log(f"{dev.name}: imported {len(new_keys)} new field(s): {new_keys}")
+                if type_changed:
+                    log(f"{dev.name}: refined dynamic state type(s) from payload")
             except Exception as e:
                 log(f"{dev.name}: dynamic-state refresh failed; rolling back. err={e}; "
                     f"new_keys={new_keys}", level="ERROR")
                 try:
-                    rollback_props = dict(dev.pluginProps)
-                    rollback_props["seenDynamicKeys"] = seen_csv  # original
-                    dev.replacePluginPropsOnServer(rollback_props)
+                    dev.replacePluginPropsOnServer(orig_props)
                 except Exception:
                     pass
                 # Skip Phase 3: writes for the new keys would fail anyway.
@@ -1177,6 +1307,8 @@ class Plugin(indigo.PluginBase):
         if not seen_csv:
             return state_list
 
+        type_map = self._load_dynamic_types(dev)
+
         # Build the set of static-state IDs already in the list.
         existing_ids = set()
         try:
@@ -1194,14 +1326,23 @@ class Plugin(indigo.PluginBase):
             if not self._is_valid_state_id(key):
                 continue  # paranoid — should already be filtered by writer
             label = key[:1].upper() + key[1:]  # cosmetic camelCase -> CamelCase
-            current = dev.states.get(key) if hasattr(dev, "states") else None
-            try:
+            token = type_map.get(key)
+            if token is None:
+                # No recorded type yet (pre-upgrade device, before any payload has
+                # arrived since the upgrade).  Fall back to inferring from the
+                # current stored value, defaulting to String.  The next captured
+                # payload records a proper token via _capture_raw_fields.
+                current = dev.states.get(key) if hasattr(dev, "states") else None
                 if isinstance(current, bool):
-                    state_list.append(self.getDeviceStateDictForBoolTrueFalseType(key, label, label))
-                elif isinstance(current, (int, float)):
-                    state_list.append(self.getDeviceStateDictForNumberType(key, label, label))
+                    token = "bool"
+                elif isinstance(current, float):
+                    token = "real"
+                elif isinstance(current, int):
+                    token = "int"
                 else:
-                    state_list.append(self.getDeviceStateDictForStringType(key, label, label))
+                    token = "str"
+            try:
+                state_list.append(self._state_dict_for_token(key, label, token))
                 existing_ids.add(key)
             except Exception:
                 # Skip silently — the writer logs detail; this method must return
@@ -1235,8 +1376,8 @@ class Plugin(indigo.PluginBase):
         `mqtt_prefix` defines the topic root.
 
         All other pluginProps — `vendor`, `model`, `capabilities_display`,
-        internal capability flags, `seenDynamicKeys` — are cosmetic or healing
-        writes that should NOT cycle comm.
+        internal capability flags, `seenDynamicKeys`, `dynamicKeyTypes` — are
+        cosmetic or healing writes that should NOT cycle comm.
         """
         keys = ("friendly_name", "ieee_address", "mqtt_prefix")
         return any(oldDevice.pluginProps.get(k) != newDevice.pluginProps.get(k) for k in keys)
