@@ -5,9 +5,9 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Opus 4.7
-# Date:        28-05-2026
-# Version:     1.9.13
+# Author:      CliveS & Claude Opus 4.8
+# Date:        29-05-2026
+# Version:     1.9.14
 #
 # v1.9.13 (28-05-2026): Dynamic state-type inference for captured z2m payload
 # fields. Each dynamic key is tagged with a type token (bool/onoff/int/real/str)
@@ -33,6 +33,15 @@
 # camelCased) so the value is a legal enum sub-state suffix: "1_single" ->
 # "single", "brightness_move_up" -> "brightnessMoveUp". Existing button devices
 # get a one-time stateListOrDisplayStateIdChanged() refresh in deviceStartComm.
+#
+# v1.9.14 (29-05-2026): Added an application-level MQTT liveness backstop. paho's
+# loop_start auto-reconnect can wedge on a half-open socket after a network blip
+# WITHOUT firing on_disconnect — leaving the client "connected" but deaf (this is
+# what left Jane Lamp dead on 29-05-2026: "sent" published into a dead socket, zero
+# inbound, lastSuccessfulComm frozen). runConcurrentThread now stamps last_rx_ts on
+# every inbound message and rebuilds the client (_stop_mqtt + _start_mqtt) if nothing
+# has arrived for MQTT_SILENCE_LIMIT (300s), independent of paho's own loop. Pairs
+# with the estate-wide Device Health Monitor watchdog as defence-in-depth.
 #
 # v1.9.11 (27-05-2026): Added prepare_to_sleep / wake_up overrides
 # harvested from the 27-May plugin_base.py sweep. Mac sleep used to leave
@@ -238,6 +247,9 @@ PLUGIN_NAME    = "Zigbee2MQTT Bridge"
 # do NOT hardcode here — Info.plist is the single source of truth.
 
 RECONNECT_DELAY      = 30   # seconds between MQTT reconnect attempts
+# Application-level liveness backstop (paho's own auto-reconnect can wedge silently):
+MQTT_SILENCE_LIMIT   = 300  # no inbound MQTT message for this long => rebuild the client
+MQTT_WATCHDOG_EVERY  = 30   # seconds between liveness checks in runConcurrentThread
 STATE_REQUEST_DELAY  = 2    # seconds after deviceStartComm before requesting state
 DEVICE_FOLDER_NAME   = "Zigbee2MQTT"
 
@@ -650,6 +662,10 @@ class Plugin(indigo.PluginBase):
         # Message queue (paho callback -> main thread via runConcurrentThread)
         self.msg_queue = queue.Queue()
 
+        # MQTT liveness backstop — stamp of last inbound message + last watchdog check.
+        self.last_rx_ts       = time.time()
+        self._last_mqtt_check = 0.0
+
         # bridge/devices cache: ieee_address -> full device dict
         self.bridge_devices = {}     # type: dict[str, dict]
 
@@ -718,6 +734,7 @@ class Plugin(indigo.PluginBase):
                     self._process_message(topic, payload)
             except Exception as e:
                 log(f"runConcurrentThread error: {e}", level="ERROR")
+            self._mqtt_liveness_check()
             self.sleep(0.2)
 
     def stopConcurrentThread(self):
@@ -1989,6 +2006,27 @@ class Plugin(indigo.PluginBase):
                 self.mqtt_client    = None
                 self.mqtt_connected = False
 
+    def _mqtt_liveness_check(self):
+        """Self-heal backstop: paho's loop_start auto-reconnect can wedge on a
+        half-open socket after a network blip without firing on_disconnect (this is
+        what left Jane Lamp dead on 29-05-2026 — "sent" logged into a dead socket,
+        zero inbound, mqtt_connected still True). If no MQTT message has arrived for
+        MQTT_SILENCE_LIMIT seconds, tear the client down and rebuild it from scratch,
+        regardless of what mqtt_connected reports."""
+        now = time.time()
+        if now - self._last_mqtt_check < MQTT_WATCHDOG_EVERY:
+            return
+        self._last_mqtt_check = now
+        if self.mqtt_client is None:
+            return  # not started, or deliberately stopped
+        silent = now - self.last_rx_ts
+        if silent > MQTT_SILENCE_LIMIT:
+            log(f"MQTT silent for {silent:.0f}s (limit {MQTT_SILENCE_LIMIT}s) — rebuilding "
+                f"connection (paho loop assumed wedged)", level="WARNING")
+            self._stop_mqtt()
+            self.last_rx_ts = time.time()   # give the rebuild a full fresh window
+            self._start_mqtt()
+
     def _publish(self, topic, payload):
         """Publish a JSON payload to an MQTT topic."""
         with self.mqtt_lock:
@@ -2017,6 +2055,7 @@ class Plugin(indigo.PluginBase):
     def _on_mqtt_connect(self, client, userdata, flags, rc):
         if rc == 0:
             self.mqtt_connected = True
+            self.last_rx_ts     = time.time()   # fresh connection — reset the liveness clock
             prefix = self._topic_prefix()
             client.subscribe(f"{prefix}/#", qos=1)
             subscribed = [f"{prefix}/#"]
@@ -2041,6 +2080,7 @@ class Plugin(indigo.PluginBase):
         self.msg_queue.put(("__disconnected__", {"rc": rc}))
 
     def _on_mqtt_message(self, client, userdata, msg):
+        self.last_rx_ts = time.time()   # liveness: any inbound message proves the link is alive
         try:
             raw = msg.payload.decode("utf-8")
         except UnicodeDecodeError:
