@@ -6,8 +6,24 @@
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 4.8
-# Date:        29-05-2026
-# Version:     1.9.14
+# Date:        06-06-2026
+# Version:     1.9.15
+# v1.9.15 (06-06-2026): deep-review fixes.
+#   * HIGH: universal-action handler was named actionControlUniversalDevices — Indigo's
+#     callback is actionControlUniversal (confirmed vs all SDK examples), so it was dead
+#     code (everyday Send Status Request still worked via the class-specific handlers).
+#     Renamed. (Global CLAUDE.md dispatch table corrected — it had the wrong name.)
+#   * HIGH (script): startup_z2m_check.py Pushover used executeAction("sendMessage",
+#     {title,message}) — wrong id + keys, so the watchdog's restart-failed alert never
+#     sent. Fixed to "send" / msgTitle / msgBody / msgPriority / msgSound.
+#   * MEDIUM (data-loss): _process_device_state reclassified ANY non-button device that
+#     received an 'action' into a button — deleting + recreating it, destroying a real
+#     dimmer/cover/switch-with-scenes and orphaning every trigger/link. New
+#     _should_reclassify_as_button re-checks the device's CURRENT exposes and only
+#     converts when there is no brightness/position/writable-state/light-cover-switch.
+#   * MEDIUM: unguarded int()/float() in _process_light_state and the relay/cover
+#     linkquality coercions dropped the WHOLE update batch on one malformed field; each
+#     numeric block is now try/except-guarded (mirrors the contact/relay power handlers).
 #
 # v1.9.13 (28-05-2026): Dynamic state-type inference for captured z2m payload
 # fields. Each dynamic key is tagged with a type token (bool/onoff/int/real/str)
@@ -1518,7 +1534,11 @@ class Plugin(indigo.PluginBase):
         else:
             log(f"Unhandled dimmer action {cmd} for {dev.name}", level="WARNING")
 
-    def actionControlUniversalDevices(self, action, dev):
+    def actionControlUniversal(self, action, dev):
+        # Indigo's universal-action callback is actionControlUniversal (confirmed
+        # against all SDK device examples) — NOT actionControlUniversalDevices, which
+        # Indigo never calls (the old name left this handler dead; everyday Send Status
+        # Request still worked because the class-specific handlers also service it).
         cmd    = action.deviceAction
         fname  = dev.pluginProps.get("friendly_name", "")
         prefix = self._device_prefix(dev)
@@ -2377,7 +2397,7 @@ class Plugin(indigo.PluginBase):
         # (e.g. a TuYa button misidentified as relay by zigbee2mqtt), delete
         # the wrong device and recreate it as z2mButton automatically.
         if "action" in payload and payload["action"] not in (None, ""):
-            if dev.deviceTypeId != "z2mButton":
+            if dev.deviceTypeId != "z2mButton" and self._should_reclassify_as_button(dev):
                 self._reclassify_as_button(dev, payload)
                 return
 
@@ -2436,16 +2456,24 @@ class Plugin(indigo.PluginBase):
         if "state" in payload:
             updates.append(("onOffState", str(payload["state"]).upper() == "ON"))
 
+        # Each numeric block is guarded so one malformed field (a non-numeric or
+        # null value from a flaky device) is skipped rather than raising and dropping
+        # the WHOLE update batch (the exception otherwise propagates to runConcurrentThread).
         if "brightness" in payload:
-            raw   = payload["brightness"]
-            is_on = str(payload.get("state", "ON")).upper() == "ON"
-            level = _brightness_255_to_100(int(raw)) if is_on else 0
-            updates.append(("brightnessLevel", level))
+            try:
+                is_on = str(payload.get("state", "ON")).upper() == "ON"
+                level = _brightness_255_to_100(int(payload["brightness"])) if is_on else 0
+                updates.append(("brightnessLevel", level))
+            except (ValueError, TypeError):
+                pass
 
         if has_ct and "color_temp" in payload and payload["color_temp"] is not None:
-            kelvin = _mireds_to_kelvin(int(payload["color_temp"]))
-            updates.append(("whiteTemperature", kelvin))
-            updates.append(("colorTemp", kelvin, f"{kelvin} K"))
+            try:
+                kelvin = _mireds_to_kelvin(int(payload["color_temp"]))
+                updates.append(("whiteTemperature", kelvin))
+                updates.append(("colorTemp", kelvin, f"{kelvin} K"))
+            except (ValueError, TypeError):
+                pass
 
         if "color_mode" in payload:
             cm = payload["color_mode"]
@@ -2457,16 +2485,22 @@ class Plugin(indigo.PluginBase):
         if has_col:
             color = payload.get("color", {})
             if isinstance(color, dict):
-                if "x" in color and "y" in color:
-                    r, g, b = _xy_to_rgb(float(color["x"]), float(color["y"]))
-                    updates.extend([("redLevel", r), ("greenLevel", g), ("blueLevel", b)])
-                elif "hue" in color and "saturation" in color:
-                    r, g, b = _hs_to_rgb(float(color["hue"]), float(color["saturation"]))
-                    updates.extend([("redLevel", r), ("greenLevel", g), ("blueLevel", b)])
+                try:
+                    if "x" in color and "y" in color:
+                        r, g, b = _xy_to_rgb(float(color["x"]), float(color["y"]))
+                        updates.extend([("redLevel", r), ("greenLevel", g), ("blueLevel", b)])
+                    elif "hue" in color and "saturation" in color:
+                        r, g, b = _hs_to_rgb(float(color["hue"]), float(color["saturation"]))
+                        updates.extend([("redLevel", r), ("greenLevel", g), ("blueLevel", b)])
+                except (ValueError, TypeError):
+                    pass
 
         if "linkquality" in payload:
-            lq = int(payload["linkquality"])
-            updates.append(("linkQuality", lq, f"{lq} / 255"))
+            try:
+                lq = int(payload["linkquality"])
+                updates.append(("linkQuality", lq, f"{lq} / 255"))
+            except (ValueError, TypeError):
+                pass
 
         self._apply_updates(dev, updates)
 
@@ -2492,8 +2526,11 @@ class Plugin(indigo.PluginBase):
                 pass
 
         if "linkquality" in payload:
-            lq = int(payload["linkquality"])
-            updates.append(("linkQuality", lq, f"{lq} / 255"))
+            try:
+                lq = int(payload["linkquality"])
+                updates.append(("linkQuality", lq, f"{lq} / 255"))
+            except (ValueError, TypeError):
+                pass
 
         self._apply_updates(dev, updates)
 
@@ -2807,6 +2844,47 @@ class Plugin(indigo.PluginBase):
                 pass
         self._apply_updates(dev, updates)
 
+    def _should_reclassify_as_button(self, dev):
+        """Guard for the auto-reclassify-to-button path. A non-button device should
+        only be deleted + recreated as a button if it has NO primary output
+        capability. A legitimate combo device — a dimmer, cover or switch that ALSO
+        publishes scene 'action's on the same MQTT topic — must never be destroyed:
+        that would lose all on/off/brightness/colour/position control and orphan
+        every trigger, link and control-page reference to its device id.
+
+        Re-check the device's CURRENT Z2M exposes (self.bridge_devices): reclassify
+        only when there is no brightness, no position, no writable on/off state and
+        no light/cover/switch composite. If the exposes can't be found, fall back to
+        the conservative rule that only the catch-all sensor/repeater types may
+        auto-convert (a relay keeps its relay device — recreate manually if needed).
+        """
+        if dev.deviceTypeId in ("z2mLight", "z2mCover"):
+            return False
+        props = dev.pluginProps
+        ieee  = (props.get("ieee_address") or "").strip()
+        fname = (props.get("friendly_name") or "").strip()
+        data  = None
+        for d in (self.bridge_devices or {}).values():
+            if ((ieee and (d.get("ieee_address") or "").strip() == ieee)
+                    or (fname and (d.get("friendly_name") or "").strip() == fname)):
+                data = d
+                break
+        exposes = ((data or {}).get("definition") or {}).get("exposes") or []
+        if not exposes:
+            # No exposes to re-check — only the no-output catch-all types may convert.
+            return dev.deviceTypeId in ("z2mSensor", "z2mRepeater")
+        for entry in exposes:
+            if entry.get("type") in ("light", "cover", "switch"):
+                return False
+        for feat in _iter_features(exposes):
+            name = feat.get("name")
+            if name in ("brightness", "position"):
+                return False
+            if (name == "state" and feat.get("type") == "binary"
+                    and (feat.get("access", 0) & 2)):  # bit 1 = writable
+                return False
+        return True
+
     def _reclassify_as_button(self, dev, payload):
         """Delete a misclassified device and recreate it as z2mButton.
 
@@ -2954,8 +3032,11 @@ class Plugin(indigo.PluginBase):
                 pass
 
         if "linkquality" in payload:
-            lq = int(payload["linkquality"])
-            updates.append(("linkQuality", lq, f"{lq} / 255"))
+            try:
+                lq = int(payload["linkquality"])
+                updates.append(("linkQuality", lq, f"{lq} / 255"))
+            except (ValueError, TypeError):
+                pass
 
         self._apply_updates(dev, updates)
 
