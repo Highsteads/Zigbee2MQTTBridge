@@ -8,10 +8,10 @@ An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zig
 - Auto-detects the right Indigo device type from each device's zigbee2mqtt `exposes` definition
 - **Discover & Create Devices** menu item: one click creates every Indigo device, no manual setup
 - Device types created:
-  - **Z2M Light** (dimmer) — bulbs, LED strips, including Hue; brightness plus optional colour / colour-temperature
-  - **Z2M Relay** (relay) — switches, outlets, plugs; on/off plus optional power / energy
-  - **Z2M Cover** (dimmer) — blinds, shutters; position 0-100% mapped to Indigo brightness, plus tilt
-  - **Z2M Repeater** — Zigbee routers and coordinators in repeater mode (SLZB, SMLIGHT); link quality + availability
+  - **Z2M Light** (dimmer) — bulbs, LED strips and Hue, with brightness plus optional colour / colour-temperature
+  - **Z2M Relay** (relay) — switches, outlets and plugs, with on/off plus optional power / energy
+  - **Z2M Cover** (dimmer) — blinds and shutters, with position 0-100% mapped to Indigo brightness, plus tilt
+  - **Z2M Repeater** — Zigbee routers and coordinators in repeater mode (SLZB, SMLIGHT), with link quality and availability
   - **Z2M Button / Scene** — button and scene controllers. The `lastAction` state is an Indigo enumeration, so you get a boolean sub-state per action (`lastAction.single`, `.double`, `.hold`, and so on) and can trigger on a specific press straight from the Triggers UI, with no string compare
   - **Z2M Sensor family** — a generic sensor plus auto-classified Contact, Occupancy / presence, Water-leak and Temperature / Humidity types, each given the matching Indigo subType so HomeKit and friends route them correctly
   - **Z2M Coordinator** — one device per MQTT bridge, tracking the Z2M version, coordinator type, permit-join, network and device count
