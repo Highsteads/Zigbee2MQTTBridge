@@ -242,14 +242,15 @@ def test_sensor_unhandled_action_does_not_crash(plugin, make_device, make_action
     assert sent == []
 
 
-# ── actionControlUniversalDevices ────────────────────────────────────────────
+# ── actionControlUniversal ───────────────────────────────────────────────────
 
 def test_universal_request_status(plugin, make_device, make_action):
     sent = _patch_publish(plugin)
     dev = make_device(501, "Some Device", "z2mRelay",
                       pluginProps={"friendly_name": "Some Device"})
 
-    plugin.actionControlUniversalDevices(
+    # v1.9.15: Indigo's callback is actionControlUniversal (not ...Devices).
+    plugin.actionControlUniversal(
         make_action(deviceAction=indigo.kUniversalAction.RequestStatus), dev)
     assert len(sent) == 1
     assert sent[0][0].endswith("/Some Device/get")

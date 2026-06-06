@@ -291,6 +291,47 @@ def test_reclassify_calls_ensure_folder_with_name(plugin, make_device, monkeypat
         assert calls[-1][0] is not None
 
 
+# ── _should_reclassify_as_button gate (v1.9.15) ──────────────────────────────
+# A non-button device that publishes an 'action' must only be deleted + recreated
+# as a button if it has NO primary output capability — otherwise a real
+# dimmer/cover/switch-with-scenes would be destroyed and its id orphaned.
+
+def test_gate_protects_switch_with_writable_state(plugin, make_device):
+    dev = make_device(601, "Switch+Scenes", "z2mRelay",
+                      pluginProps={"friendly_name": "Switch+Scenes", "ieee_address": "0xd1"})
+    plugin.bridge_devices = {"0xd1": {
+        "ieee_address": "0xd1", "friendly_name": "Switch+Scenes",
+        "definition": {"exposes": [
+            {"name": "state", "type": "binary", "access": 7},   # writable on/off
+            {"name": "action", "type": "enum"},
+        ]},
+    }}
+    assert plugin._should_reclassify_as_button(dev) is False
+
+
+def test_gate_allows_action_only_device(plugin, make_device):
+    dev = make_device(602, "PureButton", "z2mSensor",
+                      pluginProps={"friendly_name": "PureButton", "ieee_address": "0xb2"})
+    plugin.bridge_devices = {"0xb2": {
+        "ieee_address": "0xb2", "friendly_name": "PureButton",
+        "definition": {"exposes": [
+            {"name": "action", "type": "enum"},
+            {"name": "battery", "type": "numeric"},
+        ]},
+    }}
+    assert plugin._should_reclassify_as_button(dev) is True
+
+
+def test_gate_protects_light_and_cover_types_outright(plugin, make_device):
+    light = make_device(603, "ALight", "z2mLight",
+                        pluginProps={"friendly_name": "ALight", "ieee_address": "0xl3"})
+    cover = make_device(604, "ACover", "z2mCover",
+                        pluginProps={"friendly_name": "ACover", "ieee_address": "0xc4"})
+    plugin.bridge_devices = {}   # even with no cached exposes
+    assert plugin._should_reclassify_as_button(light) is False
+    assert plugin._should_reclassify_as_button(cover) is False
+
+
 class _StubNewDev:
     def __init__(self, kw):
         self.id          = 1000
