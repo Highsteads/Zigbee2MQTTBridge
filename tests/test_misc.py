@@ -6,7 +6,6 @@
 # Author:      CliveS & Claude Opus 4.7
 # Date:        25-05-2026
 
-import indigo  # stub
 
 
 # ── _effective_broker / _effective_port ──────────────────────────────────────

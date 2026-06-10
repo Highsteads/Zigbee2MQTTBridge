@@ -25,7 +25,7 @@ An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zig
 - Indigo 2023.2 or later (developed and run on Indigo 2025.2 / Python 3.13)
 - zigbee2mqtt running and reachable over MQTT
 - MQTT credentials in `IndigoSecrets.py` OR entered in PluginConfig (fallback added in v1.9.6)
-- Bundled Python dependencies, installed automatically on first run: `paho-mqtt`, `colormath`
+- Bundled Python dependencies, installed automatically on first run: `paho-mqtt` only (as of v1.9.16)
 
 ## Installation
 
@@ -81,6 +81,7 @@ restarts. Defaults to ON.
 
 ## Version history
 
+- **1.9.16** (10-06-2026) — housekeeping from a full repo audit, nothing visible changes day to day. Installs are much lighter: the unmaintained `colormath` library (which dragged the large `numpy` package onto every machine) has been dropped — the one colour conversion it performed is now done in a few lines of plain Python, with proper gamma correction so reported lamp colours stay true. The repo also gained automatic testing on every change (GitHub Actions runs the full 269-test suite plus a lint pass), a couple of silent edge cases now log a warning instead of vanishing (a malformed bridge message used to be discarded without trace), and an internal threading rule that one callback was quietly bending is now followed to the letter.
 - **1.9.15** (06-06-2026) — review fixes: corrected the universal-action handler name so Send Status Request works on every path, stopped combo devices (a dimmer or switch that also sends scene actions) being mistakenly rebuilt as buttons, and a malformed payload field is now skipped on its own rather than dropping the whole update.
 - **1.9.14** (29-05-2026) — self-healing MQTT: an application-level liveness backstop rebuilds the connection after a silent half-open socket that paho's own auto-reconnect can miss.
 - **1.9.13** (28-05-2026) — dynamic state-type inference: each captured payload field is declared with the correct Indigo type (boolean / integer / real / string) rather than always string.

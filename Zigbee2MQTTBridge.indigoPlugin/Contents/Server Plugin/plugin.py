@@ -5,9 +5,27 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Opus 4.8
-# Date:        06-06-2026
-# Version:     1.9.15
+# Author:      CliveS & Claude Fable 5
+# Date:        10-06-2026
+# Version:     1.9.16
+# v1.9.16 (10-06-2026): repo-audit hygiene release (no behaviour change for users).
+#   * DEPENDENCY: colormath==3.0.0 removed from requirements.txt — unmaintained
+#     since 2018 (SyntaxWarnings on Python 3.13) and pulled numpy (~40 MB) onto
+#     every user install, all for one XY→RGB conversion. _xy_to_rgb is now pure
+#     Python: same Wide-RGB-D65 matrix the fallback always used, plus
+#     chromaticity-preserving peak scaling and the standard sRGB gamma encode so
+#     reported colours stay close to what colormath produced. Install is now
+#     paho-mqtt only.
+#   * DISCIPLINE: _on_mqtt_connect called log() (an indigo.server.log) from the
+#     paho thread, contradicting the section's own "queue only, no Indigo calls"
+#     rule. The subscribed-topics list now rides the __connected__ queue message
+#     and is logged on the main thread.
+#   * ROBUSTNESS: bridge/devices and bridge/info payloads of an unexpected JSON
+#     type were silently discarded; both now log a WARNING naming the type and
+#     prefix so a misbehaving Z2M build is visible instead of just "no devices".
+#   * NEW guard-rails: GitHub Actions CI runs the full pytest suite + ruff
+#     (errors-only) on every push/PR; ruff.toml added; 4 lint errors fixed.
+#
 # v1.9.15 (06-06-2026): deep-review fixes.
 #   * HIGH: universal-action handler was named actionControlUniversalDevices — Indigo's
 #     callback is actionControlUniversal (confirmed vs all SDK examples), so it was dead
@@ -248,13 +266,10 @@ try:
 except ImportError:
     mqtt = None
 
-# ── colormath (XY → RGB conversion) ─────────────────────────────────────────
-try:
-    from colormath.color_objects import xyYColor, sRGBColor
-    from colormath.color_conversions import convert_color
-    COLORMATH_AVAILABLE = True
-except ImportError:
-    COLORMATH_AVAILABLE = False
+# colormath was dropped in v1.9.16 — it was unmaintained (last release 2018,
+# SyntaxWarnings on Python 3.13) and pulled numpy (~40 MB) onto every install,
+# all for one XY→RGB conversion that _xy_to_rgb now does in pure Python with
+# the standard sRGB matrix + gamma encode.
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 PLUGIN_ID      = "com.clives.indigoplugin.z2mbridge"
@@ -310,18 +325,13 @@ def log(message, level="INFO"):
 
 
 def _xy_to_rgb(x, y):
-    """Convert CIE 1931 xy chromaticity to sRGB 0-100 integers."""
-    if COLORMATH_AVAILABLE:
-        try:
-            xyz = xyYColor(x, y, 1.0, observer="10")
-            rgb = convert_color(xyz, sRGBColor)
-            r = max(0.0, min(1.0, rgb.clamped_rgb_r))
-            g = max(0.0, min(1.0, rgb.clamped_rgb_g))
-            b = max(0.0, min(1.0, rgb.clamped_rgb_b))
-            return int(r * 100), int(g * 100), int(b * 100)
-        except Exception:
-            pass
-    # Fallback: simple matrix conversion without colormath
+    """Convert CIE 1931 xy chromaticity to sRGB 0-100 integers.
+
+    Pure-Python since v1.9.16 (colormath dropped): Wide-RGB-D65 matrix (the one
+    Philips publish for Hue-class bulbs), negatives clamped, scaled so the
+    dominant channel saturates (chromaticity-preserving — xy carries no
+    brightness), then sRGB gamma-encoded to match what colormath used to report.
+    """
     z = 1.0 - x - y
     Y = 1.0
     X = (Y / y) * x if y > 0 else 0
@@ -329,9 +339,15 @@ def _xy_to_rgb(x, y):
     r =  X * 1.656492 - Y * 0.354851 - Z * 0.255038
     g = -X * 0.707196 + Y * 1.655397 + Z * 0.036152
     b =  X * 0.051713 - Y * 0.121364 + Z * 1.011530
-    r = max(0.0, min(1.0, r))
-    g = max(0.0, min(1.0, g))
-    b = max(0.0, min(1.0, b))
+    r, g, b = (max(0.0, c) for c in (r, g, b))
+    peak = max(r, g, b)
+    if peak > 1.0:
+        r, g, b = r / peak, g / peak, b / peak
+
+    def _gamma(c):
+        return 12.92 * c if c <= 0.0031308 else 1.055 * (c ** (1.0 / 2.4)) - 0.055
+
+    r, g, b = (max(0.0, min(1.0, _gamma(c))) for c in (r, g, b))
     return int(r * 100), int(g * 100), int(b * 100)
 
 
@@ -2083,8 +2099,9 @@ class Plugin(indigo.PluginBase):
             if garage:
                 client.subscribe(f"{garage}/#", qos=1)
                 subscribed.append(f"{garage}/#")
-            log(f"MQTT subscribed to: {', '.join(subscribed)}")
-            self.msg_queue.put(("__connected__", {}))
+            # No log() here — this runs on the paho thread ("queue only, no
+            # Indigo calls"); the __connected__ handler logs it on the main thread.
+            self.msg_queue.put(("__connected__", {"subscribed": subscribed}))
         else:
             rc_labels = {
                 1: "bad protocol",
@@ -2120,6 +2137,9 @@ class Plugin(indigo.PluginBase):
         # Internal control messages
         if topic == "__connected__":
             log(f"MQTT connected to {self._effective_broker()}:{self._effective_port()}")
+            subscribed = payload.get("subscribed")
+            if subscribed:
+                log(f"MQTT subscribed to: {', '.join(subscribed)}")
             # Actively request bridge/devices from every configured prefix.
             # Retained messages alone are unreliable — the garage Z2M may not have
             # published since broker restart, or retain may be disabled.
@@ -2193,6 +2213,9 @@ class Plugin(indigo.PluginBase):
         entries for this prefix — meaning we have a baseline to compare against.
         """
         if not isinstance(payload, list):
+            log(f"Ignoring bridge/devices payload of unexpected type "
+                f"{type(payload).__name__} from prefix '{prefix or self._topic_prefix()}'",
+                level="WARNING")
             return
         if prefix is None:
             prefix = self._topic_prefix()
@@ -2298,6 +2321,8 @@ class Plugin(indigo.PluginBase):
     def _process_bridge_info(self, payload, prefix):
         """Handle prefix/bridge/info — comprehensive bridge metadata."""
         if not isinstance(payload, dict):
+            log(f"Ignoring bridge/info payload of unexpected type "
+                f"{type(payload).__name__} from prefix '{prefix}'", level="WARNING")
             return
         self._bridge_info_cache[prefix] = payload
 

@@ -7,7 +7,6 @@
 # Author:      CliveS & Claude Opus 4.7
 # Date:        25-05-2026
 
-import pytest
 import indigo  # stub
 
 

@@ -1,2 +1,9 @@
+# Zigbee2MQTT Bridge runtime dependencies.
+# Indigo pip-installs this into Contents/Packages/ at plugin startup.
+#
+# paho 1.x is a DELIBERATE pin: the v1.9.14 MQTT liveness watchdog is tuned
+# around its reconnect behaviour — a 2.x upgrade needs CallbackAPIVersion
+# changes and a full soak test, not a casual bump.
+# colormath was removed in v1.9.16 (unmaintained + dragged numpy in; the
+# XY-to-RGB conversion is now pure Python inside plugin.py).
 paho-mqtt==1.6.1
-colormath==3.0.0
