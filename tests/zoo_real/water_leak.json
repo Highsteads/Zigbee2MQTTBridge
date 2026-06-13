@@ -1,0 +1,90 @@
+{
+  "_friendly_name": "Bathroom Boiler Leak Sensor",
+  "model": "SJCGQ11LM",
+  "vendor": "Aqara",
+  "exposes": [
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Remaining battery in %, can take up to 24 hours before reported",
+      "label": "Battery",
+      "name": "battery",
+      "property": "battery",
+      "type": "numeric",
+      "unit": "%",
+      "value_max": 100,
+      "value_min": 0
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Voltage of the battery in millivolts",
+      "label": "Voltage",
+      "name": "voltage",
+      "property": "voltage",
+      "type": "numeric",
+      "unit": "mV"
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Temperature of the device",
+      "label": "Device temperature",
+      "name": "device_temperature",
+      "property": "device_temperature",
+      "type": "numeric",
+      "unit": "°C"
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Number of power outages",
+      "label": "Power outage count",
+      "name": "power_outage_count",
+      "property": "power_outage_count",
+      "type": "numeric"
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Indicates how many times the sensor was triggered (since last scheduled report)",
+      "label": "Trigger count",
+      "name": "trigger_count",
+      "property": "trigger_count",
+      "type": "numeric"
+    },
+    {
+      "access": 1,
+      "description": "Indicates whether the device detected a water leak",
+      "label": "Water leak",
+      "name": "water_leak",
+      "property": "water_leak",
+      "type": "binary",
+      "value_off": false,
+      "value_on": true
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Indicates whether the battery of the device is almost empty",
+      "label": "Battery low",
+      "name": "battery_low",
+      "property": "battery_low",
+      "type": "binary",
+      "value_off": false,
+      "value_on": true
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Link quality (signal strength)",
+      "label": "Linkquality",
+      "name": "linkquality",
+      "property": "linkquality",
+      "type": "numeric",
+      "unit": "lqi",
+      "value_max": 255,
+      "value_min": 0
+    }
+  ]
+}

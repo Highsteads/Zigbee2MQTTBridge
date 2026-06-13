@@ -5,9 +5,22 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5
-# Date:        10-06-2026
-# Version:     1.9.16
+# Author:      CliveS & Claude Opus 4.8
+# Date:        13-06-2026
+# Version:     1.9.17
+# v1.9.17 (13-06-2026): device-type detection fix + device-zoo test layer.
+#   * FIX: a device exposing BOTH `presence`/`occupancy` AND an `action` enum is
+#     now classified as an occupancy sensor, not a button. The `action` enum on a
+#     presence sensor carries region/presence events (enter/leave/occupied), not
+#     scene-controller presses. Without the gate the Aqara FP1 (RTCZCGQ11LM) was
+#     mis-detected as a z2mButton on Discover & Create — losing its presence
+#     semantics. Real buttons (action, no presence/occupancy) are unaffected.
+#     Found by the new device zoo running CliveS's real broker payloads.
+#   * TEST: added tests/zoo_manifest.py + tests/test_zoo.py — a declarative
+#     "device zoo" mapping each exposes payload to the full translation it must
+#     yield (device type + capability props), parametrised, plus cross-cutting
+#     invariants (pure-contact-never-motion, presence-never-button, battery never
+#     dropped, colour-lesson Supports* set). Real captures live in tests/zoo_real/.
 # v1.9.16 (10-06-2026): repo-audit hygiene release (no behaviour change for users).
 #   * DEPENDENCY: colormath==3.0.0 removed from requirements.txt — unmaintained
 #     since 2018 (SyntaxWarnings on Python 3.13) and pulled numpy (~40 MB) onto
@@ -455,9 +468,18 @@ def _detect_device_type(exposes, model=""):
             return "z2mCover"
 
     # Check for Button/Scene controller (has "action" enum feature — TuYa TS0042, Ikea remotes etc.)
-    for feat in _iter_features(exposes):
-        if feat.get("name") == "action" and feat.get("type") == "enum":
-            return "z2mButton"
+    # BUT not when the device also reports presence/occupancy: on a presence
+    # sensor the `action` enum carries region/presence events (enter/leave/
+    # occupied), not scene-controller presses, so presence is the primary type.
+    # Without this gate the Aqara FP1 (RTCZCGQ11LM: presence + action) is
+    # mis-classified as a button and loses its presence semantics. Mirrors the
+    # pure-contact rule below — a primary sensor capability beats an incidental
+    # action enum.
+    _btn_names = {feat.get("name") for feat in _iter_features(exposes)}
+    if not (_btn_names & {"presence", "occupancy"}):
+        for feat in _iter_features(exposes):
+            if feat.get("name") == "action" and feat.get("type") == "enum":
+                return "z2mButton"
 
     # Check for Relay (writable binary "state" feature at top level or inside "switch" composite)
     for entry in exposes:

@@ -1,0 +1,208 @@
+{
+  "_friendly_name": "Front Door Light",
+  "model": "9290012573A",
+  "vendor": "Philips",
+  "exposes": [
+    {
+      "features": [
+        {
+          "access": 7,
+          "description": "On/off state of this light",
+          "label": "State",
+          "name": "state",
+          "property": "state",
+          "type": "binary",
+          "value_off": "OFF",
+          "value_on": "ON",
+          "value_toggle": "TOGGLE"
+        },
+        {
+          "access": 7,
+          "description": "Brightness of this light",
+          "label": "Brightness",
+          "name": "brightness",
+          "property": "brightness",
+          "type": "numeric",
+          "value_max": 254,
+          "value_min": 0
+        },
+        {
+          "access": 7,
+          "description": "Color temperature of this light",
+          "label": "Color temp",
+          "name": "color_temp",
+          "presets": [
+            {
+              "description": "Coolest temperature supported",
+              "name": "coolest",
+              "value": 153
+            },
+            {
+              "description": "Cool temperature (250 mireds / 4000 Kelvin)",
+              "name": "cool",
+              "value": 250
+            },
+            {
+              "description": "Neutral temperature (370 mireds / 2700 Kelvin)",
+              "name": "neutral",
+              "value": 370
+            },
+            {
+              "description": "Warm temperature (454 mireds / 2200 Kelvin)",
+              "name": "warm",
+              "value": 454
+            },
+            {
+              "description": "Warmest temperature supported",
+              "name": "warmest",
+              "value": 500
+            }
+          ],
+          "property": "color_temp",
+          "type": "numeric",
+          "unit": "mired",
+          "value_max": 500,
+          "value_min": 153
+        },
+        {
+          "access": 7,
+          "description": "Color temperature after cold power on of this light",
+          "label": "Color temp startup",
+          "name": "color_temp_startup",
+          "presets": [
+            {
+              "description": "Coolest temperature supported",
+              "name": "coolest",
+              "value": 153
+            },
+            {
+              "description": "Cool temperature (250 mireds / 4000 Kelvin)",
+              "name": "cool",
+              "value": 250
+            },
+            {
+              "description": "Neutral temperature (370 mireds / 2700 Kelvin)",
+              "name": "neutral",
+              "value": 370
+            },
+            {
+              "description": "Warm temperature (454 mireds / 2200 Kelvin)",
+              "name": "warm",
+              "value": 454
+            },
+            {
+              "description": "Warmest temperature supported",
+              "name": "warmest",
+              "value": 500
+            },
+            {
+              "description": "Restore previous color_temp on cold power on",
+              "name": "previous",
+              "value": 65535
+            }
+          ],
+          "property": "color_temp_startup",
+          "type": "numeric",
+          "unit": "mired",
+          "value_max": 500,
+          "value_min": 153
+        },
+        {
+          "access": 7,
+          "description": "Color of this light in the CIE 1931 color space (x/y)",
+          "features": [
+            {
+              "access": 7,
+              "label": "X",
+              "name": "x",
+              "property": "x",
+              "type": "numeric"
+            },
+            {
+              "access": 7,
+              "label": "Y",
+              "name": "y",
+              "property": "y",
+              "type": "numeric"
+            }
+          ],
+          "label": "Color (X/Y)",
+          "name": "color_xy",
+          "property": "color",
+          "type": "composite"
+        },
+        {
+          "access": 7,
+          "description": "Color of this light expressed as hue/saturation",
+          "features": [
+            {
+              "access": 7,
+              "label": "Hue",
+              "name": "hue",
+              "property": "hue",
+              "type": "numeric"
+            },
+            {
+              "access": 7,
+              "label": "Saturation",
+              "name": "saturation",
+              "property": "saturation",
+              "type": "numeric"
+            }
+          ],
+          "label": "Color (HS)",
+          "name": "color_hs",
+          "property": "color",
+          "type": "composite"
+        }
+      ],
+      "type": "light"
+    },
+    {
+      "access": 7,
+      "category": "config",
+      "description": "Controls the behavior when the device is powered on after power loss",
+      "label": "Power-on behavior",
+      "name": "power_on_behavior",
+      "property": "power_on_behavior",
+      "type": "enum",
+      "values": [
+        "off",
+        "on",
+        "toggle",
+        "previous"
+      ]
+    },
+    {
+      "access": 2,
+      "label": "Effect",
+      "name": "effect",
+      "property": "effect",
+      "type": "enum",
+      "values": [
+        "blink",
+        "breathe",
+        "okay",
+        "channel_change",
+        "candle",
+        "fireplace",
+        "colorloop",
+        "finish_effect",
+        "stop_effect",
+        "stop_hue_effect"
+      ]
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Link quality (signal strength)",
+      "label": "Linkquality",
+      "name": "linkquality",
+      "property": "linkquality",
+      "type": "numeric",
+      "unit": "lqi",
+      "value_max": 255,
+      "value_min": 0
+    }
+  ]
+}

@@ -1,0 +1,140 @@
+{
+  "_friendly_name": "Dining Room Temperature and Humidity Sensor",
+  "model": "SNZB-02D",
+  "vendor": "SONOFF",
+  "exposes": [
+    {
+      "access": 5,
+      "category": "diagnostic",
+      "description": "Remaining battery in %",
+      "label": "Battery",
+      "name": "battery",
+      "property": "battery",
+      "type": "numeric",
+      "unit": "%",
+      "value_max": 100,
+      "value_min": 0
+    },
+    {
+      "access": 5,
+      "description": "Measured temperature value",
+      "label": "Temperature",
+      "name": "temperature",
+      "property": "temperature",
+      "type": "numeric",
+      "unit": "°C"
+    },
+    {
+      "access": 5,
+      "description": "Measured relative humidity",
+      "label": "Humidity",
+      "name": "humidity",
+      "property": "humidity",
+      "type": "numeric",
+      "unit": "%"
+    },
+    {
+      "access": 7,
+      "category": "config",
+      "description": "Minimum temperature that is considered comfortable. The device will display ❄️ when the temperature is lower than this value. Note: wake up the device by pressing the button on the back before changing this value.",
+      "label": "Comfort temperature min",
+      "name": "comfort_temperature_min",
+      "property": "comfort_temperature_min",
+      "type": "numeric",
+      "unit": "°C",
+      "value_max": 60,
+      "value_min": -10,
+      "value_step": 0.1
+    },
+    {
+      "access": 7,
+      "category": "config",
+      "description": "Maximum temperature that is considered comfortable. The device will display 🔥 when the temperature is higher than this value. Note: wake up the device by pressing the button on the back before changing this value.",
+      "label": "Comfort temperature max",
+      "name": "comfort_temperature_max",
+      "property": "comfort_temperature_max",
+      "type": "numeric",
+      "unit": "°C",
+      "value_max": 60,
+      "value_min": -10,
+      "value_step": 0.1
+    },
+    {
+      "access": 7,
+      "category": "config",
+      "description": "Minimum relative humidity that is considered comfortable. The device will display ☀️ when the humidity is lower than this value. Note: wake up the device by pressing the button on the back before changing this value.",
+      "label": "Comfort humidity min",
+      "name": "comfort_humidity_min",
+      "property": "comfort_humidity_min",
+      "type": "numeric",
+      "unit": "%",
+      "value_max": 95,
+      "value_min": 5,
+      "value_step": 0.1
+    },
+    {
+      "access": 7,
+      "category": "config",
+      "description": "Maximum relative humidity that is considered comfortable. The device will display 💧 when the humidity is higher than this value. Note: wake up the device by pressing the button on the back before changing this value.",
+      "label": "Comfort humidity max",
+      "name": "comfort_humidity_max",
+      "property": "comfort_humidity_max",
+      "type": "numeric",
+      "unit": "%",
+      "value_max": 95,
+      "value_min": 5,
+      "value_step": 0.1
+    },
+    {
+      "access": 7,
+      "category": "config",
+      "description": "The unit of the temperature displayed on the device screen. Note: wake up the device by pressing the button on the back before changing this value.",
+      "label": "Temperature units",
+      "name": "temperature_units",
+      "property": "temperature_units",
+      "type": "enum",
+      "values": [
+        "celsius",
+        "fahrenheit"
+      ]
+    },
+    {
+      "access": 7,
+      "category": "config",
+      "description": "Offset to add/subtract to the reported temperature",
+      "label": "Temperature calibration",
+      "name": "temperature_calibration",
+      "property": "temperature_calibration",
+      "type": "numeric",
+      "unit": "°C",
+      "value_max": 50,
+      "value_min": -50,
+      "value_step": 0.1
+    },
+    {
+      "access": 7,
+      "category": "config",
+      "description": "Offset to add/subtract to the reported relative humidity",
+      "label": "Humidity calibration",
+      "name": "humidity_calibration",
+      "property": "humidity_calibration",
+      "type": "numeric",
+      "unit": "%",
+      "value_max": 50,
+      "value_min": -50,
+      "value_step": 0.1
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Link quality (signal strength)",
+      "label": "Linkquality",
+      "name": "linkquality",
+      "property": "linkquality",
+      "type": "numeric",
+      "unit": "lqi",
+      "value_max": 255,
+      "value_min": 0
+    }
+  ]
+}

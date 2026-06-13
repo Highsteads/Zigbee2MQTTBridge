@@ -1,0 +1,202 @@
+{
+  "_friendly_name": "Dining Room Presence Sensor",
+  "model": "RTCZCGQ11LM",
+  "vendor": "Aqara",
+  "exposes": [
+    {
+      "access": 5,
+      "description": "Indicates whether the device detected presence",
+      "label": "Presence",
+      "name": "presence",
+      "property": "presence",
+      "type": "binary",
+      "value_off": false,
+      "value_on": true
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Temperature of the device",
+      "label": "Device temperature",
+      "name": "device_temperature",
+      "property": "device_temperature",
+      "type": "numeric",
+      "unit": "°C"
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Number of power outages (since last pairing)",
+      "label": "Power outage count",
+      "name": "power_outage_count",
+      "property": "power_outage_count",
+      "type": "numeric"
+    },
+    {
+      "access": 1,
+      "description": "Presence events: \"enter\", \"leave\", \"left_enter\", \"right_leave\", \"right_enter\", \"left_leave\", \"approach\", \"away\"",
+      "label": "Presence event",
+      "name": "presence_event",
+      "property": "presence_event",
+      "type": "enum",
+      "values": [
+        "enter",
+        "leave",
+        "left_enter",
+        "right_leave",
+        "right_enter",
+        "left_leave",
+        "approach",
+        "away"
+      ]
+    },
+    {
+      "access": 7,
+      "description": "Monitoring mode with or without considering right and left sides",
+      "label": "Monitoring mode",
+      "name": "monitoring_mode",
+      "property": "monitoring_mode",
+      "type": "enum",
+      "values": [
+        "undirected",
+        "left_right"
+      ]
+    },
+    {
+      "access": 7,
+      "description": "The distance at which the sensor detects approaching",
+      "label": "Approach distance",
+      "name": "approach_distance",
+      "property": "approach_distance",
+      "type": "enum",
+      "values": [
+        "far",
+        "medium",
+        "near"
+      ]
+    },
+    {
+      "access": 7,
+      "description": "Different sensitivities means different static human body recognition rate and response speed of occupied",
+      "label": "Motion sensitivity",
+      "name": "motion_sensitivity",
+      "property": "motion_sensitivity",
+      "type": "enum",
+      "values": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    {
+      "access": 2,
+      "description": "Reset the status of no presence",
+      "label": "Reset nopresence status",
+      "name": "reset_nopresence_status",
+      "property": "reset_nopresence_status",
+      "type": "enum",
+      "values": [
+        ""
+      ]
+    },
+    {
+      "access": 2,
+      "description": "Definition of a new region to be added (or replace existing one). Creating or modifying a region requires you to define which zones of a 7x4 detection grid should be active for that zone. Regions can overlap, meaning that a zone can be defined in more than one region (eg. \"zone x = 1 & y = 1\" can be added to region 1 & 2). \"Zone x = 1 & y = 1\" is the nearest zone on the right (from sensor's perspective, along the detection path).",
+      "features": [
+        {
+          "access": 2,
+          "label": "Region id",
+          "name": "region_id",
+          "property": "region_id",
+          "type": "numeric",
+          "value_max": 10,
+          "value_min": 1
+        },
+        {
+          "access": 2,
+          "description": "list of dictionaries in the format {\"x\": 1, \"y\": 1}, {\"x\": 2, \"y\": 1}",
+          "item_type": {
+            "access": 2,
+            "features": [
+              {
+                "access": 2,
+                "label": "X",
+                "name": "x",
+                "property": "x",
+                "type": "numeric",
+                "value_max": 4,
+                "value_min": 1
+              },
+              {
+                "access": 2,
+                "label": "Y",
+                "name": "y",
+                "property": "y",
+                "type": "numeric",
+                "value_max": 7,
+                "value_min": 1
+              }
+            ],
+            "label": "Zone position",
+            "name": "Zone position",
+            "type": "composite"
+          },
+          "label": "Zones",
+          "name": "zones",
+          "property": "zones",
+          "type": "list"
+        }
+      ],
+      "label": "Region upsert",
+      "name": "region_upsert",
+      "property": "region_upsert",
+      "type": "composite"
+    },
+    {
+      "access": 2,
+      "description": "Region definition to be deleted from the device.",
+      "features": [
+        {
+          "access": 2,
+          "label": "Region id",
+          "name": "region_id",
+          "property": "region_id",
+          "type": "numeric",
+          "value_max": 10,
+          "value_min": 1
+        }
+      ],
+      "label": "Region delete",
+      "name": "region_delete",
+      "property": "region_delete",
+      "type": "composite"
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Triggered action (e.g. a button click)",
+      "label": "Action",
+      "name": "action",
+      "property": "action",
+      "type": "enum",
+      "values": [
+        "region_*_enter",
+        "region_*_leave",
+        "region_*_occupied",
+        "region_*_unoccupied"
+      ]
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Link quality (signal strength)",
+      "label": "Linkquality",
+      "name": "linkquality",
+      "property": "linkquality",
+      "type": "numeric",
+      "unit": "lqi",
+      "value_max": 255,
+      "value_min": 0
+    }
+  ]
+}

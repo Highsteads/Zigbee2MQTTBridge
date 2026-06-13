@@ -1,0 +1,19 @@
+{
+  "_friendly_name": "Conservatory Repeater",
+  "model": "TS0207_repeater",
+  "vendor": "Tuya",
+  "exposes": [
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Link quality (signal strength)",
+      "label": "Linkquality",
+      "name": "linkquality",
+      "property": "linkquality",
+      "type": "numeric",
+      "unit": "lqi",
+      "value_max": 255,
+      "value_min": 0
+    }
+  ]
+}

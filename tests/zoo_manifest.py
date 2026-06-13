@@ -208,3 +208,53 @@ CASES: list[ZooCase] = [
     ZooCase("none_exposes", None, "z2mSensor", {},
             note="defensive: exposes=None must not crash, falls to generic"),
 ]
+
+
+# ── Real captures from CliveS's live broker (zigbee2mqtt/bridge/devices) ──────
+# Higher-fidelity than the modelled shapes above: these are the verbatim
+# `exposes` arrays of real devices in the estate, captured 13-Jun-2026. Stored
+# as JSON under tests/zoo_real/ so they read as data, not code. Re-capture with:
+#   mosquitto_sub -h <broker> -u <user> -P <pass> -t 'zigbee2mqtt/bridge/devices' -C 1
+# then split per device into tests/zoo_real/<name>.json ({model, vendor, exposes}).
+
+import json as _json
+import os as _os
+
+_REAL_DIR = _os.path.join(_os.path.dirname(__file__), "zoo_real")
+
+
+def _load_real(stem: str):
+    with open(_os.path.join(_REAL_DIR, f"{stem}.json"), encoding="utf-8") as fh:
+        d = _json.load(fh)
+    return d.get("model", ""), d.get("exposes")
+
+
+def _real(stem, expect_type, expect_props=None, note=""):
+    model, exposes = _load_real(stem)
+    return ZooCase(f"real_{stem}", exposes, expect_type, expect_props or {},
+                   model=model, real=True, note=note)
+
+
+CASES += [
+    # The headline find: the Aqara FP1 exposes BOTH `presence` and an `action`
+    # enum (region events). It MUST classify as an occupancy sensor — the action
+    # is presence-event metadata, not a scene controller. (Pre-fix the action
+    # rule won and it became a z2mButton; the live device is the catch-all
+    # z2mSensor because its exposes gained `action` after creation.)
+    _real("fp1_presence", "z2mOccupancySensor", {"has_presence": True},
+          note="Aqara FP1 RTCZCGQ11LM — presence + action enum; presence wins"),
+    _real("occupancy_pir", "z2mOccupancySensor", {"has_presence": True, "has_illuminance": True},
+          note="Aqara PS-S04D mmWave presence + lux (uses 'presence', not 'occupancy')"),
+    _real("contact_door", "z2mContactSensor", {},
+          note="Tuya SNTZ007 contact"),
+    _real("temp_humidity", "z2mTemperatureSensor", {"has_temperature": True, "has_humidity": True},
+          note="Sonoff SNZB-02D"),
+    _real("water_leak", "z2mWaterLeakSensor", {},
+          note="Aqara SJCGQ11LM leak"),
+    _real("repeater", "z2mRepeater", {},
+          note="Tuya TS0207 repeater"),
+    _real("button_push", "z2mButton", {},
+          note="Push_LO push button — no presence/occupancy, stays a button"),
+    _real("light_bulb", "z2mLight", {"has_brightness": True},
+          note="Hue 9290012573A bulb"),
+]

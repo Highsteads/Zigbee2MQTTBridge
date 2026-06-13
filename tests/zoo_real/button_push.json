@@ -1,0 +1,48 @@
+{
+  "_friendly_name": "Hall Garage Door Opener",
+  "model": "Push_LO",
+  "vendor": "Marmitek",
+  "exposes": [
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Remaining battery in %, can take up to 24 hours before reported",
+      "label": "Battery",
+      "name": "battery",
+      "property": "battery",
+      "type": "numeric",
+      "unit": "%",
+      "value_max": 100,
+      "value_min": 0
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Triggered action (e.g. a button click)",
+      "label": "Action",
+      "name": "action",
+      "property": "action",
+      "type": "enum",
+      "values": [
+        "1_single",
+        "1_double",
+        "1_hold",
+        "2_single",
+        "2_double",
+        "2_hold"
+      ]
+    },
+    {
+      "access": 1,
+      "category": "diagnostic",
+      "description": "Link quality (signal strength)",
+      "label": "Linkquality",
+      "name": "linkquality",
+      "property": "linkquality",
+      "type": "numeric",
+      "unit": "lqi",
+      "value_max": 255,
+      "value_min": 0
+    }
+  ]
+}

@@ -108,6 +108,20 @@ def test_invariant_contact_never_becomes_motion(plugin_mod, case):
         assert got == "z2mContactSensor", f"{case.name}: pure contact not a contact sensor ({got})"
 
 
+@pytest.mark.parametrize("case", CASES, ids=_IDS)
+def test_invariant_presence_never_becomes_button(plugin_mod, case):
+    """A payload exposing `presence` or `occupancy` must never classify as a
+    button, even when it also carries an `action` enum. The action on a presence
+    sensor is region/presence-event metadata, not a scene controller. (Found via
+    the real Aqara FP1: presence + action -> was z2mButton, must be occupancy.)"""
+    names = _top_level_feature_names(plugin_mod, case.exposes)
+    if names & {"presence", "occupancy"}:
+        got = plugin_mod._detect_device_type(case.exposes, model=case.model)
+        assert got != "z2mButton", (
+            f"{case.name}: presence/occupancy sensor classified as a button"
+        )
+
+
 @pytest.mark.parametrize(
     "case", [c for c in CASES if c.exposes], ids=[c.name for c in CASES if c.exposes]
 )
