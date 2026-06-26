@@ -161,8 +161,11 @@ _REPEATER_LQ_ONLY = [{"name": "linkquality", "type": "numeric", "access": 1}]
 CASES: list[ZooCase] = [
     ZooCase("light_ct", _LIGHT_CT, "z2mLight",
             {"has_brightness": True, "has_color_temp": True, "has_color": False,
-             "SupportsWhiteTemperature": True, "SupportsColor": False},
-            note="tunable-white bulb: CT but no colour"),
+             "SupportsWhiteTemperature": True, "SupportsWhite": True,
+             "SupportsRGB": False, "SupportsColor": True},
+            note="tunable-white bulb: CT but no colour — SupportsColor must STILL be "
+                 "True at create time (Indigo ignores SupportsWhiteTemperature "
+                 "without it); v1.9.19 fixed the create path to match the helper"),
     ZooCase("light_rgb_ct", _LIGHT_RGB_CT, "z2mLight",
             {"has_color": True, "SupportsColor": True, "SupportsRGB": True,
              "SupportsWhiteTemperature": True},

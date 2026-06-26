@@ -103,13 +103,18 @@ def test_button_action_non_numeric_button_zero(plugin, make_device):
     ("release",             "release"),
     ("brightness_move_up",  "brightnessMoveUp"),  # compound -> camelCase
     ("3_brightness_step_up", "brightnessStepUp"),
-    ("2",                   "unknown"),    # bare button number, no action name
-    ("",                    "unknown"),    # empty
+    ("2",                   "other"),      # bare button number -> declared "other"
+    ("",                    "other"),      # empty -> declared "other"
+    ("recall_1",            "other"),      # exotic/unmapped token -> declared "other"
+    ("arrow_left_click",    "arrowLeftClick"),  # multi-function remote now surfaces
 ])
-def test_normalise_action(plugin, raw, expected):
-    """_normalise_action must yield a legal enum sub-state suffix: camelCase
-    ASCII, no leading digit, no underscore."""
-    assert plugin._normalise_action(raw) == expected
+def test_normalise_action(plugin, plugin_mod, raw, expected):
+    """_normalise_action must yield a legal enum Option value: a declared token
+    when recognised, else "other" (never a value the enum can't display)."""
+    token = plugin._normalise_action(raw)
+    assert token == expected
+    # Whatever it returns must be a real declared Option so a sub-state can fire.
+    assert token in plugin_mod._BUTTON_ACTION_VALUES
 
 
 def test_button_compound_action_written_normalised(plugin, make_device):
@@ -330,6 +335,43 @@ def test_gate_protects_light_and_cover_types_outright(plugin, make_device):
     plugin.bridge_devices = {}   # even with no cached exposes
     assert plugin._should_reclassify_as_button(light) is False
     assert plugin._should_reclassify_as_button(cover) is False
+
+
+# ── Regression (v1.9.18): presence/occupancy sensors must NOT reclassify ──────
+# An Aqara FP1 (RTCZCGQ11LM) and other mmWave/PIR presence sensors emit region /
+# presence events as an `action` enum. They are created as z2mOccupancySensor and
+# must NEVER be reclassified as a button — that would delete + recreate the device,
+# changing its id and orphaning every trigger/link/control-page reference, and lose
+# all presence semantics. The detection-time gate (v1.9.17) had not been mirrored
+# into the runtime _should_reclassify_as_button guard; this locks both in step.
+
+def test_gate_protects_presence_sensor_with_action(plugin, make_device):
+    dev = make_device(605, "FP1 Presence", "z2mOccupancySensor",
+                      pluginProps={"friendly_name": "FP1 Presence", "ieee_address": "0xfp1"})
+    plugin.bridge_devices = {"0xfp1": {
+        "ieee_address": "0xfp1", "friendly_name": "FP1 Presence",
+        "definition": {"exposes": [
+            {"name": "presence",        "type": "binary",  "access": 1},
+            {"name": "action",          "type": "enum",    "access": 1,
+             "values": ["region_1_enter", "enter", "leave"]},
+            {"name": "illuminance_lux", "type": "numeric", "access": 1},
+            {"name": "battery",         "type": "numeric", "access": 1},
+        ]},
+    }}
+    assert plugin._should_reclassify_as_button(dev) is False
+
+
+def test_gate_protects_occupancy_sensor_with_action(plugin, make_device):
+    dev = make_device(606, "Occ+Action", "z2mOccupancySensor",
+                      pluginProps={"friendly_name": "Occ+Action", "ieee_address": "0xocc"})
+    plugin.bridge_devices = {"0xocc": {
+        "ieee_address": "0xocc", "friendly_name": "Occ+Action",
+        "definition": {"exposes": [
+            {"name": "occupancy", "type": "binary", "access": 1},
+            {"name": "action",    "type": "enum",   "access": 1, "values": ["enter"]},
+        ]},
+    }}
+    assert plugin._should_reclassify_as_button(dev) is False
 
 
 class _StubNewDev:

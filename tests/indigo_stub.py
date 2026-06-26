@@ -108,6 +108,13 @@ class PluginBase:
     def deviceUpdated(self, *_args, **_kwargs): pass
     def stateListOrDisplayStateIdChanged(self, *_args, **_kwargs): pass
 
+    # Lifecycle hooks the plugin chains via super() — no-ops are enough for tests.
+    def sleep(self, *_args, **_kwargs): pass
+    def wake_up(self, *_args, **_kwargs): pass
+    wakeUp = wake_up
+    def prepare_to_sleep(self, *_args, **_kwargs): pass
+    prepareToSleep = prepare_to_sleep
+
 
 # ── Device registry ──────────────────────────────────────────────────────────
 

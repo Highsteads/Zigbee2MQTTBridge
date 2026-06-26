@@ -61,7 +61,7 @@ ANTHROPIC_API_KEY = "sk-ant-..."
 
 # ============================
 # Octopus Energy
-# Required by: OctopusAccountReader plugin
+# Required by: octopus_tracker_rate.py script + SigenEnergyManager / TariffAnalyser
 # ============================
 OCTOPUS_API_KEY = "sk_live_..."
 OCTOPUS_ACCOUNT = "A-XXXXXXXX"

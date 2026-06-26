@@ -601,7 +601,9 @@
                  compare. The plugin writes the NORMALISED action token (raw z2m
                  actions like "1_single" are reduced to "single"; the button
                  index is kept in lastButton) so the written value always
-                 matches an Option value / sub-state suffix. -->
+                 matches an Option value / sub-state suffix. Any token not listed
+                 here is mapped to "other" by _normalise_action — the Option list
+                 below MUST stay in sync with _BUTTON_ACTION_VALUES in plugin.py. -->
             <State id="lastAction">
                 <ValueType>
                     <List>
@@ -611,6 +613,30 @@
                         <Option value="quadruple">Quadruple</Option>
                         <Option value="hold">Hold</Option>
                         <Option value="release">Release</Option>
+                        <Option value="press">Press</Option>
+                        <Option value="on">On</Option>
+                        <Option value="off">Off</Option>
+                        <Option value="toggle">Toggle</Option>
+                        <Option value="brightnessMoveUp">Brightness Move Up</Option>
+                        <Option value="brightnessMoveDown">Brightness Move Down</Option>
+                        <Option value="brightnessStop">Brightness Stop</Option>
+                        <Option value="brightnessStepUp">Brightness Step Up</Option>
+                        <Option value="brightnessStepDown">Brightness Step Down</Option>
+                        <Option value="arrowLeftClick">Arrow Left Click</Option>
+                        <Option value="arrowRightClick">Arrow Right Click</Option>
+                        <Option value="arrowLeftHold">Arrow Left Hold</Option>
+                        <Option value="arrowRightHold">Arrow Right Hold</Option>
+                        <Option value="arrowLeftRelease">Arrow Left Release</Option>
+                        <Option value="arrowRightRelease">Arrow Right Release</Option>
+                        <Option value="colorTemperatureMoveUp">Colour Temp Move Up</Option>
+                        <Option value="colorTemperatureMoveDown">Colour Temp Move Down</Option>
+                        <Option value="moveUp">Move Up</Option>
+                        <Option value="moveDown">Move Down</Option>
+                        <Option value="upPress">Up Press</Option>
+                        <Option value="downPress">Down Press</Option>
+                        <Option value="upHold">Up Hold</Option>
+                        <Option value="downHold">Down Hold</Option>
+                        <Option value="other">Other</Option>
                     </List>
                 </ValueType>
                 <TriggerLabel>Button Action Changed</TriggerLabel>

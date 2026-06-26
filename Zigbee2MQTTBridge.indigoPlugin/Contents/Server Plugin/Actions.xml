@@ -38,9 +38,11 @@
         <CallbackMethod>action_set_cover_position</CallbackMethod>
     </Action>
 
-    <!-- Refresh device state (all types) -->
+    <!-- Refresh device state (every stateful device type — re-requests the
+         retained payload via .../get). Coordinator/button omitted: a coordinator
+         has no friendly_name and a button is a stateless event source. -->
     <Action id="refreshState"
-            deviceFilter="self.z2mLight,self.z2mRelay,self.z2mSensor,self.z2mCover"
+            deviceFilter="self.z2mLight,self.z2mRelay,self.z2mContactSensor,self.z2mOccupancySensor,self.z2mWaterLeakSensor,self.z2mTemperatureSensor,self.z2mSensor,self.z2mCover,self.z2mRepeater"
             uiPath="DeviceActions">
         <Name>Refresh Device State</Name>
         <CallbackMethod>action_refresh_state</CallbackMethod>

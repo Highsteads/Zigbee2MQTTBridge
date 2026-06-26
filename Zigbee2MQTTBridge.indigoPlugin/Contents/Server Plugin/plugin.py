@@ -6,8 +6,46 @@
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 4.8
-# Date:        13-06-2026
-# Version:     1.9.17
+# Date:        26-06-2026
+# Version:     1.9.19
+# v1.9.19 (26-06-2026): deep-review batch 2 — medium correctness/robustness + polish.
+#   * FIX (concurrency): MQTT teardown+rebuild is now atomic under one lock
+#     (_rebuild_mqtt). The liveness watchdog and a concurrent config save can no
+#     longer interleave a bare stop-then-start into leaking a second live paho
+#     client that double-delivers every message.
+#   * FIX (robustness): the catch-all z2mSensor handler tracks motion keys in the
+#     per-device last-known store (like the occupancy handler) — a partial payload
+#     no longer clears a still-present person on a mixed PIR+mmWave sensor.
+#   * FIX (correctness): z2mButton lastAction enum expanded to the common
+#     multi-function-remote vocabulary, and _normalise_action maps any unmapped
+#     token to a declared "other" — actions that previously matched no Option (and
+#     so vanished from the display + sub-states) now always surface.
+#   * FIX (low): the device CREATE path now uses _compute_light_native_flags too,
+#     so a CT-only bulb gets SupportsColor=True at creation (prereq for
+#     SupportsWhiteTemperature) instead of only after a manual Refresh Capabilities
+#     — v1.9.3 had fixed only the refresh path.
+#   * POLISH: Refresh Device State action offered on every stateful device type
+#     (was lights/relays/generic-sensor/covers only); dead has_voltage/has_current
+#     relay gate entries removed; secrets-template Octopus annotation corrected.
+#   * TEST: +20 (watchdog, paho ingress, connect/disconnect routes, atomic rebuild,
+#     catch-all motion store, lastAction fallback, hs/port robustness) and the
+#     light_ct zoo row now locks in the create-time SupportsColor fix. Suite 428 -> 448.
+# v1.9.18 (26-06-2026): deep-review batch 1 — runtime reclassify guard + robustness.
+#   * FIX (HIGH, data-loss): _should_reclassify_as_button now mirrors the v1.9.17
+#     detection gate — a device exposing presence/occupancy is NEVER reclassified
+#     as a button. An Aqara FP1 (RTCZCGQ11LM) emitting region `action` events was
+#     being DELETED and recreated as a z2mButton at runtime (new id, every
+#     trigger/link/control-page reference orphaned, presence states lost). The
+#     detection fix alone never covered the runtime auto-reclassify path.
+#   * FIX: _reclassify_as_button now also clears + repoints ieee_map (it was left
+#     pointing at the deleted device id, breaking rename detection).
+#   * ROBUSTNESS: wake_up resets last_rx_ts (watchdog no longer tears down the
+#     just-reconnected client on Mac wake); _mqtt_liveness_check moved inside the
+#     runConcurrentThread guard (a rebuild error can't kill the consumer thread);
+#     _hs_to_rgb clamps hue/saturation (no negative RGB on a malformed payload);
+#     _effective_port coerces a string MQTT_PORT from IndigoSecrets.
+#   * TEST: +2 regression tests (presence/occupancy sensor with action must not
+#     reclassify). Suite 426 -> 428.
 # v1.9.17 (13-06-2026): device-type detection fix + device-zoo test layer.
 #   * FIX: a device exposing BOTH `presence`/`occupancy` AND an `action` enum is
 #     now classified as an occupancy sensor, not a button. The `action` enum on a
@@ -297,6 +335,23 @@ MQTT_WATCHDOG_EVERY  = 30   # seconds between liveness checks in runConcurrentTh
 STATE_REQUEST_DELAY  = 2    # seconds after deviceStartComm before requesting state
 DEVICE_FOLDER_NAME   = "Zigbee2MQTT"
 
+# Declared lastAction enum Option values (must stay in sync with the z2mButton
+# <State id="lastAction"> <List> in Devices.xml). _normalise_action maps any token
+# NOT in this set to "other", so a multi-function remote's action always lands on a
+# real Option (and fires its auto-generated lastAction.<value> bool sub-state)
+# instead of writing a token the enum can't display — which silently vanished.
+_BUTTON_ACTION_VALUES = frozenset({
+    "single", "double", "triple", "quadruple", "hold", "release", "press",
+    "on", "off", "toggle",
+    "brightnessMoveUp", "brightnessMoveDown", "brightnessStop",
+    "brightnessStepUp", "brightnessStepDown",
+    "arrowLeftClick", "arrowRightClick", "arrowLeftHold", "arrowRightHold",
+    "arrowLeftRelease", "arrowRightRelease",
+    "colorTemperatureMoveUp", "colorTemperatureMoveDown",
+    "moveUp", "moveDown", "upPress", "downPress", "upHold", "downHold",
+    "other",
+})
+
 # MQTT payload keys handled semantically by type-specific _process_*_state methods.
 # Anything NOT in this set is captured as a dynamic state by _capture_raw_fields.
 _HANDLED_PAYLOAD_KEYS = {
@@ -365,11 +420,18 @@ def _xy_to_rgb(x, y):
 
 
 def _hs_to_rgb(hue_360, saturation_255):
-    """Convert zigbee2mqtt hue (0-360) + saturation (0-255) to sRGB 0-100."""
-    h = hue_360 / 360.0
-    s = saturation_255 / 255.0
+    """Convert zigbee2mqtt hue (0-360) + saturation (0-255) to sRGB 0-100.
+
+    Hue is wrapped and saturation clamped so a malformed payload (out-of-range
+    hue/saturation) can't push colorsys into returning out-of-range channels and
+    hence negative or >100 RGB. Mirrors the clamping the xy path already does.
+    """
+    h = (hue_360 % 360.0) / 360.0
+    s = max(0.0, min(1.0, saturation_255 / 255.0))
     r, g, b = colorsys.hsv_to_rgb(h, s, 1.0)
-    return int(r * 100), int(g * 100), int(b * 100)
+    return (max(0, min(100, int(r * 100))),
+            max(0, min(100, int(g * 100))),
+            max(0, min(100, int(b * 100))))
 
 
 def _brightness_255_to_100(val):
@@ -776,6 +838,10 @@ class Plugin(indigo.PluginBase):
     def wake_up(self):
         log("Mac woke — reconnecting to Mosquitto")
         super().wake_up()
+        # Give the fresh connection a full silence window, otherwise the liveness
+        # watchdog sees the pre-sleep last_rx_ts (potentially hours old) and tears
+        # the just-rebuilt client straight back down on the next check.
+        self.last_rx_ts = time.time()
         self._start_mqtt()
     wakeUp = wake_up
 
@@ -786,9 +852,12 @@ class Plugin(indigo.PluginBase):
                 while not self.msg_queue.empty():
                     topic, payload = self.msg_queue.get_nowait()
                     self._process_message(topic, payload)
+                # Inside the guard: a rebuild exception must log-and-continue, not
+                # kill the only queue-consumer thread (which would silently stop all
+                # device updates — the exact failure the watchdog exists to prevent).
+                self._mqtt_liveness_check()
             except Exception as e:
                 log(f"runConcurrentThread error: {e}", level="ERROR")
-            self._mqtt_liveness_check()
             self.sleep(0.2)
 
     def stopConcurrentThread(self):
@@ -807,9 +876,9 @@ class Plugin(indigo.PluginBase):
         if not userCancelled:
             self.debug = valuesDict.get("showDebugInfo", False)
             log("Preferences saved — reconnecting MQTT")
-            self._stop_mqtt()
-            self.sleep(1)
-            self._start_mqtt()
+            # Atomic rebuild under one lock — a config save must not race the
+            # liveness watchdog into leaking a second paho client.
+            self._rebuild_mqtt()
 
     # ── Device lifecycle ──────────────────────────────────────────────────────
 
@@ -1003,8 +1072,11 @@ class Plugin(indigo.PluginBase):
     # so unsupported entities don't appear in the Custom States panel.
     _STATE_CAPABILITY_GATE = {
         "z2mLight":            {"colorMode": "has_color", "colorTemp": "has_color_temp"},
-        "z2mRelay":            {"power": "has_power", "energy": "has_energy",
-                                "voltage": "has_voltage", "current": "has_current"},
+        # voltage/current are not detected (_detect_relay_capabilities sets only
+        # has_power/has_energy), not declared in Devices.xml, and not written by
+        # _process_relay_state — so no gate for them (the old has_voltage/has_current
+        # entries were dead).
+        "z2mRelay":            {"power": "has_power", "energy": "has_energy"},
         "z2mContactSensor":    {"battery": "has_battery"},
         "z2mOccupancySensor":  {"occupancy": "has_pir", "presence": "has_presence",
                                 "illuminance": "has_illuminance",
@@ -1094,19 +1166,23 @@ class Plugin(indigo.PluginBase):
             "2_double"            -> "double"
             "brightness_move_up"  -> "brightnessMoveUp"
             "hold"                -> "hold"
-        An action that reduces to nothing usable (e.g. a bare "2") returns
-        "unknown" — it simply won't match any declared Option, which the enum
-        state handles gracefully (no sub-state fires).
+        Any token NOT in _BUTTON_ACTION_VALUES (an exotic/device-specific action,
+        or one that reduces to nothing usable like a bare "2") returns "other" —
+        a DECLARED enum Option, so the action still surfaces (display + the
+        lastAction.other bool sub-state fires) instead of writing a value the enum
+        can't show, which previously vanished entirely for multi-function remotes.
         """
         parts = [p for p in str(action).split("_") if p != ""]
         if parts and parts[0].isdigit():
             parts = parts[1:]  # drop button-index prefix — kept in lastButton
         if not parts:
-            return "unknown"
+            return "other"
         token = parts[0] + "".join(p[:1].upper() + p[1:] for p in parts[1:])
         token = "".join(c for c in token if c.isascii() and c.isalnum())
         token = token.lstrip("0123456789")
-        return token or "unknown"
+        if not token:
+            return "other"
+        return token if token in _BUTTON_ACTION_VALUES else "other"
 
     def _sanitise_state_key(self, key):
         """Convert an MQTT field name into a valid Indigo state ID (camelCase).
@@ -2003,7 +2079,14 @@ class Plugin(indigo.PluginBase):
 
     def _effective_port(self):
         if MQTT_PORT:
-            return MQTT_PORT
+            # IndigoSecrets may hold the port as a string ("1883") — paho.connect
+            # needs an int, so coerce it here too rather than trusting the type.
+            try:
+                return int(MQTT_PORT)
+            except (TypeError, ValueError):
+                log(f"Invalid MQTT_PORT in IndigoSecrets ({MQTT_PORT!r}) — using 1883",
+                    level="WARNING")
+                return 1883
         try:
             return int(self.pluginPrefs.get("mqtt_port", "1883") or 1883)
         except (TypeError, ValueError):
@@ -2022,6 +2105,11 @@ class Plugin(indigo.PluginBase):
         return dev.pluginProps.get("mqtt_prefix", self._topic_prefix())
 
     def _start_mqtt(self):
+        with self.mqtt_lock:
+            self._start_mqtt_locked()
+
+    def _start_mqtt_locked(self):
+        """Body of _start_mqtt — the caller MUST already hold self.mqtt_lock."""
         if mqtt is None:
             log("paho-mqtt not available — cannot connect. Check requirements.txt installation.", level="ERROR")
             return
@@ -2037,32 +2125,49 @@ class Plugin(indigo.PluginBase):
                 level="ERROR")
             return
 
-        with self.mqtt_lock:
-            try:
-                client = mqtt.Client(client_id=f"indigo_z2mbridge_{int(time.time())}")
-                if username:
-                    client.username_pw_set(username, password)
-                client.on_connect    = self._on_mqtt_connect
-                client.on_disconnect = self._on_mqtt_disconnect
-                client.on_message    = self._on_mqtt_message
-                client.reconnect_delay_set(min_delay=5, max_delay=RECONNECT_DELAY)
-                client.connect_async(broker, port, keepalive=60)
-                client.loop_start()
-                self.mqtt_client = client
-                log(f"MQTT connecting to {broker}:{port}")
-            except Exception as e:
-                log(f"MQTT connect error: {e}", level="ERROR")
+        try:
+            client = mqtt.Client(client_id=f"indigo_z2mbridge_{int(time.time())}")
+            if username:
+                client.username_pw_set(username, password)
+            client.on_connect    = self._on_mqtt_connect
+            client.on_disconnect = self._on_mqtt_disconnect
+            client.on_message    = self._on_mqtt_message
+            client.reconnect_delay_set(min_delay=5, max_delay=RECONNECT_DELAY)
+            client.connect_async(broker, port, keepalive=60)
+            client.loop_start()
+            self.mqtt_client = client
+            log(f"MQTT connecting to {broker}:{port}")
+        except Exception as e:
+            log(f"MQTT connect error: {e}", level="ERROR")
 
     def _stop_mqtt(self):
         with self.mqtt_lock:
-            if self.mqtt_client:
-                try:
-                    self.mqtt_client.loop_stop()
-                    self.mqtt_client.disconnect()
-                except Exception:
-                    pass
-                self.mqtt_client    = None
-                self.mqtt_connected = False
+            self._stop_mqtt_locked()
+
+    def _stop_mqtt_locked(self):
+        """Body of _stop_mqtt — the caller MUST already hold self.mqtt_lock."""
+        if self.mqtt_client:
+            try:
+                self.mqtt_client.loop_stop()
+                self.mqtt_client.disconnect()
+            except Exception:
+                pass
+            self.mqtt_client    = None
+            self.mqtt_connected = False
+
+    def _rebuild_mqtt(self):
+        """Atomically tear down and rebuild the MQTT client under a SINGLE lock
+        acquisition, so no other thread can slip a _start_mqtt between the stop and
+        the start. Two threads run this sequence — the liveness watchdog (on
+        runConcurrentThread) and closedPrefsConfigUi (Indigo's config thread) — and
+        if they interleave a bare _stop_mqtt() + _start_mqtt() pair, both _start
+        calls run, the second self.mqtt_client store orphans the first client's
+        still-running network thread, and every message is then delivered twice.
+        Both callers MUST use this, never a separate stop-then-start."""
+        with self.mqtt_lock:
+            self._stop_mqtt_locked()
+            self.last_rx_ts = time.time()   # give the rebuild a full fresh window
+            self._start_mqtt_locked()
 
     def _mqtt_liveness_check(self):
         """Self-heal backstop: paho's loop_start auto-reconnect can wedge on a
@@ -2081,9 +2186,7 @@ class Plugin(indigo.PluginBase):
         if silent > MQTT_SILENCE_LIMIT:
             log(f"MQTT silent for {silent:.0f}s (limit {MQTT_SILENCE_LIMIT}s) — rebuilding "
                 f"connection (paho loop assumed wedged)", level="WARNING")
-            self._stop_mqtt()
-            self.last_rx_ts = time.time()   # give the rebuild a full fresh window
-            self._start_mqtt()
+            self._rebuild_mqtt()
 
     def _publish(self, topic, payload):
         """Publish a JSON payload to an MQTT topic."""
@@ -2804,13 +2907,21 @@ class Plugin(indigo.PluginBase):
         #   "motion"     — Aqara FP300 and similar (fires on movement, clears quickly)
         #   "occupancy"  — PIR sensors (fast trigger, clears after timeout)
         #   "presence"   — mmWave/radar sensors (slower trigger, stays True while stationary)
-        # Any of the three being True sets the Indigo motion state True.
-        # Only clears when all present keys are False.
-        motion_raw = payload.get("motion")
-        occ_raw    = payload.get("occupancy")
-        pres_raw   = payload.get("presence")
-        if motion_raw is not None or occ_raw is not None or pres_raw is not None:
-            combined = bool(motion_raw) or bool(occ_raw) or bool(pres_raw)
+        #   "pir"        — some combo sensors expose the raw PIR channel under this name
+        # Track the last-known value of every motion key in self._motion_states
+        # (same store pattern as _process_occupancy_sensor_state) so a PARTIAL
+        # payload (only one key changing) ORs against the others rather than
+        # clearing them. Without the store a mixed PIR+mmWave device that lands on
+        # this catch-all type drops a still-present person whenever one component
+        # key updates on its own. Only clears when ALL known keys are False.
+        store = self._motion_states.setdefault(dev.id, {})
+        motion_updated = False
+        for key in ("motion", "occupancy", "presence", "pir"):
+            if key in payload:
+                store[key] = bool(payload[key])
+                motion_updated = True
+        if motion_updated:
+            combined = any(store.values())
             occupancy = combined
             updates.append(("motion", combined))
 
@@ -2900,10 +3011,11 @@ class Plugin(indigo.PluginBase):
         every trigger, link and control-page reference to its device id.
 
         Re-check the device's CURRENT Z2M exposes (self.bridge_devices): reclassify
-        only when there is no brightness, no position, no writable on/off state and
-        no light/cover/switch composite. If the exposes can't be found, fall back to
-        the conservative rule that only the catch-all sensor/repeater types may
-        auto-convert (a relay keeps its relay device — recreate manually if needed).
+        only when there is no presence/occupancy, no brightness, no position, no
+        writable on/off state and no light/cover/switch composite. If the exposes
+        can't be found, fall back to the conservative rule that only the catch-all
+        sensor/repeater types may auto-convert (a relay keeps its relay device —
+        recreate manually if needed).
         """
         if dev.deviceTypeId in ("z2mLight", "z2mCover"):
             return False
@@ -2920,6 +3032,18 @@ class Plugin(indigo.PluginBase):
         if not exposes:
             # No exposes to re-check — only the no-output catch-all types may convert.
             return dev.deviceTypeId in ("z2mSensor", "z2mRepeater")
+        # A presence/occupancy sensor must NEVER be reclassified as a button: on
+        # such a device the `action` enum carries region/presence events
+        # (enter/leave/occupied), not scene-controller presses. This mirrors the
+        # same gate in _detect_device_type (added v1.9.17). Without it,
+        # _reclassify_as_button DELETES the live occupancy device and recreates it
+        # as a button — orphaning its id and every trigger/link referencing it.
+        # The Aqara FP1 (RTCZCGQ11LM) emits region `action` events and hit exactly
+        # this path. The detection-time gate alone was not enough — the runtime
+        # reclassify guard had drifted out of sync with it.
+        feat_names = {feat.get("name") for feat in _iter_features(exposes)}
+        if feat_names & {"presence", "occupancy"}:
+            return False
         for entry in exposes:
             if entry.get("type") in ("light", "cover", "switch"):
                 return False
@@ -2958,9 +3082,14 @@ class Plugin(indigo.PluginBase):
             log(f"Reclassify: could not delete '{dev_name}': {e}", level="ERROR")
             return
 
-        # Remove stale mapping
+        # Remove stale mappings — BOTH friendly_name_map and ieee_map point at the
+        # now-deleted old_id; leaving ieee_map stale makes rename detection resolve
+        # the deleted device id.
         self.friendly_name_map = {
             k: v for k, v in self.friendly_name_map.items() if v != old_id
+        }
+        self.ieee_map = {
+            k: v for k, v in self.ieee_map.items() if v != old_id
         }
 
         new_props = {
@@ -2989,6 +3118,8 @@ class Plugin(indigo.PluginBase):
                 props=new_props,
             )
             self.friendly_name_map[friendly_name] = new_dev.id
+            if ieee_address:
+                self.ieee_map[ieee_address] = new_dev.id
             log(f"Reclassify complete: '{dev_name}' is now Z2M Button (id={new_dev.id})")
             self._process_button_state(new_dev, payload)
         except Exception as e:
@@ -3130,9 +3261,16 @@ class Plugin(indigo.PluginBase):
         if device_type_id == "z2mLight":
             caps = _detect_light_capabilities(exposes)
             props.update(caps)
-            props["SupportsColor"]            = caps["has_color"]
-            props["SupportsWhiteTemperature"] = caps["has_color_temp"]
-            props["SupportsRGB"]              = caps["has_color"]
+            # Single source of truth for the native colour flags — must match
+            # _apply_light_capabilities / Refresh Capabilities. SupportsColor is
+            # has_color OR has_color_temp: a CT-only bulb needs it as the prereq for
+            # SupportsWhiteTemperature, else Indigo silently ignores CT. The old
+            # create-time logic (SupportsColor = has_color alone, and no
+            # SupportsWhite) created CT-only bulbs unable to do colour temp until a
+            # manual Refresh Capabilities — v1.9.3 fixed the refresh path but not
+            # this create path.
+            props.update(self._compute_light_native_flags(caps["has_color"],
+                                                          caps["has_color_temp"]))
 
         elif device_type_id == "z2mContactSensor":
             caps = _detect_contact_sensor_capabilities(exposes)
