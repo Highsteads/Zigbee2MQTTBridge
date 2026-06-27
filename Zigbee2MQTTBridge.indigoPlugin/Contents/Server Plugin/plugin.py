@@ -6,8 +6,32 @@
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 4.8
-# Date:        26-06-2026
-# Version:     1.9.19
+# Date:        27-06-2026
+# Version:     1.9.20
+# v1.9.20 (27-06-2026): deep-review batch 3 — cleared the entire deferred queue.
+#   * #18 concurrency: friendly_name_map / ieee_map / coordinator_map are now
+#     guarded by self.maps_lock (RLock) at every mutation site (deviceStartComm,
+#     deviceStopComm, reclassify rebuilds, bridge/devices rename), so a
+#     comprehension rebuild can't race a concurrent pop into a RuntimeError. Lock
+#     held only for pure dict ops, never across an indigo.* call.
+#   * #13: a dynamic payload field whose sanitised key collides with a static
+#     Devices.xml state (e.g. snake-case `link_quality` -> `linkQuality`) is no
+#     longer captured + written with a possibly-mismatched dynamic type
+#     (_static_state_ids guard).
+#   * #29: orphan dynamicKeyTypes entries are pruned in lock-step with
+#     seenDynamicKeys (the two persisted stores no longer drift).
+#   * #16: a dimmer reporting brightness 0 now forces onOffState off (some bulbs
+#     publish {"state":"ON","brightness":0} during a fade-to-off).
+#   * #17: the auto-reclassify-to-button trigger requires a NAMED action (one
+#     carrying a letter), so a bare button-index "2" / junk can't drive a
+#     destructive delete+recreate.
+#   * #30: colour helpers round() instead of int() so a fully-saturated channel
+#     reports 100, not 99.
+#   * TEST SEAMS: runConcurrentThread's body extracted to _drain_queue with
+#     per-message + liveness exception isolation (#23); +26 tests covering the
+#     above plus the dispatch table (#8) and deviceStartComm config guards (#24).
+#     Suite 448 -> 474. Bundled IndigoSecrets_example.py trimmed to the MQTT keys
+#     this plugin actually uses (generic example IP).
 # v1.9.19 (26-06-2026): deep-review batch 2 — medium correctness/robustness + polish.
 #   * FIX (concurrency): MQTT teardown+rebuild is now atomic under one lock
 #     (_rebuild_mqtt). The liveness watchdog and a concurrent config save can no
@@ -416,7 +440,9 @@ def _xy_to_rgb(x, y):
         return 12.92 * c if c <= 0.0031308 else 1.055 * (c ** (1.0 / 2.4)) - 0.055
 
     r, g, b = (max(0.0, min(1.0, _gamma(c))) for c in (r, g, b))
-    return int(r * 100), int(g * 100), int(b * 100)
+    # round() not int() so a fully-saturated channel (0.999 after gamma) reports
+    # 100 rather than truncating to 99; clamped for safety.
+    return (min(100, round(r * 100)), min(100, round(g * 100)), min(100, round(b * 100)))
 
 
 def _hs_to_rgb(hue_360, saturation_255):
@@ -429,9 +455,10 @@ def _hs_to_rgb(hue_360, saturation_255):
     h = (hue_360 % 360.0) / 360.0
     s = max(0.0, min(1.0, saturation_255 / 255.0))
     r, g, b = colorsys.hsv_to_rgb(h, s, 1.0)
-    return (max(0, min(100, int(r * 100))),
-            max(0, min(100, int(g * 100))),
-            max(0, min(100, int(b * 100))))
+    # round() not int() so a fully-saturated channel reports 100 not 99.
+    return (max(0, min(100, round(r * 100))),
+            max(0, min(100, round(g * 100))),
+            max(0, min(100, round(b * 100))))
 
 
 def _brightness_255_to_100(val):
@@ -775,6 +802,14 @@ class Plugin(indigo.PluginBase):
         self.mqtt_connected = False
         self.mqtt_lock      = threading.Lock()
 
+        # Guards the device-lookup maps below (friendly_name_map / ieee_map /
+        # coordinator_map). They are mutated by BOTH the Indigo lifecycle thread
+        # (deviceStartComm / deviceStopComm) and the MQTT consumer thread
+        # (reclassify rebuild + bridge/devices rename), so a comprehension rebuild
+        # can otherwise race a concurrent pop into a RuntimeError. RLock so a guarded
+        # method may nest. Held ONLY for pure dict ops — never across an indigo.* call.
+        self.maps_lock      = threading.RLock()
+
         # Message queue (paho callback -> main thread via runConcurrentThread)
         self.msg_queue = queue.Queue()
 
@@ -848,17 +883,28 @@ class Plugin(indigo.PluginBase):
     def runConcurrentThread(self):
         """Drain the MQTT message queue on the Indigo main thread."""
         while True:
-            try:
-                while not self.msg_queue.empty():
-                    topic, payload = self.msg_queue.get_nowait()
-                    self._process_message(topic, payload)
-                # Inside the guard: a rebuild exception must log-and-continue, not
-                # kill the only queue-consumer thread (which would silently stop all
-                # device updates — the exact failure the watchdog exists to prevent).
-                self._mqtt_liveness_check()
-            except Exception as e:
-                log(f"runConcurrentThread error: {e}", level="ERROR")
+            self._drain_queue()
             self.sleep(0.2)
+
+    def _drain_queue(self):
+        """One consumer pass: process every queued MQTT message, then run the
+        liveness check. Each message AND the liveness check are isolated so one
+        bad item logs-and-continues instead of killing the only consumer thread
+        (which would silently stop all device updates — the failure the watchdog
+        exists to prevent). Extracted from runConcurrentThread as a test seam."""
+        while not self.msg_queue.empty():
+            try:
+                topic, payload = self.msg_queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                self._process_message(topic, payload)
+            except Exception as e:
+                log(f"error processing message {topic!r}: {e}", level="ERROR")
+        try:
+            self._mqtt_liveness_check()
+        except Exception as e:
+            log(f"liveness check error: {e}", level="ERROR")
 
     def stopConcurrentThread(self):
         self.stopThread = True
@@ -890,7 +936,8 @@ class Plugin(indigo.PluginBase):
                 log(f"Coordinator '{dev.name}' has no mqtt_prefix — skipping",
                     level="WARNING")
                 return
-            self.coordinator_map[prefix] = dev.id
+            with self.maps_lock:
+                self.coordinator_map[prefix] = dev.id
             self._ensure_device_states(dev)
             # If we already have a cached bridge/info or bridge/state for this
             # prefix (retained MQTT may have arrived before this device existed),
@@ -916,10 +963,11 @@ class Plugin(indigo.PluginBase):
             log(f"Device '{dev.name}' has no friendly_name — skipping", level="WARNING")
             return
 
-        self.friendly_name_map[fname] = dev.id
         ieee = props.get("ieee_address", "")
-        if ieee:
-            self.ieee_map[ieee] = dev.id
+        with self.maps_lock:
+            self.friendly_name_map[fname] = dev.id
+            if ieee:
+                self.ieee_map[ieee] = dev.id
 
         # Apply Indigo subType — dynamic for lights (Dimmer vs ColorDimmer);
         # static for everything else.  Also backfills devices created before
@@ -1321,6 +1369,25 @@ class Plugin(indigo.PluginBase):
             return self.getDeviceStateDictForRealType(key, label, label)
         return self.getDeviceStateDictForStringType(key, label, label)
 
+    def _static_state_ids(self, dev):
+        """Set of statically-declared (Devices.xml) state IDs for this device type.
+
+        Read from the BASE getDeviceStateList (the parser's static list) — read-only,
+        never mutated here. Used by _capture_raw_fields to stop a dynamic payload
+        field whose sanitised key collides with a static state from being captured
+        and written with a possibly-mismatched dynamic type.
+        """
+        ids = set()
+        try:
+            base = indigo.PluginBase.getDeviceStateList(self, dev)
+            for s in (base or []):
+                k = s.get("Key") if hasattr(s, "get") else s["Key"]
+                if k:
+                    ids.add(k)
+        except Exception:
+            pass
+        return ids
+
     def _capture_raw_fields(self, dev, payload):
         """Write every payload field that the type-specific dispatcher did not
         already handle.  First-time keys are added to pluginProps and the device's
@@ -1355,6 +1422,7 @@ class Plugin(indigo.PluginBase):
         # the first time, and we get one error per new key per device per session.
         # Collect them all, then declare in Phase 2, then write in Phase 3.
         pending = []  # list of (state_key, state_val)
+        static_ids = None  # statically-declared state IDs (Devices.xml); built lazily
 
         for raw_key, raw_val in payload.items():
             if raw_key in _HANDLED_PAYLOAD_KEYS or raw_key.startswith("_"):
@@ -1366,6 +1434,19 @@ class Plugin(indigo.PluginBase):
                 if self.debug:
                     log(f"{dev.name}: dropping invalid state-id derived from '{raw_key}' -> '{state_key}'",
                         level="WARNING")
+                continue
+
+            # A field whose sanitised key collides with a state declared in
+            # Devices.xml (e.g. a snake-case `link_quality` -> static `linkQuality`)
+            # must NOT be captured dynamically: getDeviceStateList already skips
+            # re-declaring it, and a dynamic-typed write could mismatch the static
+            # ValueType. Leave it to the static state / type handler.
+            if static_ids is None:
+                static_ids = self._static_state_ids(dev)
+            if state_key in static_ids:
+                if self.debug:
+                    log(f"{dev.name}: field '{raw_key}' collides with static state "
+                        f"'{state_key}' — skipping dynamic capture", level="WARNING")
                 continue
 
             token = self._infer_state_type(raw_val)
@@ -1391,10 +1472,19 @@ class Plugin(indigo.PluginBase):
             state_val = self._coerce_dynamic_value(raw_val, type_map[state_key])
             pending.append((state_key, state_val))
 
-        # Phase 2: if any key is new OR changed type, persist + refresh the state
-        # list FIRST so the writes in Phase 3 don't trigger "state key not
-        # defined" errors and any retyped state is re-declared before reseeding.
-        if new_keys or type_changed:
+        # Prune any dynamicKeyTypes entries whose key is no longer in the validated
+        # seen set (e.g. a previously-persisted key that now fails validation) so the
+        # two persisted stores stay in lock-step instead of leaving orphan type
+        # entries behind. orphan_types also forces a write so an existing drift heals.
+        orphan_types = set(type_map) - seen
+        for k in orphan_types:
+            type_map.pop(k, None)
+
+        # Phase 2: if any key is new OR changed type (OR an orphan was pruned),
+        # persist + refresh the state list FIRST so the writes in Phase 3 don't
+        # trigger "state key not defined" errors and any retyped state is
+        # re-declared before reseeding.
+        if new_keys or type_changed or orphan_types:
             try:
                 new_props = dict(dev.pluginProps)
                 new_props["seenDynamicKeys"] = ",".join(sorted(seen))
@@ -1505,10 +1595,11 @@ class Plugin(indigo.PluginBase):
                 log(f"Stopped coordinator: {dev.name}")
             return
         fname = dev.pluginProps.get("friendly_name", "")
-        self.friendly_name_map.pop(fname, None)
         ieee = dev.pluginProps.get("ieee_address", "")
-        self.ieee_map.pop(ieee, None)
-        self._motion_states.pop(dev.id, None)
+        with self.maps_lock:
+            self.friendly_name_map.pop(fname, None)
+            self.ieee_map.pop(ieee, None)
+            self._motion_states.pop(dev.id, None)
         if self.debug:
             log(f"Stopped device: {dev.name}")
 
@@ -2397,8 +2488,9 @@ class Plugin(indigo.PluginBase):
                     if name_changed:
                         dev.name = new_fname
                         dev.replaceOnServer()
-                        self.friendly_name_map.pop(old_fname, None)
-                        self.friendly_name_map[new_fname] = dev.id
+                        with self.maps_lock:
+                            self.friendly_name_map.pop(old_fname, None)
+                            self.friendly_name_map[new_fname] = dev.id
                     if prefix_changed and name_changed:
                         log(f"Device moved+renamed: '{old_fname}' -> '{new_fname}' "
                             f"(prefix: {stored_prefix} -> {prefix})")
@@ -2545,11 +2637,16 @@ class Plugin(indigo.PluginBase):
 
         # Auto-reclassify: if any non-button device receives an action payload
         # (e.g. a TuYa button misidentified as relay by zigbee2mqtt), delete
-        # the wrong device and recreate it as z2mButton automatically.
-        if "action" in payload and payload["action"] not in (None, ""):
-            if dev.deviceTypeId != "z2mButton" and self._should_reclassify_as_button(dev):
-                self._reclassify_as_button(dev, payload)
-                return
+        # the wrong device and recreate it as z2mButton automatically. Require a
+        # NAMED action (one carrying a letter) — a bare button index like "2" or
+        # other junk carries no button semantics and must not drive a destructive
+        # delete+recreate (the exposes guard below is the primary protection).
+        action_val = payload.get("action")
+        if (action_val not in (None, "") and any(c.isalpha() for c in str(action_val))
+                and dev.deviceTypeId != "z2mButton"
+                and self._should_reclassify_as_button(dev)):
+            self._reclassify_as_button(dev, payload)
+            return
 
         type_id = dev.deviceTypeId
         if type_id == "z2mLight":
@@ -2614,6 +2711,13 @@ class Plugin(indigo.PluginBase):
                 is_on = str(payload.get("state", "ON")).upper() == "ON"
                 level = _brightness_255_to_100(int(payload["brightness"])) if is_on else 0
                 updates.append(("brightnessLevel", level))
+                # Keep the two native states consistent: a dimmer at 0 brightness is
+                # OFF in Indigo's model. Some bulbs briefly publish {"state":"ON",
+                # "brightness":0} during a fade-to-off, which would otherwise leave
+                # onOffState ON while the level reads 0. This append wins over the
+                # state-derived onOffState above (updates apply in order).
+                if level == 0:
+                    updates.append(("onOffState", False))
             except (ValueError, TypeError):
                 pass
 
@@ -3084,13 +3188,15 @@ class Plugin(indigo.PluginBase):
 
         # Remove stale mappings — BOTH friendly_name_map and ieee_map point at the
         # now-deleted old_id; leaving ieee_map stale makes rename detection resolve
-        # the deleted device id.
-        self.friendly_name_map = {
-            k: v for k, v in self.friendly_name_map.items() if v != old_id
-        }
-        self.ieee_map = {
-            k: v for k, v in self.ieee_map.items() if v != old_id
-        }
+        # the deleted device id. Under maps_lock: the comprehension rebuild iterates
+        # the dict, so a concurrent deviceStopComm pop would otherwise RuntimeError.
+        with self.maps_lock:
+            self.friendly_name_map = {
+                k: v for k, v in self.friendly_name_map.items() if v != old_id
+            }
+            self.ieee_map = {
+                k: v for k, v in self.ieee_map.items() if v != old_id
+            }
 
         new_props = {
             "friendly_name":      friendly_name,
@@ -3117,9 +3223,10 @@ class Plugin(indigo.PluginBase):
                 folder=folder_id_to_use,
                 props=new_props,
             )
-            self.friendly_name_map[friendly_name] = new_dev.id
-            if ieee_address:
-                self.ieee_map[ieee_address] = new_dev.id
+            with self.maps_lock:
+                self.friendly_name_map[friendly_name] = new_dev.id
+                if ieee_address:
+                    self.ieee_map[ieee_address] = new_dev.id
             log(f"Reclassify complete: '{dev_name}' is now Z2M Button (id={new_dev.id})")
             self._process_button_state(new_dev, payload)
         except Exception as e:

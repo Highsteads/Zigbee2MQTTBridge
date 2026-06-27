@@ -1,181 +1,53 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 # Filename:    IndigoSecrets_example.py
-# Description: Template for IndigoSecrets.py — copy to IndigoSecrets.py and fill in your values.
-#              IndigoSecrets.py lives at:
-#                  /Library/Application Support/Perceptive Automation/IndigoSecrets.py
-#              It is NEVER committed to git. Keep a backup in a password manager.
-# Author:      CliveS & Claude Sonnet 4.6
-# Date:        24-03-2026
-# Version:     1.0
+# Description: Template for IndigoSecrets.py — the MQTT credentials this plugin
+#              (Zigbee2MQTT Bridge) reads. Copy to IndigoSecrets.py and fill in
+#              your values. This bundled copy lists ONLY the keys Zigbee2MQTT
+#              Bridge uses; the full multi-plugin master template lives at the
+#              shared path below.
+# Author:      CliveS & Claude Opus 4.8
+# Date:        27-06-2026
+# Version:     2.0
 
 # ============================================================
 # HOW THIS FILE WORKS
 # ============================================================
 #
-# This is the MASTER credentials template for all CliveS Indigo plugins.
-#
-# WHY IT EXISTS
-# Each plugin needs API keys and passwords to connect to external services.
-# Rather than storing credentials separately in every plugin, or re-entering
-# them each time via the Indigo config dialog, all plugins share a single
-# IndigoSecrets.py at this version-stable path:
+# Plugins read credentials from a single shared file at this version-stable path
+# (it never changes across Indigo upgrades):
 #
 #     /Library/Application Support/Perceptive Automation/IndigoSecrets.py
 #
-# This path never changes when Indigo is upgraded — unlike paths inside the
-# Indigo version folder (e.g. .../Indigo 2025.1/...) which change each release.
+# Each plugin does:
+#     sys.path.insert(0, "/Library/Application Support/Perceptive Automation")
+#     from IndigoSecrets import MQTT_BROKER   # etc.
+# (NEVER "from secrets import ..." — that shadows Python's stdlib secrets module,
+#  which is exactly why the file is named IndigoSecrets, not secrets.)
 #
-# HOW PLUGINS USE IT
-# Each plugin does: sys.path.insert(0, "/Library/Application Support/Perceptive Automation")
-# then: from IndigoSecrets import KEY_NAME
-# (NEVER "from secrets import ..." — that shadows Python's stdlib secrets module, which is
-#  exactly why the file was renamed from secrets.py to IndigoSecrets.py.)
-# If IndigoSecrets.py is missing or a key is absent, the plugin falls back to the
-# value entered in its own configuration dialog (Plugins → Plugin Name → Configure).
-#
-# NOTE: Indigo also has a built-in "secrets.json" in its Preferences folder,
-# but that is only for authenticating HTTP requests to Indigo's own web server.
-# It is a flat list of tokens with no names — not suitable for storing plugin
-# credentials. Our IndigoSecrets.py is a separate, purpose-built solution.
+# If IndigoSecrets.py is missing, or a key is absent, this plugin falls back to
+# the values entered in its own dialog (Plugins -> Zigbee2MQTT Bridge ->
+# Configure). A missing single key never blanks the others (per-key try/except).
 #
 # FIRST-TIME SETUP
-# Copy this file into the folder:
+# Copy this file into:
 #     /Library/Application Support/Perceptive Automation/
 # then RENAME the copy from  IndigoSecrets_example.py  to  IndigoSecrets.py
-# (the plugins import from IndigoSecrets, not from IndigoSecrets_example).
-# Fill in the values for the plugins you use. You only need the sections for
-# plugins you have installed.
+# and fill in the MQTT values below. If you run other CliveS plugins too, use the
+# full master template (every plugin's keys) from any of their bundles instead,
+# so a single IndigoSecrets.py serves them all.
 #
 # SECURITY
-# IndigoSecrets.py is listed in .gitignore on every plugin repo and will NEVER be
-# committed to git. Keep a backup copy in a password manager.
+# IndigoSecrets.py is listed in .gitignore on every plugin repo and is NEVER
+# committed to git. Keep a backup in a password manager.
 #
 # ============================================================
 
 # ============================
-# Anthropic (Claude API)
-# Required by: Claude Bridge plugin
+# MQTT broker (Mosquitto / zigbee2mqtt)
+# Required by: Zigbee2MQTT Bridge
 # ============================
-ANTHROPIC_API_KEY = "sk-ant-..."
-
-# ============================
-# Octopus Energy
-# Required by: octopus_tracker_rate.py script + SigenEnergyManager / TariffAnalyser
-# ============================
-OCTOPUS_API_KEY = "sk_live_..."
-OCTOPUS_ACCOUNT = "A-XXXXXXXX"
-OCTOPUS_MPAN    = ""
-OCTOPUS_SERIAL  = ""
-
-# ============================
-# Octopus Energy - Gas (optional)
-# ============================
-OCTOPUS_GAS_MPRN   = ""
-OCTOPUS_GAS_SERIAL = ""
-
-# ============================
-# Octopus Energy - Export (optional, add when known)
-# ============================
-# OCTOPUS_EXPORT_MPAN   = ""
-# OCTOPUS_EXPORT_SERIAL = ""
-
-# ============================
-# Home Assistant
-# ============================
-HA_URL   = "http://192.168.x.x:8123"
-HA_TOKEN = ""
-
-# ============================
-# OpenWeatherMap (optional)
-# ============================
-OWM_API_KEY = ""
-
-# ============================
-# EvoHome (optional)
-# ============================
-EVOHOME_USER     = ""
-EVOHOME_PASSWORD = ""
-
-# ============================
-# Pushover (optional)
-# ============================
-PUSHOVER_USER_TOKEN = ""
-
-# ============================
-# MQTT (optional)
-# ============================
-MQTT_BROKER   = "192.168.x.x"
+MQTT_BROKER   = "192.168.1.10"   # your broker's LAN IP or hostname
 MQTT_PORT     = 1883
-MQTT_USERNAME = ""
+MQTT_USERNAME = ""               # leave blank if the broker allows anonymous
 MQTT_PASSWORD = ""
-
-# ============================
-# Location
-# Required by: SigenergySolar, weather integrations
-# ============================
-LATITUDE  = 0.0
-LONGITUDE = 0.0
-
-# ============================
-# Sigenergy Inverter (Modbus TCP)
-# Required by: SigenergySolar plugin
-# ============================
-SIGENERGY_IP               = ""        # e.g. 192.168.x.x
-SIGENERGY_PORT             = 502
-SIGENERGY_ADDRESS          = 247
-SIGENERGY_INVERTER_ADDRESS = 1
-
-# ============================
-# Solcast (Solar Forecast API)
-# Required by: SigenergySolar plugin
-# ============================
-SOLCAST_API_KEY = ""
-
-SOLCAST_SITES = [
-    {"name": "Site1", "resource_id": ""},
-    {"name": "Site2", "resource_id": ""},
-]
-
-# ============================
-# Octopus Energy - Export rates
-# ============================
-EXPORT_RATE_P = 15.0    # p/kWh flat export rate
-
-# ============================
-# Axle VPP (optional)
-# Required by: SigenergySolar plugin (Axle VPP feature)
-# ============================
-AXLE_API_TOKEN = ""
-
-# ============================
-# Sigenergy Energy Manager — extras (optional)
-# Required by: SigenEnergyManager plugin
-# ============================
-# DASHBOARD_HOST       — host shown in the "[Web] Dashboard at http://..." log
-#                        line.  Leave blank to auto-detect the LAN IP.
-# AXLE_SUPPORT_EMAIL   — email address used by the VPP "inverter not released"
-#                        escalation alert (sent if Axle has not returned the
-#                        inverter to self-consumption mode 45 minutes after a
-#                        VPP event ends).
-DASHBOARD_HOST     = ""
-AXLE_SUPPORT_EMAIL = ""
-
-# ============================
-# Claude Bridge plugin (optional)
-# Required by: Claude Bridge plugin (com.clives.indigoplugin.claudebridge)
-# CLAUDEBRIDGE_BEARER_TOKEN - the IWS bearer token used by the stdio MCP proxy
-# Get it from Indigo: copy the first entry of /Library/Application Support/
-# Perceptive Automation/Indigo 2025.x/Preferences/secrets.json
-# ============================
-CLAUDEBRIDGE_BEARER_TOKEN = ""
-
-# ============================
-# InfluxDB (optional)
-# Required by: Claude Bridge plugin (historical_analysis MCP tools)
-# ============================
-INFLUXDB_HOST     = ""
-INFLUXDB_PORT     = 8086
-INFLUXDB_USERNAME = ""
-INFLUXDB_PASSWORD = ""
-INFLUXDB_DATABASE = ""

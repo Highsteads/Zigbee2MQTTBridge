@@ -108,6 +108,14 @@ class PluginBase:
     def deviceUpdated(self, *_args, **_kwargs): pass
     def stateListOrDisplayStateIdChanged(self, *_args, **_kwargs): pass
 
+    def getDeviceStateList(self, dev):
+        """Return the device's statically-declared states as [{'Key': id}, ...].
+        Tests set dev.static_state_keys to control what Devices.xml would declare.
+        A fresh list each call (the real one returns a live ref; plugin.py copies
+        it before appending dynamic states)."""
+        keys = getattr(dev, "static_state_keys", None) or []
+        return [{"Key": k} for k in keys]
+
     # Lifecycle hooks the plugin chains via super() — no-ops are enough for tests.
     def sleep(self, *_args, **_kwargs): pass
     def wake_up(self, *_args, **_kwargs): pass
@@ -128,10 +136,11 @@ class FakeDevice:
 
     def __init__(self, id, name, deviceTypeId, pluginProps=None, states=None,
                  onState=False, brightness=0, sensorValue=None,
-                 displayStateId="onOffState", subType=""):
+                 displayStateId="onOffState", subType="", static_state_keys=None):
         self.id              = id
         self.name            = name
         self.deviceTypeId    = deviceTypeId
+        self.static_state_keys = static_state_keys or []   # Devices.xml static states
         self.pluginProps     = pluginProps or {}
         self.ownerProps      = self.pluginProps           # alias used by plugin code
         self.states          = states or {}
