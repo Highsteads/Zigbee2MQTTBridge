@@ -28,7 +28,11 @@
 #
 # HOW PLUGINS USE IT
 # Each plugin does: sys.path.insert(0, "/Library/Application Support/Perceptive Automation")
-# then: from IndigoSecrets import KEY_NAME
+# then imports each key with its own guard, so ONE missing key can't blank the others:
+#     try:
+#         from IndigoSecrets import KEY_NAME
+#     except ImportError:
+#         KEY_NAME = ""
 # If IndigoSecrets.py is missing or a key is absent, the plugin falls back to the
 # value entered in its own configuration dialog (Plugins → Plugin Name → Configure).
 #
@@ -99,8 +103,12 @@ PUSHOVER_USER_TOKEN = ""
 
 # ============================
 # MQTT (optional)
+# Required by: Zigbee2MQTT Bridge, TasmotaBridge (broker credentials)
+# Leave MQTT_BROKER empty ("") to configure via the plugin's own dialog —
+# a placeholder value here would WIN over the dialog (secrets are read first)
+# and fail with a confusing DNS error.
 # ============================
-MQTT_BROKER   = "192.168.x.x"
+MQTT_BROKER   = ""          # e.g. "192.168.1.10"
 MQTT_PORT     = 1883
 MQTT_USERNAME = ""
 MQTT_PASSWORD = ""

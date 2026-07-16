@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import importlib
 import os
 import sys
 from pathlib import Path
@@ -51,12 +50,10 @@ def plugin_mod():
 @pytest.fixture
 def plugin():
     """A fresh Plugin instance with default prefs. State is per-test."""
-    # Re-import indigo stub freshness for each test if needed
-    importlib.reload(plugin_module) if False else None
     p = plugin_module.Plugin(
         pluginId          = "com.clives.indigoplugin.z2mbridge",
         pluginDisplayName = "Zigbee2MQTT Bridge",
-        pluginVersion     = "1.9.8",
+        pluginVersion     = "test",   # fixture version — not a real release number
         pluginPrefs       = {"mqtt_topic_prefix": "zigbee2mqtt"},
     )
     yield p

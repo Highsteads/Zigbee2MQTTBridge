@@ -14,11 +14,11 @@ import pytest
 @pytest.mark.parametrize("val255,expected", [
     (0,   0),
     (1,   0),     # rounds down to 0
-    (127, 49),    # ~50% (int(127/255*100) = 49)
-    (128, 50),    # int(128/255*100) = 50
-    (252, 98),    # below the 99-clamp threshold
-    (253, 100),   # int(253/255*100)=99 → >=99 clamp → 100
-    (254, 100),   # the >=99 clamp catches 99 too
+    (127, 50),    # round(49.8) = 50 — v1.9.23: readback matches the set level
+    (128, 50),    # round(50.2) = 50
+    (252, 99),    # round(98.8) = 99
+    (253, 99),    # round(99.2) = 99
+    (254, 100),   # z2m's writable max reads as full — round(99.6) = 100
     (255, 100),
 ])
 def test_brightness_255_to_100(plugin_mod, val255, expected):
@@ -110,16 +110,9 @@ def test_xy_to_rgb_handles_zero_y(plugin_mod):
 
 # ── _flatten_features / _iter_features ───────────────────────────────────────
 
-def test_flatten_features_leaves_only(plugin_mod):
-    exposes = [{
-        "type": "light",
-        "features": [
-            {"name": "state",      "type": "binary"},
-            {"name": "brightness", "type": "numeric"},
-        ],
-    }]
-    names = [f.get("name") for f in plugin_mod._flatten_features(exposes)]
-    assert names == ["state", "brightness"]
+# (test_flatten_features_leaves_only removed v1.9.23 — _flatten_features was
+# dead code with a self-contradictory docstring and has been deleted;
+# _iter_features below is the live traversal helper.)
 
 
 def test_iter_features_includes_composites(plugin_mod):

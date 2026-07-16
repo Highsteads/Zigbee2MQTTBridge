@@ -118,6 +118,15 @@ def install_timestamp_filter(plugin, enabled=True):
             state = "ON" if self.timestamp_enabled else "OFF"
             indigo.server.log(f"[{self.pluginDisplayName}] Timestamps in Log -> {state}")
     """
+    # Duplicate-install guard (v1.9.23): calling this twice used to stack two
+    # filters and double-prefix every log line. Reuse the existing one instead.
+    # NB: attached at LOGGER level, so records from child loggers
+    # (logger.getChild()) bypass it — fine for CliveS plugins, which log on
+    # self.logger directly.
+    for existing in getattr(plugin.logger, "filters", []):
+        if isinstance(existing, MillisecondTimestampFilter):
+            existing.enabled = enabled
+            return existing
     f = MillisecondTimestampFilter(enabled=enabled)
     plugin.logger.addFilter(f)
     return f

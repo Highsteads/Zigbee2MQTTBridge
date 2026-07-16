@@ -264,7 +264,7 @@ def test_hs_overrange_saturation_clamped(plugin_mod):
 def test_device_start_comm_happy_path(plugin, make_device, monkeypatch):
     scheduled = []
     monkeypatch.setattr(plugin, "_schedule_state_request",
-                        lambda dev_id, fname, type_id, prefix:
+                        lambda dev_id, fname, type_id, prefix, dev_props=None:
                         scheduled.append((dev_id, fname, type_id, prefix)))
     dev = make_device(220, "Lounge Contact", "z2mContactSensor",
                       pluginProps={"friendly_name": "Lounge Contact",

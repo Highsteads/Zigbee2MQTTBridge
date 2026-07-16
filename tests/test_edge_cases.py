@@ -66,7 +66,7 @@ def test_light_state_brightness_string_value(plugin, make_device):
     """Some Zigbee firmware sends brightness as a string. int() should coerce."""
     dev = make_device(11, "Lamp", "z2mLight")
     plugin._process_light_state(dev, {"state": "ON", "brightness": "127"})
-    assert dev.states["brightnessLevel"] == 49  # int(127/255*100)
+    assert dev.states["brightnessLevel"] == 50  # round(127/255*100) — v1.9.23
 
 
 # ── Contact sensor numeric battery ───────────────────────────────────────────
@@ -154,13 +154,16 @@ def test_capture_raw_skips_none_values(plugin, make_device):
 
 
 def test_capture_raw_dict_value_is_json_stringified(plugin, make_device):
-    """A nested dict in the payload should be persisted as a JSON string."""
+    """A nested dict in the payload must be persisted as a JSON string.
+    (v1.9.23: this used to assert nothing behind a stale excuse comment —
+    Phase 3 DOES write once Phase 2's refresh succeeds under the stub.)"""
+    import json as _json
     dev = make_device(54, "Dev", "z2mSensor",
                       pluginProps={"seenDynamicKeys": ""})
     plugin._capture_raw_fields(dev, {"sub_obj": {"a": 1, "b": 2}})
-    # state_writes won't yet contain the value — Phase 3 of _capture_raw_fields
-    # requires the state list to have been refreshed first. We just need to
-    # verify nothing crashed.
+    val = dev.states.get("subObj")
+    assert isinstance(val, str), "complex value must be stringified"
+    assert _json.loads(val) == {"a": 1, "b": 2}
 
 
 # ── _ensure_device_states — read-state-list path ─────────────────────────────
