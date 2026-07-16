@@ -27,6 +27,7 @@ KNOWN_TYPES = {
     "z2mLight", "z2mRelay", "z2mContactSensor", "z2mOccupancySensor",
     "z2mWaterLeakSensor", "z2mTemperatureSensor", "z2mSensor", "z2mCover",
     "z2mButton", "z2mRepeater",
+    "z2mLock", "z2mThermostat",   # v1.10.0
 }
 
 _IDS = [c.name for c in CASES]

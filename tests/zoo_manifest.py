@@ -202,6 +202,18 @@ _FLAT_POSITION_COVER = [
     {"name": "linkquality", "type": "numeric", "access": 1},
 ]
 
+# Door lock: lock composite with writable LOCK/UNLOCK state + lock_state enum.
+_DOOR_LOCK = [{
+    "type": "lock",
+    "features": [
+        {"name": "state", "type": "binary", "access": 3,
+         "value_on": "LOCK", "value_off": "UNLOCK"},
+        {"name": "lock_state", "type": "enum", "access": 1,
+         "values": ["not_fully_locked", "locked", "unlocked"]},
+    ],
+}, {"name": "battery", "type": "numeric", "access": 1},
+   {"name": "linkquality", "type": "numeric", "access": 1}]
+
 # Smoke detector: binary smoke + battery, no env channels — falls to the generic
 # sensor type, whose handler owns the smoke -> onOffState semantics (v1.9.21).
 _SMOKE_DETECTOR = [
@@ -278,9 +290,16 @@ CASES: list[ZooCase] = [
     ZooCase("motion_with_action", _MOTION_WITH_ACTION, "z2mSensor", {},
             note="v1.9.21: motion + action enum is a sensor, not a button — "
                  "motion/pir joined presence/occupancy in the button gate"),
-    ZooCase("trv_valve_position", _TRV_VALVE_POSITION, "z2mSensor", {},
-            note="v1.9.21: TRV (climate composite + read-only valve position) "
-                 "must NOT be a cover — OPEN/CLOSE at a radiator valve"),
+    ZooCase("trv_valve_position", _TRV_VALVE_POSITION, "z2mThermostat",
+            {"has_battery": True, "SupportsHeatSetpoint": True,
+             "SupportsCoolSetpoint": False, "NumTemperatureInputs": 1,
+             "setpoint_key": "current_heating_setpoint"},
+            note="v1.9.21 stopped TRVs becoming covers (they fell to z2mSensor); "
+                 "v1.10.0 gives them a real thermostat class"),
+    ZooCase("door_lock", _DOOR_LOCK, "z2mLock",
+            {"has_battery": True},
+            note="v1.10.0: lock composite -> z2mLock (its writable LOCK/UNLOCK "
+                 "state must NOT classify as a relay and be sent ON/OFF)"),
     ZooCase("flat_position_cover", _FLAT_POSITION_COVER, "z2mCover", {},
             note="v1.9.21: a WRITABLE flat position stays a cover after the "
                  "writability + no-climate gates"),

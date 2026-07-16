@@ -7,7 +7,35 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Fable 5
 # Date:        16-07-2026
-# Version:     1.9.23
+# Version:     1.10.0
+# v1.10.0 (16-07-2026): Fable 5 deep-review feature batch (improvement lens).
+#   * NEW z2mLock device type (relay class, Lock subtype): lock composites no
+#     longer classify as relays sent ON/OFF — locks speak LOCK/UNLOCK, richer
+#     lock_state enum in a custom state (not_fully_locked reads as unlocked),
+#     onOffState ON = locked.
+#   * NEW z2mThermostat device type (thermostat class): climate composites
+#     (TRVs) get native temperatureInput1 / setpointHeat / hvacOperationMode
+#     with actionControlThermostat (set/raise/lower heat setpoint, HVAC mode
+#     heat/auto/off, status request), running_state + read-only valve
+#     `position` in custom states, and a setpoint_key prop remembering whether
+#     the device speaks current_ or occupied_heating_setpoint.
+#   * NEW "Publish Custom Payload" device action — user JSON to /set for the
+#     device options no typed action covers (validated at dialog save).
+#   * NEW menu items: Test MQTT Connection (banner + live checks in one log
+#     dump), Report Orphaned Devices (in Indigo but gone from z2m — report
+#     only), Enable/Disable Pairing (permit_join to every configured bridge).
+#   * z2m last_seen now surfaces as a readable `lastSeen` dynamic state
+#     (handles both ms-epoch and ISO formats) instead of being swallowed.
+#   * Connection diagnostics: paho's on_connect_fail is registered (an
+#     unreachable broker was completely silent) and CONNACK failures (bad
+#     credentials etc.) are reported once per outage instead of every retry.
+#   * showPluginInfo gains liveness lines (last message age, queue depth,
+#     silence limit) shared with the connection test via _banner_extras.
+#   * Tests 597 -> 624 (+2 zoo rows: door_lock, trv reclassified from the
+#     v1.9.21 sensor stopgap to z2mThermostat).
+#   * NOT implemented (judged net-negative): a dynamic friendly-name menu in
+#     device config — devices are auto-created (typing a name is the rare
+#     path) and an empty-cache menu would BLOCK manual creation entirely.
 # v1.9.23 (16-07-2026): Fable 5 deep-review batch 3 (lows + infos).
 #   * wake_up reorders: MQTT reconnect BEFORE super() (device comm) so the
 #     settle-delay /get requests no longer race a not-yet-connected client.
@@ -486,9 +514,11 @@ _BUTTON_ACTION_VALUES = frozenset({
 
 # MQTT payload keys consumed for EVERY device type (mesh/meta fields that either
 # every handler writes semantically, or the plugin deliberately swallows).
+# last_seen left this set in v1.10.0 — _capture_raw_fields transforms it into a
+# human-readable `lastSeen` dynamic String state instead of swallowing it.
 _ALWAYS_CONSUMED_KEYS = {
     "linkquality",                    # written as linkQuality by every handler
-    "last_seen", "update_available", "update",   # health/meta — deliberately not states
+    "update_available", "update",     # OTA meta — deliberately not states
     "click",                          # legacy reclassification trigger only
 }
 
@@ -516,6 +546,10 @@ _HANDLED_KEYS_BY_TYPE = {
     "z2mSensor":            {"smoke", "water_leak", "motion", "occupancy", "presence",
                              "pir", "contact", "temperature", "humidity", "pressure",
                              "illuminance", "illuminance_lux", "battery"},
+    "z2mLock":              {"state", "lock_state", "battery"},
+    "z2mThermostat":        {"local_temperature", "current_heating_setpoint",
+                             "occupied_heating_setpoint", "system_mode",
+                             "running_state", "position", "battery"},
 }
 
 # Conservative fallback for any type not in the table (e.g. future types):
@@ -620,6 +654,24 @@ def _mireds_to_kelvin(mireds):
     return round(1_000_000 / max(1, mireds))
 
 
+def _format_last_seen(raw):
+    """Format z2m's last_seen (ms-epoch int OR ISO-8601 string, depending on
+    the bridge's last_seen config) as a local 'YYYY-MM-DD HH:MM:SS' string.
+    Returns None when unparseable."""
+    try:
+        if isinstance(raw, (int, float)) and raw > 0:
+            return datetime.fromtimestamp(raw / 1000.0).strftime("%Y-%m-%d %H:%M:%S")
+        if isinstance(raw, str) and raw:
+            iso = raw.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(iso)
+            if dt.tzinfo is not None:
+                dt = dt.astimezone().replace(tzinfo=None)
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError, OverflowError, OSError):
+        pass
+    return None
+
+
 def _payload_bool(val):
     """Coerce a z2m binary payload value to bool, or None if unrecognisable.
 
@@ -698,6 +750,20 @@ def _detect_device_type(exposes, model=""):
     for feat in _iter_features(exposes):
         if feat.get("name") == "brightness" and feat.get("type") == "numeric":
             return "z2mLight"
+
+    # Check for Thermostat/TRV (composite type "climate") — v1.10.0. Checked
+    # BEFORE cover so a TRV's valve-position leaf can never reach the cover
+    # rule, and before lock/button/relay so climate always wins.
+    for entry in exposes:
+        if entry.get("type") == "climate":
+            return "z2mThermostat"
+
+    # Check for Lock (composite type "lock") — v1.10.0. Before the button and
+    # relay checks: a lock's writable binary state (LOCK/UNLOCK) would
+    # otherwise classify as z2mRelay and be sent ON/OFF.
+    for entry in exposes:
+        if entry.get("type") == "lock":
+            return "z2mLock"
 
     # Check for Cover (composite type "cover", or a WRITABLE flat "position"
     # feature outside a climate composite). The writability + no-climate gates
@@ -1002,6 +1068,19 @@ class Plugin(indigo.PluginBase):
         # (dev.id, state_key) pairs whose write already failed once — the first
         # failure logs a WARNING, repeats stay at debug (see _apply_updates).
         self._state_write_warned = set()
+
+        # Once-per-outage connect-failure reporting (v1.10.0): paho retries
+        # forever, so unreachable-broker / bad-credential errors are reported
+        # once per distinct condition and re-armed by a successful connect.
+        self._connect_fail_reported = False
+        self._last_connect_fail_msg = None
+
+        # IEEE addresses of the bridges' own coordinator radios (v1.10.0).
+        # bridge/devices entries of type Coordinator are deliberately excluded
+        # from the device cache, so without this the orphan report flags the
+        # coordinator radio's repeater tile as orphaned (live false positive:
+        # the SLZB-06P7 house radio).
+        self._coordinator_ieees = set()
 
         # Serialises pluginProps read-modify-write cycles (dict(dev.pluginProps)
         # -> mutate -> replacePluginPropsOnServer) between the MQTT consumer
@@ -1335,6 +1414,19 @@ class Plugin(indigo.PluginBase):
             ("availability", ""),
             ("linkQuality",  0),
         ],
+        "z2mLock": [
+            ("lockState",    ""),
+            ("battery",      0),
+            ("availability", ""),
+            ("linkQuality",  0),
+        ],
+        "z2mThermostat": [
+            ("runningState", ""),
+            ("valvePosition", 0),
+            ("battery",      0),
+            ("availability", ""),
+            ("linkQuality",  0),
+        ],
         "z2mSensor": [
             ("temperature",  0.0),
             ("humidity",     0.0),
@@ -1382,6 +1474,8 @@ class Plugin(indigo.PluginBase):
         "z2mContactSensor":    {"battery": "has_battery"},
         "z2mCover":            {"tiltAngle": "has_tilt"},
         "z2mButton":           {"battery": "has_battery"},
+        "z2mLock":             {"battery": "has_battery"},
+        "z2mThermostat":       {"battery": "has_battery"},
         "z2mOccupancySensor":  {"occupancy": "has_pir", "presence": "has_presence",
                                 "illuminance": "has_illuminance",
                                 "temperature": "has_temperature",
@@ -1667,6 +1761,15 @@ class Plugin(indigo.PluginBase):
         if not isinstance(payload, dict):
             return
 
+        # v1.10.0: surface z2m's last_seen as a readable String state instead
+        # of swallowing it — replace the raw key (ms epoch / ISO) with the
+        # formatted value under the camelCase name the sanitiser would pick.
+        if "last_seen" in payload:
+            payload = dict(payload)
+            formatted = _format_last_seen(payload.pop("last_seen"))
+            if formatted:
+                payload["lastSeen"] = formatted
+
         orig_props = dict(dev.pluginProps)
         seen_csv = orig_props.get("seenDynamicKeys", "")
         seen = set(s for s in seen_csv.split(",") if s and self._is_valid_state_id(s))
@@ -1912,6 +2015,27 @@ class Plugin(indigo.PluginBase):
                 f"(its state mirrors availability)", level="WARNING")
             return
 
+        # Locks speak LOCK/UNLOCK, not ON/OFF (v1.10.0). Indigo's lock/unlock
+        # UI arrives here as TurnOn/TurnOff on the relay class.
+        if dev.deviceTypeId == "z2mLock":
+            if cmd == indigo.kDeviceAction.TurnOn:
+                self._publish_cmd(f"{prefix}/{fname}/set", {"state": "LOCK"},
+                                  dev, "lock")
+            elif cmd == indigo.kDeviceAction.TurnOff:
+                self._publish_cmd(f"{prefix}/{fname}/set", {"state": "UNLOCK"},
+                                  dev, "unlock")
+            elif cmd == indigo.kDeviceAction.Toggle:
+                new_state = "UNLOCK" if dev.onState else "LOCK"
+                self._publish_cmd(f"{prefix}/{fname}/set", {"state": new_state},
+                                  dev, new_state.lower())
+            elif cmd == indigo.kDeviceAction.RequestStatus:
+                self._request_state(fname, dev.deviceTypeId, prefix,
+                                    dev_props=dict(dev.pluginProps))
+                log(f'sent "{dev.name}" status request')
+            else:
+                log(f"Unhandled lock action {cmd} for {dev.name}", level="WARNING")
+            return
+
         if cmd == indigo.kDeviceAction.TurnOn:
             self._publish_cmd(f"{prefix}/{fname}/set", {"state": "ON"}, dev, "on")
         elif cmd == indigo.kDeviceAction.TurnOff:
@@ -2049,6 +2173,71 @@ class Plugin(indigo.PluginBase):
             log(f"Unhandled sensor action {cmd} for {dev.name} "
                 f"(sensors are read-only)", level="WARNING")
 
+    def actionControlThermostat(self, action, dev):
+        """Handle thermostat-class device actions for z2mThermostat (v1.10.0).
+
+        NOTE: thermostat actions arrive via action.thermostatAction (each device
+        class has its OWN action attribute — .deviceAction raises here).
+        Setpoints publish the z2m key stored in the device's setpoint_key prop
+        (current_heating_setpoint by default; some TRVs use occupied_).
+        """
+        cmd    = action.thermostatAction
+        fname  = dev.pluginProps.get("friendly_name", "")
+        prefix = self._device_prefix(dev)
+        sp_key = dev.pluginProps.get("setpoint_key", "current_heating_setpoint")
+
+        def _current_setpoint():
+            try:
+                return float(dev.states.get("setpointHeat", 0) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        if cmd == indigo.kThermostatAction.SetHeatSetpoint:
+            try:
+                sp = round(float(action.actionValue), 1)
+            except (TypeError, ValueError):
+                log(f"{dev.name}: invalid heat setpoint value", level="ERROR")
+                return
+            self._publish_cmd(f"{prefix}/{fname}/set", {sp_key: sp}, dev,
+                              f"set heat setpoint to {sp}")
+        elif cmd in (indigo.kThermostatAction.IncreaseHeatSetpoint,
+                     indigo.kThermostatAction.DecreaseHeatSetpoint):
+            try:
+                delta = float(action.actionValue)
+            except (TypeError, ValueError):
+                delta = 1.0
+            if cmd == indigo.kThermostatAction.DecreaseHeatSetpoint:
+                delta = -delta
+            sp = round(_current_setpoint() + delta, 1)
+            self._publish_cmd(f"{prefix}/{fname}/set", {sp_key: sp}, dev,
+                              f"set heat setpoint to {sp}")
+        elif cmd == indigo.kThermostatAction.SetHvacMode:
+            mode_map = {}
+            try:
+                mode_map = {indigo.kHvacMode.Heat:     "heat",
+                            indigo.kHvacMode.HeatCool: "auto",
+                            indigo.kHvacMode.Off:      "off"}
+            except Exception:
+                pass
+            z2m_mode = mode_map.get(action.actionMode)
+            if z2m_mode:
+                self._publish_cmd(f"{prefix}/{fname}/set",
+                                  {"system_mode": z2m_mode}, dev,
+                                  f"set mode {z2m_mode}")
+            else:
+                log(f"{dev.name}: HVAC mode {action.actionMode} not supported "
+                    f"(heat/auto/off only)", level="WARNING")
+        elif cmd in (indigo.kThermostatAction.RequestStatusAll,
+                     indigo.kThermostatAction.RequestTemperatures,
+                     indigo.kThermostatAction.RequestSetpoints,
+                     indigo.kThermostatAction.RequestMode):
+            self._request_state(fname, dev.deviceTypeId, prefix,
+                                dev_props=dict(dev.pluginProps))
+            log(f'sent "{dev.name}" status request')
+        else:
+            log(f"Unhandled thermostat action {cmd} for {dev.name} "
+                f"(cooling is not supported on z2m TRVs)", level="WARNING")
+
     def action_set_color_temperature(self, action, dev=None, callerWaitingForResult=None):
         """Action: set light color temperature in Kelvin."""
         if dev is None:
@@ -2113,6 +2302,41 @@ class Plugin(indigo.PluginBase):
         fname  = dev.pluginProps.get("friendly_name", "")
         prefix = self._device_prefix(dev)
         self._request_state(fname, dev.deviceTypeId, prefix, dev_props=dict(dev.pluginProps))
+
+    def action_publish_custom(self, action, dev=None, callerWaitingForResult=None):
+        """Action: publish a user-supplied JSON payload to this device's /set
+        topic (v1.10.0) — the escape hatch for device options the typed actions
+        don't cover (sensitivity, LED modes, calibration, child lock...). Uses
+        z2m's snake_case property names, e.g. {"motion_sensitivity": "high"}."""
+        if dev is None:
+            dev = indigo.devices[action.deviceId]
+        raw = (action.props.get("json_payload") or "").strip()
+        try:
+            payload = json.loads(raw)
+            if not isinstance(payload, dict):
+                raise ValueError("payload must be a JSON object")
+        except (ValueError, TypeError) as e:
+            log(f"{dev.name}: custom payload is not valid JSON ({e}): {raw!r}",
+                level="ERROR")
+            return
+        fname  = dev.pluginProps.get("friendly_name", "")
+        prefix = self._device_prefix(dev)
+        self._publish_cmd(f"{prefix}/{fname}/set", payload, dev,
+                          f"custom payload {payload}")
+
+    def validateActionConfigUi(self, valuesDict, typeId, deviceId):
+        """Validate action dialogs at save time (v1.10.0 — the custom-publish
+        JSON gets checked here instead of failing at run time)."""
+        errors = indigo.Dict()
+        if typeId == "publishCustom":
+            raw = (valuesDict.get("json_payload") or "").strip()
+            try:
+                parsed = json.loads(raw)
+                if not isinstance(parsed, dict):
+                    raise ValueError("must be a JSON object, e.g. {\"key\": \"value\"}")
+            except (ValueError, TypeError) as e:
+                errors["json_payload"] = f"Not a valid JSON object: {e}"
+        return (len(errors) == 0), valuesDict, errors
 
     # ── Menu callbacks ────────────────────────────────────────────────────────
 
@@ -2419,26 +2643,117 @@ class Plugin(indigo.PluginBase):
             parts.append(f"{skipped} skipped (no detector)")
         log(f"Refresh Device Capabilities complete: {', '.join(parts)}")
 
-    def showPluginInfo(self, valuesDict=None, typeId=None):
+    def _banner_extras(self):
+        """One source of truth for the diagnostic banner lines — used by both
+        showPluginInfo and Test MQTT Connection (estate convention)."""
         z2m_count = sum(1 for _ in indigo.devices.iter(self.pluginId))
+        rx_age = time.time() - self.last_rx_ts
+        extras = [
+            ("MQTT Broker:", f"{self._effective_broker()}:{self._effective_port()}"),
+            ("Topic Prefix:", self._topic_prefix()),
+        ]
+        garage = self._garage_prefix()
+        if garage:
+            extras.append(("Garage Prefix:", garage))
+        extras += [
+            ("MQTT Status:", "connected" if self.mqtt_connected else "disconnected"),
+            ("Last Message:", f"{rx_age:.0f}s ago"),
+            ("Queue Depth:", str(self.msg_queue.qsize())),
+            ("Silence Limit:", f"{self._silence_limit()}s"),
+            ("Bridge Devices Cached:", str(len(self.bridge_devices))),
+            ("Z2M Indigo Devices:", str(z2m_count)),
+            ("Timestamps in Log:", "ON" if self.timestamp_enabled else "OFF"),
+        ]
+        return extras
+
+    def showPluginInfo(self, valuesDict=None, typeId=None):
         if log_startup_banner:
-            _extras = [
-                ("MQTT Broker:", f"{self._effective_broker()}:{self._effective_port()}"),
-                ("Topic Prefix:", self._topic_prefix()),
-            ]
-            _garage = self._garage_prefix()
-            if _garage:
-                _extras.append(("Garage Prefix:", _garage))
-            _extras += [
-                ("MQTT Status:", "connected" if self.mqtt_connected else "disconnected"),
-                ("Bridge Devices Cached:", str(len(self.bridge_devices))),
-                ("Z2M Indigo Devices:", str(z2m_count)),
-                ("Timestamps in Log:", "ON" if self.timestamp_enabled else "OFF"),
-            ]
             log_startup_banner(self.pluginId, self.pluginDisplayName, self.pluginVersion,
-                               extras=_extras)
+                               extras=self._banner_extras())
         else:
             indigo.server.log(f"{self.pluginDisplayName} v{self.pluginVersion}")
+
+    def testMqttConnection(self, valuesDict=None, typeId=None):
+        """Menu: full banner + live connection checks in one log dump (estate
+        convention — exactly what a user pastes into a forum support post).
+        v1.10.0."""
+        # Always dump the full banner first so the environment and the test
+        # result land together.
+        self.showPluginInfo()
+        problems = []
+        if not self._effective_broker():
+            problems.append("no broker configured (IndigoSecrets.MQTT_BROKER "
+                            "or the config dialog)")
+        if self.mqtt_client is None:
+            problems.append("MQTT client not started")
+        if not self.mqtt_connected:
+            problems.append("not connected to the broker")
+        rx_age = time.time() - self.last_rx_ts
+        if self.mqtt_connected and rx_age > self._silence_limit():
+            problems.append(f"connected but silent for {rx_age:.0f}s "
+                            f"(limit {self._silence_limit()}s)")
+        for prefix in (p for p in (self._topic_prefix(), self._garage_prefix()) if p):
+            state = self._bridge_state_cache.get(prefix)
+            if state and state != "online":
+                problems.append(f"bridge '{prefix}' reports {state}")
+            elif state is None:
+                problems.append(f"no bridge/state seen yet from '{prefix}'")
+        if problems:
+            for p in problems:
+                self.logger.error(f"Connection test FAILED — {p}")
+        else:
+            self.logger.info("Connection test PASSED — broker connected, "
+                             "traffic flowing, all bridges online")
+
+    def report_orphaned_devices(self, valuesDict=None, typeId=None):
+        """Menu: list Indigo devices this plugin owns whose z2m device no
+        longer exists in the bridge cache (removed/re-paired in z2m). Report
+        only — never deletes (v1.10.0)."""
+        if not self.bridge_devices:
+            log("No bridge device data yet — wait for MQTT or run "
+                "'Refresh Device List from MQTT' first.", level="WARNING")
+            return
+        known_ieee  = {ieee for ieee in self.bridge_devices}
+        known_fname = {(d.get("_mqtt_prefix", self._topic_prefix()),
+                        (d.get("friendly_name") or "").strip())
+                       for d in self.bridge_devices.values()}
+        orphans = []
+        for dev in indigo.devices.iter(self.pluginId):
+            if dev.deviceTypeId == "z2mCoordinator":
+                continue
+            ieee  = (dev.pluginProps.get("ieee_address") or "").strip()
+            fname = (dev.pluginProps.get("friendly_name") or "").strip()
+            key   = (self._device_prefix(dev), fname)
+            if ieee and ieee in known_ieee:
+                continue
+            if ieee and ieee in self._coordinator_ieees:
+                continue   # the bridge's own radio — excluded from the cache by design
+            if not ieee and key in known_fname:
+                continue
+            orphans.append((dev.name, ieee or "-", fname or "-"))
+        if not orphans:
+            log(f"No orphaned devices — all {sum(1 for _ in indigo.devices.iter(self.pluginId))} "
+                f"plugin devices match the bridge cache")
+            return
+        log(f"{len(orphans)} orphaned device(s) — in Indigo but no longer known "
+            f"to zigbee2mqtt (removed/re-paired?). Review and delete manually "
+            f"if genuinely gone:", level="WARNING")
+        for name, ieee, fname in sorted(orphans):
+            log(f"  {name}  (ieee={ieee}, friendly_name={fname})", level="WARNING")
+
+    def permit_join_enable(self, valuesDict=None, typeId=None):
+        """Menu: open both bridges for pairing (254s, z2m's maximum window).
+        The coordinator tile's permitJoin state confirms it took (v1.10.0)."""
+        for prefix in (p for p in (self._topic_prefix(), self._garage_prefix()) if p):
+            if self._publish(f"{prefix}/bridge/request/permit_join", {"time": 254}):
+                log(f"Permit join ENABLED on '{prefix}' for 254s — new devices "
+                    f"can now pair")
+
+    def permit_join_disable(self, valuesDict=None, typeId=None):
+        """Menu: close both bridges to pairing immediately (v1.10.0)."""
+        for prefix in (p for p in (self._topic_prefix(), self._garage_prefix()) if p):
+            if self._publish(f"{prefix}/bridge/request/permit_join", {"time": 0}):
+                log(f"Permit join DISABLED on '{prefix}'")
 
     def menuToggleTimestamps(self):
         self.timestamp_enabled = not self.timestamp_enabled
@@ -2524,9 +2839,12 @@ class Plugin(indigo.PluginBase):
             client = mqtt.Client(client_id=f"indigo_z2mbridge_{int(time.time())}")
             if username:
                 client.username_pw_set(username, password)
-            client.on_connect    = self._on_mqtt_connect
-            client.on_disconnect = self._on_mqtt_disconnect
-            client.on_message    = self._on_mqtt_message
+            client.on_connect      = self._on_mqtt_connect
+            client.on_disconnect   = self._on_mqtt_disconnect
+            client.on_message      = self._on_mqtt_message
+            # v1.10.0: an unreachable broker used to be completely silent —
+            # paho retries connect_async forever without ever reporting.
+            client.on_connect_fail = self._on_mqtt_connect_fail
             client.reconnect_delay_set(min_delay=5, max_delay=RECONNECT_DELAY)
             client.connect_async(broker, port, keepalive=60)
             client.loop_start()
@@ -2666,6 +2984,12 @@ class Plugin(indigo.PluginBase):
         from a plain dimmable bulb makes z2m log an error per request (v1.9.23)."""
         if prefix is None:
             prefix = self._topic_prefix()
+        if device_type_id == "z2mThermostat":
+            self._publish(f"{prefix}/{friendly_name}/get",
+                          {"local_temperature": "",
+                           "current_heating_setpoint": "",
+                           "system_mode": ""})
+            return
         if device_type_id == "z2mLight" and dev_props is not None:
             payload = {"state": "", "brightness": ""}
             if dev_props.get("has_color_temp"):
@@ -2688,6 +3012,9 @@ class Plugin(indigo.PluginBase):
         if rc == 0:
             self.mqtt_connected = True
             self.last_rx_ts     = time.time()   # fresh connection — reset the liveness clock
+            # A successful connect re-arms the once-per-outage failure reporting.
+            self._connect_fail_reported = False
+            self._last_connect_fail_msg = None
             # Prefixes were snapshotted as plain strings at client-build time —
             # no self.pluginPrefs (indigo.Dict) reads on the paho thread.
             subscribed = []
@@ -2705,7 +3032,25 @@ class Plugin(indigo.PluginBase):
                 4: "bad credentials",
                 5: "not authorised",
             }
-            self.msg_queue.put(("__error__", {"msg": f"MQTT connect failed: {rc_labels.get(rc, rc)}"}))
+            msg = f"MQTT connect failed: {rc_labels.get(rc, rc)}"
+            # paho retries forever — a wrong password used to produce this
+            # ERROR on EVERY reconnect attempt. Report each distinct reason
+            # once per outage (v1.10.0); a successful connect re-arms.
+            if msg != self._last_connect_fail_msg:
+                self._last_connect_fail_msg = msg
+                self.msg_queue.put(("__error__", {
+                    "msg": f"{msg} — will keep retrying quietly"}))
+
+    def _on_mqtt_connect_fail(self, client, userdata):
+        """paho callback (paho thread): the async connect attempt failed at the
+        network level (broker unreachable/refused). Without this, an
+        unreachable broker is completely silent (v1.10.0). Reported once per
+        outage — paho retries forever."""
+        if not self._connect_fail_reported:
+            self._connect_fail_reported = True
+            self.msg_queue.put(("__error__", {
+                "msg": "MQTT broker unreachable — check host/port and that the "
+                       "broker is running (will keep retrying quietly)"}))
 
     def _on_mqtt_disconnect(self, client, userdata, rc):
         self.mqtt_connected = False
@@ -2828,6 +3173,9 @@ class Plugin(indigo.PluginBase):
             if not ieee or d.get("disabled", False):
                 continue
             if d.get("type") == "Coordinator":
+                # Remember the radio's own ieee — the orphan report must not
+                # flag its repeater tile just because the cache excludes it.
+                self._coordinator_ieees.add(ieee)
                 continue
             entry = dict(d)
             entry["_mqtt_prefix"] = prefix
@@ -3072,6 +3420,10 @@ class Plugin(indigo.PluginBase):
             self._process_cover_state(dev, payload)
         elif type_id == "z2mButton":
             self._process_button_state(dev, payload)
+        elif type_id == "z2mLock":
+            self._process_lock_state(dev, payload)
+        elif type_id == "z2mThermostat":
+            self._process_thermostat_state(dev, payload)
 
         # After type-specific handling, capture any remaining payload fields as
         # dynamic states so all Z2M data is imported (not just the semantically-
@@ -3550,7 +3902,7 @@ class Plugin(indigo.PluginBase):
         sensor/repeater types may auto-convert (a relay keeps its relay device —
         recreate manually if needed).
         """
-        if dev.deviceTypeId in ("z2mLight", "z2mCover"):
+        if dev.deviceTypeId in ("z2mLight", "z2mCover", "z2mLock", "z2mThermostat"):
             return False
         props = dev.pluginProps
         ieee  = (props.get("ieee_address") or "").strip()
@@ -3581,7 +3933,7 @@ class Plugin(indigo.PluginBase):
         if feat_names & {"presence", "occupancy", "motion", "pir"}:
             return False
         for entry in exposes:
-            if entry.get("type") in ("light", "cover", "switch"):
+            if entry.get("type") in ("light", "cover", "switch", "lock", "climate"):
                 return False
         for feat in _iter_features(exposes):
             name = feat.get("name")
@@ -3770,6 +4122,113 @@ class Plugin(indigo.PluginBase):
 
         self._apply_updates(dev, updates)
 
+    def _process_lock_state(self, dev, payload):
+        """Update z2mLock device states from MQTT payload (v1.10.0).
+
+        z2m locks report `state` ("LOCK"/"UNLOCK") and the richer `lock_state`
+        enum (locked / unlocked / not_fully_locked). onOffState follows the
+        Indigo convention: ON = locked. lock_state wins over state when both
+        are present — it reflects the bolt, not the last command.
+        """
+        updates = []
+        locked = None
+
+        if "state" in payload:
+            token = str(payload["state"]).strip().upper()
+            if token in ("LOCK", "LOCKED", "ON"):
+                locked = True
+            elif token in ("UNLOCK", "UNLOCKED", "OFF"):
+                locked = False
+
+        if "lock_state" in payload:
+            ls = str(payload["lock_state"]).strip().lower()
+            updates.append(("lockState", ls))
+            if ls == "locked":
+                locked = True
+            elif ls in ("unlocked", "not_fully_locked"):
+                locked = False
+
+        if locked is not None:
+            updates.append(("onOffState", locked,
+                            "Locked" if locked else "Unlocked"))
+
+        if "battery" in payload:
+            try:
+                bat = int(payload["battery"])
+                updates.append(("battery", bat, f"{bat} %"))
+            except (ValueError, TypeError):
+                pass
+
+        if "linkquality" in payload:
+            try:
+                lq = int(payload["linkquality"])
+                updates.append(("linkQuality", lq, f"{lq} / 255"))
+            except (ValueError, TypeError):
+                pass
+
+        self._apply_updates(dev, updates)
+
+    def _process_thermostat_state(self, dev, payload):
+        """Update z2mThermostat (TRV) device states from MQTT payload (v1.10.0).
+
+        Maps z2m climate fields to Indigo's native thermostat states:
+        local_temperature -> temperatureInput1, current/occupied_heating_setpoint
+        -> setpointHeat, system_mode -> hvacOperationMode. running_state and the
+        (read-only) valve `position` land in custom states.
+        """
+        updates = []
+
+        if "local_temperature" in payload:
+            try:
+                temp = round(float(payload["local_temperature"]), 1)
+                updates.append(("temperatureInput1", temp, f"{temp} °C"))
+            except (ValueError, TypeError):
+                pass
+
+        setpoint_raw = payload.get("current_heating_setpoint",
+                                   payload.get("occupied_heating_setpoint"))
+        if setpoint_raw is not None:
+            try:
+                sp = round(float(setpoint_raw), 1)
+                updates.append(("setpointHeat", sp, f"{sp} °C"))
+            except (ValueError, TypeError):
+                pass
+
+        if "system_mode" in payload:
+            mode = str(payload["system_mode"]).strip().lower()
+            hvac = {"heat": indigo.kHvacMode.Heat,
+                    "auto": indigo.kHvacMode.HeatCool,
+                    "off":  indigo.kHvacMode.Off}.get(mode)
+            if hvac is not None:
+                updates.append(("hvacOperationMode", hvac))
+
+        if "running_state" in payload:
+            updates.append(("runningState",
+                            str(payload["running_state"]).strip().lower()))
+
+        if "position" in payload:
+            try:
+                pos = int(payload["position"])
+                updates.append(("valvePosition", pos, f"{pos} %"))
+            except (ValueError, TypeError):
+                pass
+
+        if "battery" in payload:
+            try:
+                bat = int(payload["battery"])
+                updates.append(("battery", bat, f"{bat} %"))
+            except (ValueError, TypeError):
+                pass
+
+        if "linkquality" in payload:
+            try:
+                lq = int(payload["linkquality"])
+                updates.append(("linkQuality", lq, f"{lq} / 255"))
+            except (ValueError, TypeError):
+                pass
+
+        self._apply_updates(dev, updates)
+
     def _apply_updates(self, dev, updates):
         """
         Apply a list of state update tuples to an Indigo device.
@@ -3869,6 +4328,32 @@ class Plugin(indigo.PluginBase):
             names = {feat.get("name") for feat in _iter_features(exposes)}
             caps  = {"has_battery": "battery" in names}
             props.update(caps)
+
+        elif device_type_id == "z2mLock":
+            names = {feat.get("name") for feat in _iter_features(exposes)}
+            caps  = {"has_battery": "battery" in names}
+            props.update(caps)
+
+        elif device_type_id == "z2mThermostat":
+            names = {feat.get("name") for feat in _iter_features(exposes)}
+            caps  = {"has_battery": "battery" in names}
+            props.update(caps)
+            # Some TRVs expose occupied_heating_setpoint instead of
+            # current_heating_setpoint — remember which one to publish to.
+            props["setpoint_key"] = ("occupied_heating_setpoint"
+                                     if ("occupied_heating_setpoint" in names
+                                         and "current_heating_setpoint" not in names)
+                                     else "current_heating_setpoint")
+            # Native thermostat behaviour flags (heat-only TRV).
+            props.update({
+                "NumTemperatureInputs":       1,
+                "NumHumidityInputs":          0,
+                "SupportsHeatSetpoint":       True,
+                "SupportsCoolSetpoint":       False,
+                "SupportsHvacOperationMode":  "system_mode" in names,
+                "SupportsHvacFanMode":        False,
+                "ShowCoolHeatEquipmentStateUI": False,
+            })
 
         else:
             caps = {}

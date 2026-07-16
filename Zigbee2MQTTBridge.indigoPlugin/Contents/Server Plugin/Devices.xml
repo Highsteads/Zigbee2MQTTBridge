@@ -679,6 +679,118 @@
     </Device>
 
     <!-- ================================================================
+         z2mLock — Zigbee door lock (relay class, Lock subtype)
+         onOffState native: ON = locked, OFF = unlocked (Indigo convention).
+         lockState carries z2m's richer enum (locked / unlocked /
+         not_fully_locked) for triggers on the jammed case.
+         ================================================================ -->
+    <Device type="relay" id="z2mLock" subType="indigo.kRelayDeviceSubType.Lock">
+        <Name>Z2M Lock</Name>
+        <ConfigUI>
+            <Field id="friendly_name" type="textfield" defaultValue="">
+                <Label>Friendly Name:</Label>
+                <Description>zigbee2mqtt friendly_name — must match exactly (e.g. Front Door Lock)</Description>
+            </Field>
+            <Field id="ieee_address" type="textfield" readonly="true" defaultValue="">
+                <Label>IEEE Address:</Label>
+            </Field>
+            <Field id="vendor" type="textfield" readonly="true" defaultValue="">
+                <Label>Vendor:</Label>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="capabilities_display" type="textfield" readonly="true" defaultValue="">
+                <Label>Capabilities:</Label>
+            </Field>
+            <Field id="has_battery" type="checkbox" hidden="true" defaultValue="false"/>
+        </ConfigUI>
+        <States>
+            <!-- onOffState: native relay state (True=locked) — not declared here -->
+            <State id="lockState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Lock State Changed</TriggerLabel>
+                <ControlPageLabel>Lock State</ControlPageLabel>
+            </State>
+            <State id="battery">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Battery Changed</TriggerLabel>
+                <ControlPageLabel>Battery %</ControlPageLabel>
+            </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="linkQuality">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Link Quality Changed</TriggerLabel>
+                <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         z2mThermostat — Zigbee TRV / climate device (thermostat class)
+         Native: temperatureInput1 (local_temperature), setpointHeat
+         (current/occupied_heating_setpoint), hvacOperationMode (system_mode).
+         valvePosition surfaces the TRV's valve-opening %% (read-only) —
+         the field that used to mis-classify these devices as covers.
+         ================================================================ -->
+    <Device type="thermostat" id="z2mThermostat">
+        <Name>Z2M Thermostat / TRV</Name>
+        <ConfigUI>
+            <Field id="friendly_name" type="textfield" defaultValue="">
+                <Label>Friendly Name:</Label>
+                <Description>zigbee2mqtt friendly_name — must match exactly (e.g. Lounge TRV)</Description>
+            </Field>
+            <Field id="ieee_address" type="textfield" readonly="true" defaultValue="">
+                <Label>IEEE Address:</Label>
+            </Field>
+            <Field id="vendor" type="textfield" readonly="true" defaultValue="">
+                <Label>Vendor:</Label>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="capabilities_display" type="textfield" readonly="true" defaultValue="">
+                <Label>Capabilities:</Label>
+            </Field>
+            <Field id="has_battery" type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="setpoint_key" type="textfield" hidden="true" defaultValue="current_heating_setpoint"/>
+        </ConfigUI>
+        <States>
+            <!-- temperatureInput1 / setpointHeat / hvacOperationMode: native
+                 thermostat states — not declared here -->
+            <State id="runningState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Running State Changed</TriggerLabel>
+                <ControlPageLabel>Running State</ControlPageLabel>
+            </State>
+            <State id="valvePosition">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Valve Position Changed</TriggerLabel>
+                <ControlPageLabel>Valve Position %</ControlPageLabel>
+            </State>
+            <State id="battery">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Battery Changed</TriggerLabel>
+                <ControlPageLabel>Battery %</ControlPageLabel>
+            </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="linkQuality">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Link Quality Changed</TriggerLabel>
+                <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
          z2mCoordinator — Z2M bridge itself (custom device class)
          One per MQTT prefix (e.g. zigbee2mqtt + zigbee2mqtt_garage).
          Aggregates bridge/state, bridge/info and bridge/devices into a single

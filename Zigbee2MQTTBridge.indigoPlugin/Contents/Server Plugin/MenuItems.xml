@@ -19,12 +19,29 @@
         <Name>Refresh Device Capabilities</Name>
         <CallbackMethod>refresh_device_capabilities</CallbackMethod>
     </MenuItem>
+    <MenuItem id="reportOrphanedDevices">
+        <Name>Report Orphaned Devices</Name>
+        <CallbackMethod>report_orphaned_devices</CallbackMethod>
+    </MenuItem>
+    <MenuItem id="sepJoin" isSeparator="true"/>
+    <MenuItem id="permitJoinEnable">
+        <Name>Enable Pairing (Permit Join, 254s)</Name>
+        <CallbackMethod>permit_join_enable</CallbackMethod>
+    </MenuItem>
+    <MenuItem id="permitJoinDisable">
+        <Name>Disable Pairing (Permit Join Off)</Name>
+        <CallbackMethod>permit_join_disable</CallbackMethod>
+    </MenuItem>
     <MenuItem id="sep2" isSeparator="true"/>
     <MenuItem id="toggleTimestamps">
         <Name>Toggle Timestamps in Log (on/off)</Name>
         <CallbackMethod>menuToggleTimestamps</CallbackMethod>
     </MenuItem>
     <MenuItem id="sep3" isSeparator="true"/>
+    <MenuItem id="testMqttConnection">
+        <Name>Test MQTT Connection</Name>
+        <CallbackMethod>testMqttConnection</CallbackMethod>
+    </MenuItem>
     <MenuItem id="showPluginInfo">
         <Name>Show Plugin Info</Name>
         <CallbackMethod>showPluginInfo</CallbackMethod>

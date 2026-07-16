@@ -50,6 +50,7 @@ kSensorDeviceSubType = _Enum("kSensorDeviceSubType")
 kRelayDeviceSubType  = _Enum("kRelayDeviceSubType")
 kStateImageSel       = _Enum("kStateImageSel")
 kProtocol            = _Enum("kProtocol")
+kHvacMode            = _Enum("kHvacMode")
 
 
 # ── server-side log / Dict ────────────────────────────────────────────────────
@@ -344,6 +345,7 @@ def install():
     mod.kRelayDeviceSubType  = kRelayDeviceSubType
     mod.kStateImageSel       = kStateImageSel
     mod.kProtocol            = kProtocol
+    mod.kHvacMode            = kHvacMode
 
     sys.modules["indigo"] = mod
     return mod

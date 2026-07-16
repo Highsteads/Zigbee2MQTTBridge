@@ -42,10 +42,26 @@
          retained payload via .../get). Coordinator/button omitted: a coordinator
          has no friendly_name and a button is a stateless event source. -->
     <Action id="refreshState"
-            deviceFilter="self.z2mLight,self.z2mRelay,self.z2mContactSensor,self.z2mOccupancySensor,self.z2mWaterLeakSensor,self.z2mTemperatureSensor,self.z2mSensor,self.z2mCover,self.z2mRepeater"
+            deviceFilter="self.z2mLight,self.z2mRelay,self.z2mContactSensor,self.z2mOccupancySensor,self.z2mWaterLeakSensor,self.z2mTemperatureSensor,self.z2mSensor,self.z2mCover,self.z2mRepeater,self.z2mLock,self.z2mThermostat"
             uiPath="DeviceActions">
         <Name>Refresh Device State</Name>
         <CallbackMethod>action_refresh_state</CallbackMethod>
+    </Action>
+
+    <!-- Publish a custom JSON payload to the device's /set topic — the escape
+         hatch for z2m device options the typed actions don't cover
+         (sensitivity, LED indicator modes, calibration, child lock...). -->
+    <Action id="publishCustom"
+            deviceFilter="self.z2mLight,self.z2mRelay,self.z2mContactSensor,self.z2mOccupancySensor,self.z2mWaterLeakSensor,self.z2mTemperatureSensor,self.z2mSensor,self.z2mCover,self.z2mButton,self.z2mLock,self.z2mThermostat"
+            uiPath="DeviceActions">
+        <Name>Publish Custom Payload</Name>
+        <ConfigUI>
+            <Field id="json_payload" type="textfield" defaultValue="{}">
+                <Label>JSON payload:</Label>
+                <Description>A JSON object published to zigbee2mqtt/&lt;device&gt;/set. Use z2m's snake_case property names, e.g. {"motion_sensitivity": "high"}. NB battery devices must be awake to receive it.</Description>
+            </Field>
+        </ConfigUI>
+        <CallbackMethod>action_publish_custom</CallbackMethod>
     </Action>
 
 </Actions>
