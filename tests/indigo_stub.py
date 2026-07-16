@@ -116,6 +116,29 @@ class PluginBase:
         keys = getattr(dev, "static_state_keys", None) or []
         return [{"Key": k} for k in keys]
 
+    # State-dict builders plugin.py's getDeviceStateList override uses to declare
+    # dynamic states. Real Indigo returns richer dicts; the 'Key'/'Type' subset is
+    # what the tests assert on.
+    @staticmethod
+    def _state_dict(key, trigger_label, label, type_name):
+        return {"Key": key, "TriggerLabel": trigger_label, "StateLabel": label,
+                "Type": type_name}
+
+    def getDeviceStateDictForBoolTrueFalseType(self, key, trigger_label, label):
+        return self._state_dict(key, trigger_label, label, "BoolTrueFalse")
+
+    def getDeviceStateDictForBoolOnOffType(self, key, trigger_label, label):
+        return self._state_dict(key, trigger_label, label, "BoolOnOff")
+
+    def getDeviceStateDictForIntegerType(self, key, trigger_label, label):
+        return self._state_dict(key, trigger_label, label, "Integer")
+
+    def getDeviceStateDictForRealType(self, key, trigger_label, label):
+        return self._state_dict(key, trigger_label, label, "Real")
+
+    def getDeviceStateDictForStringType(self, key, trigger_label, label):
+        return self._state_dict(key, trigger_label, label, "String")
+
     # Lifecycle hooks the plugin chains via super() — no-ops are enough for tests.
     def sleep(self, *_args, **_kwargs): pass
     def wake_up(self, *_args, **_kwargs): pass
@@ -136,10 +159,13 @@ class FakeDevice:
 
     def __init__(self, id, name, deviceTypeId, pluginProps=None, states=None,
                  onState=False, brightness=0, sensorValue=None,
-                 displayStateId="onOffState", subType="", static_state_keys=None):
+                 displayStateId="onOffState", subType="", static_state_keys=None,
+                 folderId=0, enabled=True):
         self.id              = id
         self.name            = name
         self.deviceTypeId    = deviceTypeId
+        self.folderId        = folderId
+        self.enabled         = enabled
         self.static_state_keys = static_state_keys or []   # Devices.xml static states
         self.pluginProps     = pluginProps or {}
         self.ownerProps      = self.pluginProps           # alias used by plugin code
@@ -254,6 +280,31 @@ class _TriggerShim:
 trigger = _TriggerShim()
 
 
+# indigo.device (singular) namespace — create/delete, backed by the registry.
+# Tests that need isolation should monkeypatch indigo.device with a fresh
+# DeviceShim(devices) rather than a bare Mock (a Mock left on the shared module
+# leaks into later tests — seen with an early reclassify test).
+class DeviceShim:
+    def __init__(self, registry):
+        self._registry = registry
+        self._next_id = 900000
+
+    def create(self, protocol=None, name="", pluginId="", deviceTypeId="",
+               folder=0, props=None, **_kwargs):
+        self._next_id += 1
+        dev = FakeDevice(id=self._next_id, name=name, deviceTypeId=deviceTypeId,
+                         pluginProps=dict(props or {}), folderId=folder)
+        self._registry.add(dev)
+        return dev
+
+    def delete(self, dev):
+        dev_id = getattr(dev, "id", dev)
+        self._registry._by_id.pop(dev_id, None)
+
+
+device = DeviceShim(devices)
+
+
 # ── Module installation helper ───────────────────────────────────────────────
 
 def install():
@@ -264,6 +315,7 @@ def install():
     mod.Dict                 = Dict
     mod.server               = server
     mod.devices              = devices
+    mod.device               = device
     mod.variables            = variables
     mod.trigger              = trigger
 

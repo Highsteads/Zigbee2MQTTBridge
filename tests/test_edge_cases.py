@@ -125,12 +125,14 @@ def test_capture_raw_skips_underscore_prefix(plugin, make_device):
 
 
 def test_capture_raw_skips_handled_keys(plugin, make_device):
-    """Keys already handled by the type-specific dispatcher must not be
-    double-captured as dynamic states."""
+    """Keys handled by the DEVICE'S OWN type dispatcher must not be
+    double-captured as dynamic states (per-type since v1.9.21: temperature
+    and battery belong to the z2mSensor handler; state/brightness no longer
+    count as handled for a sensor — a light key on a sensor is now real data)."""
     dev = make_device(51, "Dev", "z2mSensor",
                       pluginProps={"seenDynamicKeys": ""})
-    plugin._capture_raw_fields(dev, {"state": "ON", "brightness": 100})
-    # Both 'state' and 'brightness' are in _HANDLED_PAYLOAD_KEYS — no dynamic capture
+    plugin._capture_raw_fields(dev, {"temperature": 21.0, "battery": 95,
+                                     "linkquality": 60})
     assert dev.state_writes == []
 
 
@@ -181,18 +183,35 @@ def test_reserved_state_names_constant_includes_batteryLevel(plugin_mod):
     assert "onOffState"       in plugin_mod._RESERVED_STATE_NAMES
 
 
-def test_handled_payload_keys_covers_all_processed_fields(plugin_mod):
-    """Every key the type-specific _process_* methods consume MUST be in
-    _HANDLED_PAYLOAD_KEYS, otherwise the field will be double-stored
-    (once as a typed state, once as a dynamic state with the wrong type)."""
-    required = {
-        "state", "brightness", "color_temp", "color_mode", "color",
-        "contact", "occupancy", "presence", "motion", "water_leak",
-        "temperature", "humidity", "pressure", "illuminance", "illuminance_lux",
-        "battery", "power", "energy", "linkquality", "position", "action",
+def test_handled_keys_cover_each_types_processed_fields(plugin_mod):
+    """Every key a type's _process_*_state handler consumes MUST be in that
+    type's handled set, otherwise the field is double-stored (once as a typed
+    state, once as a dynamic state with a possibly-wrong type). Per-type since
+    v1.9.21 — keep this table in lock-step with the handlers."""
+    per_type_required = {
+        "z2mLight":             {"state", "brightness", "color_temp",
+                                 "color_mode", "color"},
+        "z2mRelay":             {"state", "power", "energy"},
+        "z2mCover":             {"state", "position", "tilt"},
+        "z2mButton":            {"action", "battery"},
+        "z2mContactSensor":     {"contact", "battery"},
+        "z2mOccupancySensor":   {"motion", "occupancy", "presence", "pir",
+                                 "illuminance", "illuminance_lux",
+                                 "temperature", "humidity", "battery"},
+        "z2mWaterLeakSensor":   {"water_leak", "temperature", "battery"},
+        "z2mTemperatureSensor": {"temperature", "humidity", "pressure",
+                                 "illuminance", "illuminance_lux", "battery"},
+        "z2mSensor":            {"smoke", "water_leak", "motion", "occupancy",
+                                 "presence", "pir", "contact", "temperature",
+                                 "humidity", "pressure", "illuminance",
+                                 "illuminance_lux", "battery"},
     }
-    missing = required - plugin_mod._HANDLED_PAYLOAD_KEYS
-    assert not missing, f"_HANDLED_PAYLOAD_KEYS missing: {sorted(missing)}"
+    for type_id, required in per_type_required.items():
+        handled = plugin_mod._handled_keys_for(type_id)
+        missing = required - handled
+        assert not missing, f"{type_id} handled-keys missing: {sorted(missing)}"
+        # linkquality is consumed globally for every type.
+        assert "linkquality" in handled
 
 
 # ── Helper consistency: sanitiser output is camelCase ────────────────────────

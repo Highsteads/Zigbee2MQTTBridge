@@ -154,6 +154,62 @@ _BUTTON = [
 
 _REPEATER_LQ_ONLY = [{"name": "linkquality", "type": "numeric", "access": 1}]
 
+# Decoupled-mode wall switch / scene-capable relay: a switch composite AND an
+# action enum on the same device (Aqara decoupled switches, Tuya TS004F in
+# switch mode). The load control is the primary function — must be a relay.
+_SWITCH_WITH_ACTION = [{
+    "type": "switch",
+    "features": [{"name": "state", "type": "binary", "access": 7,
+                  "value_on": "ON", "value_off": "OFF"}],
+}, {"name": "action", "type": "enum", "access": 1,
+    "values": ["single", "double", "hold"]},
+   {"name": "linkquality", "type": "numeric", "access": 1}]
+
+# Same class of device but with a FLAT writable state leaf (no composite).
+_FLAT_STATE_WITH_ACTION = [
+    {"name": "state",  "type": "binary", "access": 7,
+     "value_on": "ON", "value_off": "OFF"},
+    {"name": "action", "type": "enum", "access": 1, "values": ["toggle", "on", "off"]},
+    {"name": "linkquality", "type": "numeric", "access": 1},
+]
+
+# Motion sensor whose action enum carries motion-event metadata — a sensor
+# first, same rule as presence/occupancy devices (v1.9.21 gate extension).
+_MOTION_WITH_ACTION = [
+    {"name": "motion",  "type": "binary", "access": 1},
+    {"name": "action",  "type": "enum",   "access": 1,
+     "values": ["motion_detected", "motion_cleared"]},
+    {"name": "battery", "type": "numeric", "access": 1},
+]
+
+# TRV: climate composite + READ-ONLY valve-position percentage. Must NOT become
+# a cover (v1.9.21 — OPEN/CLOSE at a radiator valve).
+_TRV_VALVE_POSITION = [{
+    "type": "climate",
+    "features": [
+        {"name": "local_temperature",        "type": "numeric", "access": 1},
+        {"name": "current_heating_setpoint", "type": "numeric", "access": 7},
+    ],
+}, {"name": "position", "type": "numeric", "access": 1, "unit": "%"},
+   {"name": "battery",  "type": "numeric", "access": 1},
+   {"name": "linkquality", "type": "numeric", "access": 1}]
+
+# Flat-expose cover: a WRITABLE position with no cover composite — the shape the
+# writability gate must keep classifying as a cover.
+_FLAT_POSITION_COVER = [
+    {"name": "position", "type": "numeric", "access": 7,
+     "value_min": 0, "value_max": 100},
+    {"name": "linkquality", "type": "numeric", "access": 1},
+]
+
+# Smoke detector: binary smoke + battery, no env channels — falls to the generic
+# sensor type, whose handler owns the smoke -> onOffState semantics (v1.9.21).
+_SMOKE_DETECTOR = [
+    {"name": "smoke",   "type": "binary",  "access": 1},
+    {"name": "battery", "type": "numeric", "access": 1},
+    {"name": "linkquality", "type": "numeric", "access": 1},
+]
+
 
 # ── The contract table ───────────────────────────────────────────────────────
 # Add a row to cover a new device class — or to lock in a bug you just fixed.
@@ -210,6 +266,28 @@ CASES: list[ZooCase] = [
                  "leaf or model hint, a bare [] does not"),
     ZooCase("none_exposes", None, "z2mSensor", {},
             note="defensive: exposes=None must not crash, falls to generic"),
+    # ── v1.9.21 classification fixes ─────────────────────────────────────────
+    ZooCase("switch_with_action", _SWITCH_WITH_ACTION, "z2mRelay",
+            {"has_power": False},
+            note="v1.9.21: decoupled wall switch (switch composite + action enum) "
+                 "must be a RELAY — pre-fix the button check ran first and the "
+                 "load became permanently uncontrollable"),
+    ZooCase("flat_state_with_action", _FLAT_STATE_WITH_ACTION, "z2mRelay", {},
+            note="v1.9.21: flat writable state + action enum — same rule, "
+                 "non-composite shape"),
+    ZooCase("motion_with_action", _MOTION_WITH_ACTION, "z2mSensor", {},
+            note="v1.9.21: motion + action enum is a sensor, not a button — "
+                 "motion/pir joined presence/occupancy in the button gate"),
+    ZooCase("trv_valve_position", _TRV_VALVE_POSITION, "z2mSensor", {},
+            note="v1.9.21: TRV (climate composite + read-only valve position) "
+                 "must NOT be a cover — OPEN/CLOSE at a radiator valve"),
+    ZooCase("flat_position_cover", _FLAT_POSITION_COVER, "z2mCover", {},
+            note="v1.9.21: a WRITABLE flat position stays a cover after the "
+                 "writability + no-climate gates"),
+    ZooCase("smoke_detector", _SMOKE_DETECTOR, "z2mSensor",
+            {"has_battery": True},
+            note="v1.9.21: smoke detector lands on the generic sensor whose "
+                 "handler owns smoke -> onOffState (was: silently dropped)"),
 ]
 
 

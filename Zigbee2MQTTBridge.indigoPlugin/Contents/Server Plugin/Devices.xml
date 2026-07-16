@@ -182,6 +182,11 @@
                 <TriggerLabel>Water Leak Changed</TriggerLabel>
                 <ControlPageLabel>Water Leak</ControlPageLabel>
             </State>
+            <State id="smoke">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Smoke Changed</TriggerLabel>
+                <ControlPageLabel>Smoke</ControlPageLabel>
+            </State>
             <State id="battery">
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Battery Changed</TriggerLabel>

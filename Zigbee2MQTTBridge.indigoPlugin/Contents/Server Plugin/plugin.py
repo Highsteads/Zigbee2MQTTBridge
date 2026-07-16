@@ -5,9 +5,39 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Opus 4.8
-# Date:        27-06-2026
-# Version:     1.9.20
+# Author:      CliveS & Claude Fable 5
+# Date:        16-07-2026
+# Version:     1.9.21
+# v1.9.21 (16-07-2026): Fable 5 deep-review batch 1 (highs).
+#   * HIGH classification: a device with an action enum AND an output capability
+#     (switch composite or writable binary state) is now created as z2mRelay,
+#     not z2mButton — decoupled-mode wall switches were losing on/off control
+#     PERMANENTLY at Discover & Create (reclassify only converts toward button,
+#     so nothing could heal it). Detection now mirrors the gates
+#     _should_reclassify_as_button already enforced at runtime; the gate also
+#     gained motion/pir alongside presence/occupancy (both places).
+#   * HIGH data loss: the global _HANDLED_PAYLOAD_KEYS set claimed keys NO
+#     handler wrote (smoke/vibration/tamper/voltage/current/battery_low were
+#     blocked from dynamic capture yet never written — a smoke alarm produced
+#     NO Indigo state change at all) and claimed keys globally that only some
+#     types handle (a contact sensor's temperature, a bulb's power — silently
+#     dropped). Replaced with per-type _HANDLED_KEYS_BY_TYPE +
+#     _ALWAYS_CONSUMED_KEYS; everything a type's handler doesn't own is now
+#     dynamically captured as a typed state.
+#   * HIGH safety: smoke is handled semantically on z2mSensor — declared bool
+#     `smoke` state + onOffState priority smoke > water_leak > occupancy >
+#     contact, with _payload_bool guarding string tokens ("false" is False).
+#   * Cover gate: a flat `position` feature only classifies as z2mCover when
+#     WRITABLE and there is no climate composite — TRVs exposing a read-only
+#     valve-position % were being created as blinds.
+#   * Tests 474 -> 551: per-type capture, smoke semantics, classification gates,
+#     reclassify map-repoint regression (v1.9.18 fix now locked in),
+#     bridge/devices rename + prefix-migration + auto-create + flood-guard
+#     paths, getDeviceStateList dynamic declarations (stub gained the
+#     state-dict builders + an indigo.device create/delete shim), 6 new zoo rows.
+#   * Companion: startup_z2m_check.py -> v1.6 (mosquitto alert debounce + storm
+#     fix, subprocess timeouts, flock'd overlap guard, plugin-running check,
+#     format-drift fallback, pgrep -x, main() wrapper).
 # v1.9.20 (27-06-2026): deep-review batch 3 — cleared the entire deferred queue.
 #   * #18 concurrency: friendly_name_map / ieee_map / coordinator_map are now
 #     guarded by self.maps_lock (RLock) at every mutation site (deviceStartComm,
@@ -376,29 +406,50 @@ _BUTTON_ACTION_VALUES = frozenset({
     "other",
 })
 
-# MQTT payload keys handled semantically by type-specific _process_*_state methods.
-# Anything NOT in this set is captured as a dynamic state by _capture_raw_fields.
-_HANDLED_PAYLOAD_KEYS = {
-    # binary / state
-    "state", "contact", "occupancy", "presence", "motion", "pir", "water_leak",
-    "smoke", "vibration", "tamper",
-    # light
-    "brightness", "color_temp", "color_mode", "color",
-    # numeric metering
-    "power", "energy", "voltage", "current",
-    # environmental (handled per-type)
-    "temperature", "humidity", "pressure", "illuminance", "illuminance_lux",
-    # cover
-    "position", "tilt",
-    # button
-    "action",
-    # battery / health (handled per-type)
-    "battery", "battery_low",
-    # mesh
-    "linkquality", "last_seen", "update_available", "update",
-    # reclassification trigger only — ignored for state writes
-    "click",
+# MQTT payload keys consumed for EVERY device type (mesh/meta fields that either
+# every handler writes semantically, or the plugin deliberately swallows).
+_ALWAYS_CONSUMED_KEYS = {
+    "linkquality",                    # written as linkQuality by every handler
+    "last_seen", "update_available", "update",   # health/meta — deliberately not states
+    "click",                          # legacy reclassification trigger only
 }
+
+# Payload keys each device type's _process_*_state handler ACTUALLY writes as
+# named states. _capture_raw_fields skips these (plus _ALWAYS_CONSUMED_KEYS) for
+# the device's own type and imports everything else as a typed dynamic state.
+#
+# v1.9.21: this replaces the old single global _HANDLED_PAYLOAD_KEYS set, which
+# claimed keys NO handler wrote (smoke/vibration/tamper/voltage/current/
+# battery_low) and claimed keys globally that only SOME types handle — so a
+# smoke alarm, a contact sensor's temperature or a metering bulb's power was
+# neither semantically handled NOR dynamically captured: silent total data loss.
+_HANDLED_KEYS_BY_TYPE = {
+    "z2mLight":             {"state", "brightness", "color_temp", "color_mode", "color"},
+    "z2mRelay":             {"state", "power", "energy"},
+    "z2mCover":             {"state", "position", "tilt"},
+    "z2mButton":            {"action", "battery"},
+    "z2mRepeater":          set(),
+    "z2mContactSensor":     {"contact", "battery"},
+    "z2mOccupancySensor":   {"motion", "occupancy", "presence", "pir", "illuminance",
+                             "illuminance_lux", "temperature", "humidity", "battery"},
+    "z2mWaterLeakSensor":   {"water_leak", "temperature", "battery"},
+    "z2mTemperatureSensor": {"temperature", "humidity", "pressure", "illuminance",
+                             "illuminance_lux", "battery"},
+    "z2mSensor":            {"smoke", "water_leak", "motion", "occupancy", "presence",
+                             "pir", "contact", "temperature", "humidity", "pressure",
+                             "illuminance", "illuminance_lux", "battery"},
+}
+
+# Conservative fallback for any type not in the table (e.g. future types):
+# the union of everything any handler writes — matches the old global set's
+# behaviour minus the never-written keys.
+_HANDLED_KEYS_FALLBACK = set().union(*_HANDLED_KEYS_BY_TYPE.values())
+
+
+def _handled_keys_for(device_type_id):
+    """Keys _capture_raw_fields must NOT import for this device type."""
+    return _ALWAYS_CONSUMED_KEYS | _HANDLED_KEYS_BY_TYPE.get(
+        device_type_id, _HANDLED_KEYS_FALLBACK)
 
 # Indigo-reserved state names to avoid as dynamic state IDs (silently shadow
 # native device properties — see global CLAUDE.md and feedback_indigo_state_visibility).
@@ -482,6 +533,27 @@ def _mireds_to_kelvin(mireds):
     return round(1_000_000 / max(1, mireds))
 
 
+def _payload_bool(val):
+    """Coerce a z2m binary payload value to bool, or None if unrecognisable.
+
+    JSON true/false arrive as Python bools, but some devices publish string
+    tokens — and raw bool() reads "false"/"OFF"/"0" as True. Numbers follow
+    truthiness (0 -> False). Unrecognised strings return None so the caller
+    can skip the write rather than guess.
+    """
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return bool(val)
+    if isinstance(val, str):
+        token = val.strip().lower()
+        if token in ("true", "on", "yes", "1"):
+            return True
+        if token in ("false", "off", "no", "0", ""):
+            return False
+    return None
+
+
 def _flatten_features(exposes):
     """
     Yield all leaf feature dicts from a zigbee2mqtt exposes list,
@@ -548,27 +620,44 @@ def _detect_device_type(exposes, model=""):
         if feat.get("name") == "brightness" and feat.get("type") == "numeric":
             return "z2mLight"
 
-    # Check for Cover (composite type "cover" or any "position" feature)
+    # Check for Cover (composite type "cover", or a WRITABLE flat "position"
+    # feature outside a climate composite). The writability + no-climate gates
+    # (v1.9.21) stop TRVs being created as blinds: Tuya/Moes TRVs expose a
+    # read-only valve-position percentage, and treating that as a cover sends
+    # OPEN/CLOSE commands at a radiator valve. A genuine flat-expose cover's
+    # position is writable (access bit 1).
     for entry in exposes:
         if entry.get("type") == "cover":
             return "z2mCover"
-    for feat in _iter_features(exposes):
-        if feat.get("name") == "position":
-            return "z2mCover"
+    if not any(entry.get("type") == "climate" for entry in exposes):
+        for feat in _iter_features(exposes):
+            if feat.get("name") == "position" and (feat.get("access", 0) & 2):
+                return "z2mCover"
 
     # Check for Button/Scene controller (has "action" enum feature — TuYa TS0042, Ikea remotes etc.)
-    # BUT not when the device also reports presence/occupancy: on a presence
-    # sensor the `action` enum carries region/presence events (enter/leave/
-    # occupied), not scene-controller presses, so presence is the primary type.
-    # Without this gate the Aqara FP1 (RTCZCGQ11LM: presence + action) is
-    # mis-classified as a button and loses its presence semantics. Mirrors the
-    # pure-contact rule below — a primary sensor capability beats an incidental
-    # action enum.
+    # TWO gates before we accept the button classification:
+    # 1. Not when the device reports presence/occupancy/motion/pir: on such
+    #    sensors the `action` enum carries region/presence events (enter/leave/
+    #    occupied), not scene-controller presses — the sensor is the primary
+    #    type. Without this the Aqara FP1 (RTCZCGQ11LM: presence + action) was
+    #    mis-classified as a button and lost its presence semantics (v1.9.17).
+    # 2. Not when the device has an output capability (switch composite or
+    #    writable binary state): a decoupled-mode wall switch or scene-capable
+    #    relay must be created as z2mRelay or its load can never be switched
+    #    from Indigo (v1.9.21 — mirrors _should_reclassify_as_button, which
+    #    already refused to CONVERT such a device but couldn't undo a wrong
+    #    creation). Its scene presses surface via the dynamic `action` state.
     _btn_names = {feat.get("name") for feat in _iter_features(exposes)}
-    if not (_btn_names & {"presence", "occupancy"}):
-        for feat in _iter_features(exposes):
-            if feat.get("name") == "action" and feat.get("type") == "enum":
-                return "z2mButton"
+    if not (_btn_names & {"presence", "occupancy", "motion", "pir"}):
+        _has_output = any(entry.get("type") == "switch" for entry in exposes) or any(
+            feat.get("name") == "state" and feat.get("type") == "binary"
+            and (feat.get("access", 0) & 2)
+            for feat in _iter_features(exposes)
+        )
+        if not _has_output:
+            for feat in _iter_features(exposes):
+                if feat.get("name") == "action" and feat.get("type") == "enum":
+                    return "z2mButton"
 
     # Check for Relay (writable binary "state" feature at top level or inside "switch" composite)
     for entry in exposes:
@@ -1424,8 +1513,9 @@ class Plugin(indigo.PluginBase):
         pending = []  # list of (state_key, state_val)
         static_ids = None  # statically-declared state IDs (Devices.xml); built lazily
 
+        handled_keys = _handled_keys_for(dev.deviceTypeId)
         for raw_key, raw_val in payload.items():
-            if raw_key in _HANDLED_PAYLOAD_KEYS or raw_key.startswith("_"):
+            if raw_key in handled_keys or raw_key.startswith("_"):
                 continue
             if raw_val is None:
                 continue
@@ -2998,9 +3088,21 @@ class Plugin(indigo.PluginBase):
         updates = []
 
         # Track which binary states are present for onOffState priority
+        smoke      = None
         water_leak = None
         occupancy  = None
         contact    = None
+
+        if "smoke" in payload:
+            # Life-safety: smoke detectors classify as the generic sensor type,
+            # so the alarm is surfaced here (declared `smoke` state + top
+            # onOffState priority). _payload_bool handles the string tokens
+            # ("false"/"OFF") a non-conforming device might publish — a raw
+            # bool() would read those as True.
+            val = _payload_bool(payload["smoke"])
+            if val is not None:
+                smoke = val
+                updates.append(("smoke", val, "Smoke!" if val else "OK"))
 
         if "water_leak" in payload:
             val = bool(payload["water_leak"])
@@ -3079,8 +3181,10 @@ class Plugin(indigo.PluginBase):
             except (ValueError, TypeError):
                 pass
 
-        # Assign onOffState: priority waterLeak > occupancy/presence > contact
-        if water_leak is not None:
+        # Assign onOffState: priority smoke > waterLeak > occupancy/presence > contact
+        if smoke is not None:
+            updates.append(("onOffState", smoke, "Smoke!" if smoke else "OK"))
+        elif water_leak is not None:
             updates.append(("onOffState", water_leak, "Leak!" if water_leak else "OK"))
         elif occupancy is not None:
             updates.append(("onOffState", occupancy, "Detected" if occupancy else "Clear"))
@@ -3145,8 +3249,10 @@ class Plugin(indigo.PluginBase):
         # The Aqara FP1 (RTCZCGQ11LM) emits region `action` events and hit exactly
         # this path. The detection-time gate alone was not enough — the runtime
         # reclassify guard had drifted out of sync with it.
+        # motion/pir included since v1.9.21: a motion sensor with a named action
+        # channel is a motion sensor first, same as presence/occupancy devices.
         feat_names = {feat.get("name") for feat in _iter_features(exposes)}
-        if feat_names & {"presence", "occupancy"}:
+        if feat_names & {"presence", "occupancy", "motion", "pir"}:
             return False
         for entry in exposes:
             if entry.get("type") in ("light", "cover", "switch"):

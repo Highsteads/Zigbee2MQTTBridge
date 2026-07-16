@@ -148,16 +148,22 @@ def test_detect_priority_cover_over_relay(plugin_mod):
     assert plugin_mod._detect_device_type(exposes) == "z2mCover"
 
 
-def test_detect_button_wins_over_relay(plugin_mod):
-    """Some TuYa buttons mis-expose a writable state leaf alongside the
-    action enum. The action enum should win."""
+def test_detect_relay_wins_over_button_with_writable_state(plugin_mod):
+    """CONTRACT FLIPPED in v1.9.21 (this test previously asserted z2mButton).
+    A writable state alongside an action enum now classifies as z2mRelay:
+    decoupled-mode wall switches and scene-capable relays genuinely have both,
+    and creating them as buttons loses on/off control of the load PERMANENTLY
+    (reclassify only ever converts TOWARD button). The error asymmetry decides
+    it — a rare button mis-exposing a writable state leaf still surfaces its
+    presses via the dynamic `action` state on the relay device, whereas a
+    relay created as a button is unusable for its primary function."""
     exposes = [
         {"name": "state",  "type": "binary", "access": 7,
          "value_on": "ON", "value_off": "OFF"},
         {"name": "action", "type": "enum",   "access": 1,
          "values": ["single", "double", "long"]},
     ]
-    assert plugin_mod._detect_device_type(exposes) == "z2mButton"
+    assert plugin_mod._detect_device_type(exposes) == "z2mRelay"
 
 
 def test_detect_none_exposes_is_sensor(plugin_mod):
