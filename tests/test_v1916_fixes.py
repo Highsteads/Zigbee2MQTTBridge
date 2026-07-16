@@ -62,7 +62,8 @@ def test_on_connect_queues_subscribed_list_without_logging(plugin, plugin_mod, m
     client = _FakeClient()
     plugin.msg_queue = queue.Queue()
 
-    plugin._on_mqtt_connect(client, None, None, 0)
+    from conftest import RC_OK
+    plugin._on_mqtt_connect(client, None, None, RC_OK, None)  # paho 2.x VERSION2
 
     assert plugin.mqtt_connected is True
     assert ("zigbee2mqtt/#", 1) in client.subscriptions

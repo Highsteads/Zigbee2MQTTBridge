@@ -140,17 +140,19 @@ def test_on_message_binary_skipped_but_still_stamps(plugin):
 
 def test_on_connect_failure_queues_error(plugin):
     plugin.msg_queue = queue.Queue()
-    plugin._on_mqtt_connect(object(), None, None, 4)     # rc=4 -> bad credentials
+    from conftest import RC_BAD_AUTH
+    plugin._on_mqtt_connect(object(), None, None, RC_BAD_AUTH, None)  # paho 2.x
     topic, payload = plugin.msg_queue.get_nowait()
     assert topic == "__error__"
-    assert "bad credentials" in payload["msg"]
+    assert "Bad user name or password" in payload["msg"]  # str(ReasonCode) since v2.0.0
     assert plugin.mqtt_connected is False
 
 
 def test_on_disconnect_clears_connected_and_queues(plugin):
     plugin.msg_queue = queue.Queue()
     plugin.mqtt_connected = True
-    plugin._on_mqtt_disconnect(object(), None, 1)
+    from conftest import RC_DROPPED
+    plugin._on_mqtt_disconnect(object(), None, None, RC_DROPPED, None)  # paho 2.x
     assert plugin.mqtt_connected is False
     topic, payload = plugin.msg_queue.get_nowait()
     assert topic == "__disconnected__"

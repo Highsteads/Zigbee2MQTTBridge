@@ -236,3 +236,25 @@ class FakeAction:
 @pytest.fixture
 def make_action():
     return FakeAction
+
+# ── paho 2.x reason-code fake (v2.0.0 migration) ─────────────────────────────
+# Keeps the suite paho-free: plugin.py's VERSION2 callbacks read
+# reason_code.is_failure / .value / str(). Import in tests via
+# `from conftest import FakeReasonCode`.
+
+class FakeReasonCode:
+    def __init__(self, value=0, name="Success", is_failure=False):
+        self.value      = value
+        self._name      = name
+        self.is_failure = is_failure
+
+    def __str__(self):
+        return self._name
+
+    def __int__(self):
+        return self.value
+
+
+RC_OK       = FakeReasonCode(0, "Success", False)
+RC_BAD_AUTH = FakeReasonCode(134, "Bad user name or password", True)
+RC_DROPPED  = FakeReasonCode(1, "Unspecified error", True)

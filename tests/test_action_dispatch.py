@@ -64,6 +64,7 @@ def test_relay_toggle_when_off_sends_on(plugin, make_device, make_action):
 
 
 def test_relay_status_request(plugin, make_device, make_action):
+    plugin.mqtt_connected = True   # /get is a quiet no-op offline since v2.0.0
     sent = _patch_publish(plugin)
     dev = make_device(105, "Lounge Plug", "z2mRelay",
                       pluginProps={"friendly_name": "Lounge Plug"})
@@ -220,6 +221,7 @@ def test_cover_set_color_no_op(plugin, make_device, make_action):
 def test_sensor_status_request_uses_sensorAction(plugin, make_device, make_action):
     """Confirms the v1.9.8 fix — SensorAction uses .sensorAction, not .deviceAction.
     Calling with sensorAction=RequestStatus must publish a /get to the right topic."""
+    plugin.mqtt_connected = True   # /get is a quiet no-op offline since v2.0.0
     sent = _patch_publish(plugin)
     dev = make_device(401, "Bathroom Door", "z2mContactSensor",
                       pluginProps={"friendly_name": "Bathroom Door"})
@@ -244,6 +246,7 @@ def test_sensor_unhandled_action_does_not_crash(plugin, make_device, make_action
 # ── actionControlUniversal ───────────────────────────────────────────────────
 
 def test_universal_request_status(plugin, make_device, make_action):
+    plugin.mqtt_connected = True   # /get is a quiet no-op offline since v2.0.0
     sent = _patch_publish(plugin)
     dev = make_device(501, "Some Device", "z2mRelay",
                       pluginProps={"friendly_name": "Some Device"})

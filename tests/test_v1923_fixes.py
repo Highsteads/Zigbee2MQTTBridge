@@ -31,6 +31,7 @@ def test_repeater_rejects_on_off_commands(plugin, make_device, make_action,
 
 def test_repeater_still_answers_status_request(plugin, make_device, make_action,
                                                monkeypatch):
+    plugin.mqtt_connected = True   # /get is a quiet no-op offline since v2.0.0
     sent = []
     monkeypatch.setattr(plugin, "_publish", lambda t, p: sent.append(t) or True)
     dev = make_device(302, "Hall Repeater", "z2mRepeater",
@@ -163,6 +164,7 @@ def test_occupancy_string_tokens_safe(plugin, make_device):
 # ── capability-gated /get payloads ────────────────────────────────────────────
 
 def test_request_state_gates_colour_fields(plugin, monkeypatch):
+    plugin.mqtt_connected = True   # /get is a quiet no-op offline since v2.0.0
     sent = []
     monkeypatch.setattr(plugin, "_publish",
                         lambda t, p: sent.append((t, p)) or True)

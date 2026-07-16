@@ -212,17 +212,19 @@ def test_connect_fail_reported_once_per_outage(plugin):
         msgs.append(plugin.msg_queue.get_nowait())
     assert len([m for m in msgs if m[0] == "__error__"]) == 1
     # A successful connect re-arms it
-    plugin._on_mqtt_connect(_FakeSubClient(), None, None, 0)
+    from conftest import RC_OK
+    plugin._on_mqtt_connect(_FakeSubClient(), None, None, RC_OK, None)
     plugin._on_mqtt_connect_fail(None, None)
     assert any(t == "__error__" for t, _p in _drain(plugin))
 
 
 def test_bad_credentials_reported_once_per_reason(plugin):
-    plugin._on_mqtt_connect(_FakeSubClient(), None, None, 4)
-    plugin._on_mqtt_connect(_FakeSubClient(), None, None, 4)
+    from conftest import RC_BAD_AUTH
+    plugin._on_mqtt_connect(_FakeSubClient(), None, None, RC_BAD_AUTH, None)
+    plugin._on_mqtt_connect(_FakeSubClient(), None, None, RC_BAD_AUTH, None)
     errs = [p for t, p in _drain(plugin) if t == "__error__"]
     assert len(errs) == 1
-    assert "bad credentials" in errs[0]["msg"]
+    assert "Bad user name or password" in errs[0]["msg"]
 
 
 class _FakeSubClient:

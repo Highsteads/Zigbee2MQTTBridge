@@ -102,6 +102,7 @@ def test_friendly_name_with_slash_round_trips(plugin):
 # ── _request_state payload shape ─────────────────────────────────────────────
 
 def test_request_state_default_uses_state_get(plugin, monkeypatch):
+    plugin.mqtt_connected = True   # /get is a quiet no-op offline since v2.0.0
     sent = []
     monkeypatch.setattr(plugin, "_publish", lambda t, p: sent.append((t, p)))
     plugin._request_state("Door", device_type_id="z2mContactSensor")
@@ -109,6 +110,7 @@ def test_request_state_default_uses_state_get(plugin, monkeypatch):
 
 
 def test_request_state_light_includes_extras(plugin, monkeypatch):
+    plugin.mqtt_connected = True   # /get is a quiet no-op offline since v2.0.0
     sent = []
     monkeypatch.setattr(plugin, "_publish", lambda t, p: sent.append((t, p)))
     plugin._request_state("Lamp", device_type_id="z2mLight")
@@ -119,6 +121,7 @@ def test_request_state_light_includes_extras(plugin, monkeypatch):
 
 
 def test_request_state_uses_provided_prefix(plugin, monkeypatch):
+    plugin.mqtt_connected = True   # /get is a quiet no-op offline since v2.0.0
     sent = []
     monkeypatch.setattr(plugin, "_publish", lambda t, p: sent.append((t, p)))
     plugin._request_state("Garage Door", prefix="zigbee2mqtt_garage")

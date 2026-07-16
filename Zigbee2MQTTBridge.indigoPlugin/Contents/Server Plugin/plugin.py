@@ -7,7 +7,31 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Fable 5
 # Date:        16-07-2026
-# Version:     1.10.0
+# Version:     2.0.0
+# v2.0.0 (16-07-2026): paho-mqtt 1.6.1 -> 2.1.0 migration (the one deliberately
+#   deferred structural item from the deep reviews). Isolated change:
+#   * mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=...) — the
+#     callback_api_version positional is REQUIRED in 2.x (without it the
+#     client constructor raises and the bridge never connects).
+#   * _on_mqtt_connect(client, userdata, flags, reason_code, properties) —
+#     success is `not reason_code.is_failure`; the old int rc_labels dict is
+#     DELETED (under VERSION2 even a 3.1.1 broker's CONNACK errors arrive as
+#     MQTT-v5 ReasonCodes, e.g. bad credentials = 134 not 4, so the 1-5 keys
+#     could never match again; str(ReasonCode) is already human-readable).
+#   * _on_mqtt_disconnect(client, userdata, disconnect_flags, reason_code,
+#     properties) — normalised at the boundary to {"rc": int, "reason": str}
+#     so the main-thread route keeps its int semantics; the unexpected-
+#     disconnect WARNING now includes the readable reason.
+#   * on_message / on_connect_fail / username_pw_set / reconnect_delay_set /
+#     connect_async / loop_start / loop_stop / disconnect: signature-identical
+#     in 2.x — unchanged.
+#   * The v1.9.14 liveness watchdog + v1.9.19 atomic rebuild carry over
+#     UNCHANGED — verified to hold no 1.x assumptions (no flags dict access,
+#     no is_connected, no internal-thread poking); 2.x improves some reconnect
+#     edge cases but does not guarantee the half-open-socket wedge is gone.
+#   * requirements.txt pin 2.1.0 with the migration recorded; tests use a
+#     paho-free FakeReasonCode (conftest) so the suite still needs no
+#     third-party packages. 4 callback call-sites updated.
 # v1.10.0 (16-07-2026): Fable 5 deep-review feature batch (improvement lens).
 #   * NEW z2mLock device type (relay class, Lock subtype): lock composites no
 #     longer classify as relays sent ON/OFF — locks speak LOCK/UNLOCK, richer
@@ -2836,7 +2860,11 @@ class Plugin(indigo.PluginBase):
             p for p in (self._topic_prefix(), self._garage_prefix()) if p)
 
         try:
-            client = mqtt.Client(client_id=f"indigo_z2mbridge_{int(time.time())}")
+            # paho 2.x (v2.0.0): callback_api_version is a REQUIRED first
+            # positional — without it 2.x raises ValueError and the bridge
+            # never connects. VERSION2 callbacks carry ReasonCode objects.
+            client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
+                                 client_id=f"indigo_z2mbridge_{int(time.time())}")
             if username:
                 client.username_pw_set(username, password)
             client.on_connect      = self._on_mqtt_connect
@@ -2981,7 +3009,16 @@ class Plugin(indigo.PluginBase):
 
         When dev_props is supplied, the z2mLight /get payload only asks for the
         colour fields the bulb actually supports — requesting color/color_temp
-        from a plain dimmable bulb makes z2m log an error per request (v1.9.23)."""
+        from a plain dimmable bulb makes z2m log an error per request (v1.9.23).
+
+        Quietly a no-op while disconnected (v2.0.0): these are best-effort
+        refreshes — retained payloads reseed every device on reconnect, and a
+        broker outage at startup used to spray one WARNING per device from the
+        settle-delay timers."""
+        if not self.mqtt_connected:
+            if self.debug:
+                log(f"skipping state request for '{friendly_name}' — MQTT not connected")
+            return
         if prefix is None:
             prefix = self._topic_prefix()
         if device_type_id == "z2mThermostat":
@@ -3008,8 +3045,11 @@ class Plugin(indigo.PluginBase):
 
     # ── paho callbacks (run on paho thread — queue only, no Indigo calls) ─────
 
-    def _on_mqtt_connect(self, client, userdata, flags, rc):
-        if rc == 0:
+    def _on_mqtt_connect(self, client, userdata, flags, reason_code, properties=None):
+        # paho 2.x VERSION2 signature (v2.0.0): reason_code is a ReasonCode
+        # object (is_failure/str), properties is None on MQTT 3.1.1, flags is a
+        # ConnectFlags dataclass (unused here).
+        if not reason_code.is_failure:
             self.mqtt_connected = True
             self.last_rx_ts     = time.time()   # fresh connection — reset the liveness clock
             # A successful connect re-arms the once-per-outage failure reporting.
@@ -3025,14 +3065,11 @@ class Plugin(indigo.PluginBase):
             # Indigo calls"); the __connected__ handler logs it on the main thread.
             self.msg_queue.put(("__connected__", {"subscribed": subscribed}))
         else:
-            rc_labels = {
-                1: "bad protocol",
-                2: "bad client ID",
-                3: "server unavailable",
-                4: "bad credentials",
-                5: "not authorised",
-            }
-            msg = f"MQTT connect failed: {rc_labels.get(rc, rc)}"
+            # str(ReasonCode) is already human-readable ("Not authorized",
+            # "Bad user name or password", ...). Under VERSION2 even a 3.1.1
+            # broker's CONNACK errors arrive as MQTT-v5 reason codes, so the
+            # old 1-5 int label table could never match again — deleted (v2.0.0).
+            msg = f"MQTT connect failed: {reason_code}"
             # paho retries forever — a wrong password used to produce this
             # ERROR on EVERY reconnect attempt. Report each distinct reason
             # once per outage (v1.10.0); a successful connect re-arms.
@@ -3052,9 +3089,18 @@ class Plugin(indigo.PluginBase):
                 "msg": "MQTT broker unreachable — check host/port and that the "
                        "broker is running (will keep retrying quietly)"}))
 
-    def _on_mqtt_disconnect(self, client, userdata, rc):
+    def _on_mqtt_disconnect(self, client, userdata, disconnect_flags,
+                            reason_code, properties=None):
+        # paho 2.x VERSION2 signature (v2.0.0). Normalise at the boundary so
+        # the main-thread __disconnected__ route keeps its int semantics
+        # (0 = clean); carry the readable reason for the log line.
         self.mqtt_connected = False
-        self.msg_queue.put(("__disconnected__", {"rc": rc}))
+        try:
+            rc_val = int(reason_code.value)
+        except (AttributeError, TypeError, ValueError):
+            rc_val = 0 if reason_code in (0, None) else 1
+        self.msg_queue.put(("__disconnected__",
+                            {"rc": rc_val, "reason": str(reason_code)}))
 
     def _on_mqtt_message(self, client, userdata, msg):
         self.last_rx_ts = time.time()   # liveness: any inbound message proves the link is alive
@@ -3095,7 +3141,10 @@ class Plugin(indigo.PluginBase):
             if rc == 0:
                 log("MQTT disconnected cleanly")
             else:
-                log(f"MQTT disconnected unexpectedly (rc={rc}) — will auto-reconnect", level="WARNING")
+                reason = payload.get("reason", "")
+                detail = f"rc={rc}" + (f", {reason}" if reason else "")
+                log(f"MQTT disconnected unexpectedly ({detail}) — will "
+                    f"auto-reconnect", level="WARNING")
             return
         if topic == "__error__":
             log(payload.get("msg", "MQTT error"), level="ERROR")

@@ -1,9 +1,14 @@
 # Zigbee2MQTT Bridge runtime dependencies.
 # Indigo pip-installs this into Contents/Packages/ at plugin startup.
 #
-# paho 1.x is a DELIBERATE pin: the v1.9.14 MQTT liveness watchdog is tuned
-# around its reconnect behaviour — a 2.x upgrade needs CallbackAPIVersion
-# changes and a full soak test, not a casual bump.
+# paho 2.x since v2.0.0: plugin.py passes CallbackAPIVersion.VERSION2 to
+# mqtt.Client() and the connect/disconnect callbacks use the VERSION2
+# signatures (reason_code/properties). Do NOT downgrade to 1.x without
+# reverting those (the 1.x Client() call would raise on the required
+# callback_api_version argument in reverse).
+# The v1.9.14 application-level liveness watchdog carries over unchanged —
+# it is client-version-agnostic (silence-based, plus a probe since v1.9.22)
+# and still guards the half-open-socket wedge auto-reconnect can miss.
 # colormath was removed in v1.9.16 (unmaintained + dragged numpy in; the
 # XY-to-RGB conversion is now pure Python inside plugin.py).
-paho-mqtt==1.6.1
+paho-mqtt==2.1.0
