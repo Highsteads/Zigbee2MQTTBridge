@@ -39,6 +39,14 @@
         <Label>Garage Topic Prefix:</Label>
         <Description>Optional second Z2M instance topic prefix (e.g. "zigbee2mqtt_garage"). Leave blank to disable.</Description>
     </Field>
+
+    <Field id="advancedLabel" type="label">
+        <Label>--- Advanced ---</Label>
+    </Field>
+    <Field id="mqtt_silence_limit" type="textfield" defaultValue="300">
+        <Label>Watchdog Silence Limit (s):</Label>
+        <Description>Seconds of MQTT silence before the liveness watchdog probes (and, if unanswered, rebuilds) the connection. Raise this on a small/quiet Zigbee network. Minimum 60.</Description>
+    </Field>
     <Field id="showDebugInfo" type="checkbox" defaultValue="false">
         <Label>Show Debug Info in Event Log</Label>
     </Field>

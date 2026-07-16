@@ -7,7 +7,44 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Fable 5
 # Date:        16-07-2026
-# Version:     1.9.21
+# Version:     1.9.22
+# v1.9.22 (16-07-2026): Fable 5 deep-review batch 2 (mediums).
+#   * Cross-bridge routing: friendly_name_map is now keyed by
+#     (mqtt_prefix, friendly_name) — a name shared between the house and
+#     garage bridges used to collide into one entry, bleeding one device's
+#     state onto the other and blocking the second from ever being created.
+#     All lookups (state routing, availability, creation exists-check,
+#     capability-refresh fname fallback, rename/prefix-migration, reclassify)
+#     are prefix-qualified; a prefix migration now moves the map key even
+#     without a rename.
+#   * Honest command logging: _publish returns True only when the message was
+#     accepted by a live client (connected + rc==0); new _publish_cmd logs
+#     'sent ...' on success and an ERROR naming the device on failure — the
+#     action handlers no longer claim 'sent' for commands that died on a
+#     disconnected/wedged client.
+#   * Watchdog: two-stage liveness check — on silence it first PROBES
+#     (bridge/request/devices, whose reply arrives on the existing
+#     subscription) and only rebuilds if the probe is still unanswered at the
+#     next tick, so a legitimately QUIET network (sparse install) no longer
+#     triggers an endless rebuild cycle. Silence limit is now a guarded pref
+#     (mqtt_silence_limit, min 60s, default 300).
+#   * _hs_to_rgb: saturation divides by 100 not 255 — z2m publishes color_hs
+#     saturation 0-100, so reported colours were capped at ~39% saturation.
+#   * Discover & Create resilience: detection/props-build moved inside the
+#     per-device try; malformed (non-dict) exposes entries skipped in
+#     _detect_device_type, _should_reclassify_as_button and _iter_features —
+#     one bad definition costs only itself, not the whole pass.
+#   * deviceStartComm's settle-delay Timer is tracked per-device, daemonised,
+#     and cancelled on deviceStopComm/shutdown (was fire-and-forget).
+#   * smoke joined the capability system: has_smoke detection, seeded state
+#     with gate (completes v1.9.21's semantic handling for existing devices).
+#   * Tests 551 -> 579: cross-bridge collision suite, probe state machine,
+#     publish honesty, saturation scale, first-ever coverage for
+#     deviceStartComm happy path / didDeviceCommPropertyChange /
+#     _ensure_device_states gating / refresh_device_capabilities; stub gained
+#     opt-in strict state writes; the v1.9.9 reclassify test's indigo.device
+#     replacement is now monkeypatched (no longer leaks) and its assertion
+#     can no longer pass vacuously.
 # v1.9.21 (16-07-2026): Fable 5 deep-review batch 1 (highs).
 #   * HIGH classification: a device with an action enum AND an output capability
 #     (switch composite or writable binary state) is now created as z2mRelay,
@@ -496,15 +533,20 @@ def _xy_to_rgb(x, y):
     return (min(100, round(r * 100)), min(100, round(g * 100)), min(100, round(b * 100)))
 
 
-def _hs_to_rgb(hue_360, saturation_255):
-    """Convert zigbee2mqtt hue (0-360) + saturation (0-255) to sRGB 0-100.
+def _hs_to_rgb(hue_360, saturation_100):
+    """Convert zigbee2mqtt hue (0-360) + saturation (0-100) to sRGB 0-100.
+
+    v1.9.22: saturation divides by 100, not 255 — zigbee2mqtt publishes
+    color_hs saturation on a 0-100 scale (herdsman-converters maps the ZCL
+    0-254 range to 0-100 at publish time). The old /255 capped Indigo's
+    reported saturation at ~39% of actual.
 
     Hue is wrapped and saturation clamped so a malformed payload (out-of-range
     hue/saturation) can't push colorsys into returning out-of-range channels and
     hence negative or >100 RGB. Mirrors the clamping the xy path already does.
     """
     h = (hue_360 % 360.0) / 360.0
-    s = max(0.0, min(1.0, saturation_255 / 255.0))
+    s = max(0.0, min(1.0, saturation_100 / 100.0))
     r, g, b = colorsys.hsv_to_rgb(h, s, 1.0)
     # round() not int() so a fully-saturated channel reports 100 not 99.
     return (max(0, min(100, round(r * 100))),
@@ -577,6 +619,8 @@ def _iter_features(exposes):
     yield all nested features from any composite entries.
     """
     for entry in exposes:
+        if not isinstance(entry, dict):
+            continue    # malformed exposes entry — skip, don't abort the caller
         yield entry
         sub = entry.get("features", [])
         if sub:
@@ -608,6 +652,13 @@ def _detect_device_type(exposes, model=""):
         if feature_names <= {"linkquality", "link_quality"} or not feature_names:
             return "z2mRepeater"
 
+    if not exposes:
+        return "z2mSensor"
+
+    # Drop malformed (non-dict) entries once, so the direct top-level loops
+    # below can't crash on a junk element (v1.9.22 — _iter_features already
+    # skips them, but `for entry in exposes` does not).
+    exposes = [e for e in exposes if isinstance(e, dict)]
     if not exposes:
         return "z2mSensor"
 
@@ -770,6 +821,7 @@ def _detect_sensor_capabilities(exposes):
         "has_contact":      "contact"      in names,
         "has_occupancy":    ("occupancy" in names or "presence" in names or "motion" in names),
         "has_water_leak":   "water_leak"   in names,
+        "has_smoke":        "smoke"        in names,
         "has_battery":      "battery"      in names,
         "has_pressure":     "pressure"     in names,
         "has_illuminance":  any(n in names for n in ("illuminance", "illuminance_lux")),
@@ -905,12 +957,25 @@ class Plugin(indigo.PluginBase):
         # MQTT liveness backstop — stamp of last inbound message + last watchdog check.
         self.last_rx_ts       = time.time()
         self._last_mqtt_check = 0.0
+        # Outstanding liveness probe: ts of the bridge/request/devices probe the
+        # watchdog sent to distinguish a wedged socket from a QUIET network.
+        # 0.0 = no probe outstanding.
+        self._probe_sent_ts   = 0.0
+
+        # Per-device state-request timers (deviceStartComm's settle delay),
+        # tracked so stop/shutdown can cancel them (v1.9.22 — an untracked
+        # Timer could fire after its device was deleted or the plugin stopped).
+        self._state_request_timers = {}  # type: dict[int, threading.Timer]
 
         # bridge/devices cache: ieee_address -> full device dict
         self.bridge_devices = {}     # type: dict[str, dict]
 
-        # Active Indigo devices: friendly_name -> indigo device id
-        self.friendly_name_map = {}  # type: dict[str, int]
+        # Active Indigo devices: (mqtt_prefix, friendly_name) -> indigo device id.
+        # Prefix-qualified since v1.9.22: with two bridges (house + garage) a
+        # friendly name shared across them used to collide into ONE entry —
+        # both physical devices' payloads routed to a single Indigo device and
+        # the second could never be auto-created.
+        self.friendly_name_map = {}  # type: dict[tuple[str, str], int]
 
         # Active Indigo devices: ieee_address -> indigo device id
         # Used for O(1) rename detection when Z2M changes a friendly_name
@@ -948,6 +1013,8 @@ class Plugin(indigo.PluginBase):
 
     def shutdown(self):
         log(f"{PLUGIN_NAME} shutting down")
+        for dev_id in list(self._state_request_timers):
+            self._cancel_state_request(dev_id)
         self._stop_mqtt()
 
     # ── Mac sleep / wake — disconnect MQTT cleanly on sleep so Mosquitto
@@ -1054,7 +1121,7 @@ class Plugin(indigo.PluginBase):
 
         ieee = props.get("ieee_address", "")
         with self.maps_lock:
-            self.friendly_name_map[fname] = dev.id
+            self.friendly_name_map[(self._device_prefix(dev), fname)] = dev.id
             if ieee:
                 self.ieee_map[ieee] = dev.id
 
@@ -1104,7 +1171,24 @@ class Plugin(indigo.PluginBase):
 
         # Request current state after brief delay (MQTT needs time to settle)
         prefix = self._device_prefix(dev)
-        threading.Timer(STATE_REQUEST_DELAY, self._request_state, args=(fname, dev.deviceTypeId, prefix)).start()
+        self._schedule_state_request(dev.id, fname, dev.deviceTypeId, prefix)
+
+    def _schedule_state_request(self, dev_id, fname, device_type_id, prefix):
+        """Ask the device for its state after a short settle delay. Timers are
+        daemonised and tracked per-device so deviceStopComm/shutdown can cancel
+        them — an untracked Timer could fire after the device was deleted or
+        the plugin stopped (v1.9.22; also the deviceStartComm test seam)."""
+        self._cancel_state_request(dev_id)
+        t = threading.Timer(STATE_REQUEST_DELAY, self._request_state,
+                            args=(fname, device_type_id, prefix))
+        t.daemon = True
+        self._state_request_timers[dev_id] = t
+        t.start()
+
+    def _cancel_state_request(self, dev_id):
+        t = self._state_request_timers.pop(dev_id, None)
+        if t is not None:
+            t.cancel()
 
     # Expected displayStateId per device type — must match <UiDisplayStateId> in
     # Devices.xml.  Used by deviceStartComm to retroactively repair the cached
@@ -1177,6 +1261,7 @@ class Plugin(indigo.PluginBase):
             ("contact",      False),
             ("motion",       False),
             ("waterLeak",    False),
+            ("smoke",        False),
             ("battery",      0),
             ("pressure",     0.0),
             ("illuminance",  0.0),
@@ -1231,6 +1316,7 @@ class Plugin(indigo.PluginBase):
                                 "contact": "has_contact",
                                 "motion": "has_occupancy",
                                 "waterLeak": "has_water_leak",
+                                "smoke": "has_smoke",
                                 "pressure": "has_pressure",
                                 "illuminance": "has_illuminance",
                                 "battery": "has_battery"},
@@ -1686,8 +1772,9 @@ class Plugin(indigo.PluginBase):
             return
         fname = dev.pluginProps.get("friendly_name", "")
         ieee = dev.pluginProps.get("ieee_address", "")
+        self._cancel_state_request(dev.id)
         with self.maps_lock:
-            self.friendly_name_map.pop(fname, None)
+            self.friendly_name_map.pop((self._device_prefix(dev), fname), None)
             self.ieee_map.pop(ieee, None)
             self._motion_states.pop(dev.id, None)
         if self.debug:
@@ -1728,15 +1815,13 @@ class Plugin(indigo.PluginBase):
         prefix = self._device_prefix(dev)
 
         if cmd == indigo.kDeviceAction.TurnOn:
-            self._publish(f"{prefix}/{fname}/set", {"state": "ON"})
-            log(f'sent "{dev.name}" on')
+            self._publish_cmd(f"{prefix}/{fname}/set", {"state": "ON"}, dev, "on")
         elif cmd == indigo.kDeviceAction.TurnOff:
-            self._publish(f"{prefix}/{fname}/set", {"state": "OFF"})
-            log(f'sent "{dev.name}" off')
+            self._publish_cmd(f"{prefix}/{fname}/set", {"state": "OFF"}, dev, "off")
         elif cmd == indigo.kDeviceAction.Toggle:
             new_state = "OFF" if dev.onState else "ON"
-            self._publish(f"{prefix}/{fname}/set", {"state": new_state})
-            log(f'sent "{dev.name}" toggle -> {new_state.lower()}')
+            self._publish_cmd(f"{prefix}/{fname}/set", {"state": new_state}, dev,
+                              f"toggle -> {new_state.lower()}")
         elif cmd == indigo.kDeviceAction.RequestStatus:
             self._request_state(fname, dev.deviceTypeId, prefix)
             log(f'sent "{dev.name}" status request')
@@ -1752,40 +1837,34 @@ class Plugin(indigo.PluginBase):
 
         if cmd == indigo.kDimmerRelayAction.TurnOn:
             if is_cover:
-                self._publish(f"{prefix}/{fname}/set", {"state": "OPEN"})
-                log(f'sent "{dev.name}" open')
+                self._publish_cmd(f"{prefix}/{fname}/set", {"state": "OPEN"}, dev, "open")
             else:
-                self._publish(f"{prefix}/{fname}/set", {"state": "ON"})
-                log(f'sent "{dev.name}" on')
+                self._publish_cmd(f"{prefix}/{fname}/set", {"state": "ON"}, dev, "on")
 
         elif cmd == indigo.kDimmerRelayAction.TurnOff:
             if is_cover:
-                self._publish(f"{prefix}/{fname}/set", {"state": "CLOSE"})
-                log(f'sent "{dev.name}" close')
+                self._publish_cmd(f"{prefix}/{fname}/set", {"state": "CLOSE"}, dev, "close")
             else:
-                self._publish(f"{prefix}/{fname}/set", {"state": "OFF"})
-                log(f'sent "{dev.name}" off')
+                self._publish_cmd(f"{prefix}/{fname}/set", {"state": "OFF"}, dev, "off")
 
         elif cmd == indigo.kDimmerRelayAction.Toggle:
             if is_cover:
                 new_state = "CLOSE" if dev.onState else "OPEN"
-                self._publish(f"{prefix}/{fname}/set", {"state": new_state})
-                log(f'sent "{dev.name}" toggle -> {new_state.lower()}')
             else:
                 new_state = "OFF" if dev.onState else "ON"
-                self._publish(f"{prefix}/{fname}/set", {"state": new_state})
-                log(f'sent "{dev.name}" toggle -> {new_state.lower()}')
+            self._publish_cmd(f"{prefix}/{fname}/set", {"state": new_state}, dev,
+                              f"toggle -> {new_state.lower()}")
 
         elif cmd == indigo.kDimmerRelayAction.SetBrightness:
             level = action.actionValue  # 0-100
             if is_cover:
-                self._publish(f"{prefix}/{fname}/set", {"position": level})
-                log(f'sent "{dev.name}" set position to {level}%')
+                self._publish_cmd(f"{prefix}/{fname}/set", {"position": level}, dev,
+                                  f"set position to {level}%")
             else:
                 brightness = _brightness_100_to_255(level)
                 payload = {"brightness": brightness, "state": "ON" if level > 0 else "OFF"}
-                self._publish(f"{prefix}/{fname}/set", payload)
-                log(f'sent "{dev.name}" set brightness to {level}%')
+                self._publish_cmd(f"{prefix}/{fname}/set", payload, dev,
+                                  f"set brightness to {level}%")
 
         elif cmd in (indigo.kDimmerRelayAction.BrightenBy, indigo.kDimmerRelayAction.DimBy):
             current = dev.brightness
@@ -1795,15 +1874,15 @@ class Plugin(indigo.PluginBase):
             else:
                 new_level = max(0, current - delta)
             if is_cover:
-                self._publish(f"{prefix}/{fname}/set", {"position": new_level})
                 verb = "open" if cmd == indigo.kDimmerRelayAction.BrightenBy else "close"
-                log(f'sent "{dev.name}" {verb} by {delta}% -> {new_level}%')
+                self._publish_cmd(f"{prefix}/{fname}/set", {"position": new_level}, dev,
+                                  f"{verb} by {delta}% -> {new_level}%")
             else:
                 brightness = _brightness_100_to_255(new_level)
                 payload = {"brightness": brightness, "state": "ON" if new_level > 0 else "OFF"}
-                self._publish(f"{prefix}/{fname}/set", payload)
                 verb = "brighten" if cmd == indigo.kDimmerRelayAction.BrightenBy else "dim"
-                log(f'sent "{dev.name}" {verb} by {delta}% -> {new_level}%')
+                self._publish_cmd(f"{prefix}/{fname}/set", payload, dev,
+                                  f"{verb} by {delta}% -> {new_level}%")
 
         elif cmd == indigo.kDimmerRelayAction.SetColorLevels:
             # Only applicable to z2mLight
@@ -1815,14 +1894,16 @@ class Plugin(indigo.PluginBase):
                 kelvin = int(color_vals["whiteTemperature"])
                 kelvin = max(1000, min(10000, kelvin))
                 mireds = _kelvin_to_mireds(kelvin)
-                self._publish(f"{prefix}/{fname}/set", {"color_temp": mireds, "state": "ON"})
-                log(f'sent "{dev.name}" set color temp to {kelvin}K')
+                self._publish_cmd(f"{prefix}/{fname}/set",
+                                  {"color_temp": mireds, "state": "ON"}, dev,
+                                  f"set color temp to {kelvin}K")
             elif all(k in color_vals for k in ("redLevel", "greenLevel", "blueLevel")):
                 r = int(round(float(color_vals["redLevel"])   / 100.0 * 255))
                 g = int(round(float(color_vals["greenLevel"]) / 100.0 * 255))
                 b = int(round(float(color_vals["blueLevel"])  / 100.0 * 255))
-                self._publish(f"{prefix}/{fname}/set", {"color": {"r": r, "g": g, "b": b}, "state": "ON"})
-                log(f'sent "{dev.name}" set color RGB ({r}, {g}, {b})')
+                self._publish_cmd(f"{prefix}/{fname}/set",
+                                  {"color": {"r": r, "g": g, "b": b}, "state": "ON"}, dev,
+                                  f"set color RGB ({r}, {g}, {b})")
             else:
                 log(f"{dev.name}: SetColorLevels — no actionable channels in {list(color_vals.keys())}", level="WARNING")
 
@@ -1938,26 +2019,30 @@ class Plugin(indigo.PluginBase):
     # ── Menu callbacks ────────────────────────────────────────────────────────
 
     def _get_existing_friendly_names(self):
-        """Return a set of friendly_names for all active devices owned by this plugin."""
+        """Return a set of (mqtt_prefix, friendly_name) for all active devices
+        owned by this plugin. Prefix-qualified (v1.9.22) so a name reused on the
+        other bridge doesn't block that bridge's device from being created."""
         names = set()
         for dev in indigo.devices.iter(self.pluginId):
             fn = dev.pluginProps.get("friendly_name", "")
             if fn:
-                names.add(fn)
+                names.add((self._device_prefix(dev), fn))
         return names
 
     def _try_create_device(self, device_data, folder_id, existing_names):
         """Attempt to create a single Indigo device from Z2M device_data.
 
         Returns one of: 'created', 'exists', 'coordinator', 'no_definition', 'error'.
-        existing_names is updated in-place when a device is successfully created.
+        existing_names is a set of (prefix, friendly_name) tuples, updated
+        in-place when a device is successfully created.
         """
         fname  = device_data.get("friendly_name", "")
         d_type = device_data.get("type", "")
+        d_prefix = device_data.get("_mqtt_prefix", self._topic_prefix())
 
         if d_type == "Coordinator":
             return "coordinator"
-        if fname in existing_names:
+        if (d_prefix, fname) in existing_names:
             return "exists"
 
         definition = device_data.get("definition")
@@ -1965,12 +2050,15 @@ class Plugin(indigo.PluginBase):
             log(f"  skip (not yet interviewed by z2m): {fname}", level="WARNING")
             return "no_definition"
 
-        exposes        = definition.get("exposes", [])
-        device_type_id = _detect_device_type(exposes, model=definition.get("model", ""))
-        plugin_props   = self._build_plugin_props(device_type_id, device_data, definition, exposes)
-        plugin_props["mqtt_prefix"] = device_data.get("_mqtt_prefix", self._topic_prefix())
-
         try:
+            # Detection/props-build INSIDE the guard (v1.9.22): a malformed or
+            # schema-shifted definition used to raise out of these helpers and
+            # abort the WHOLE Discover & Create pass / auto-create batch — one
+            # bad device must cost only itself.
+            exposes        = definition.get("exposes", [])
+            device_type_id = _detect_device_type(exposes, model=definition.get("model", ""))
+            plugin_props   = self._build_plugin_props(device_type_id, device_data, definition, exposes)
+            plugin_props["mqtt_prefix"] = device_data.get("_mqtt_prefix", self._topic_prefix())
             new_dev = indigo.device.create(
                 protocol=indigo.kProtocol.Plugin,
                 name=fname,
@@ -1983,7 +2071,7 @@ class Plugin(indigo.PluginBase):
             model  = definition.get("model", "")
             log(f"  created {device_type_id}: '{new_dev.name}'"
                 + (f" ({vendor} {model})" if vendor or model else ""))
-            existing_names.add(fname)  # prevent duplicate creation within same pass
+            existing_names.add((d_prefix, fname))  # prevent duplicate creation within same pass
             return "created"
         except Exception as e:
             log(f"  error creating '{fname}': {e}", level="ERROR")
@@ -2095,7 +2183,9 @@ class Plugin(indigo.PluginBase):
                 "'Refresh Device List from MQTT' first.", level="WARNING")
             return
 
-        # Index bridge cache by both ieee and friendly_name for fast lookup
+        # Index bridge cache by both ieee and (prefix, friendly_name) for fast
+        # lookup — the fname fallback is prefix-qualified (v1.9.22) so a name
+        # shared across the two bridges can't resolve to the wrong entry.
         by_ieee = {}
         by_fname = {}
         for d in self.bridge_devices.values():
@@ -2104,7 +2194,7 @@ class Plugin(indigo.PluginBase):
             if ieee:
                 by_ieee[ieee] = d
             if fn:
-                by_fname[fn] = d
+                by_fname[(d.get("_mqtt_prefix", self._topic_prefix()), fn)] = d
 
         changed = unchanged = missing = no_def = skipped = 0
         for dev in indigo.devices.iter(self.pluginId):
@@ -2128,7 +2218,7 @@ class Plugin(indigo.PluginBase):
 
             data = by_ieee.get(ieee) if ieee else None
             if data is None and fname:
-                data = by_fname.get(fname)
+                data = by_fname.get((self._device_prefix(dev), fname))
 
             if data is None:
                 log(f"  {dev.name}: not in bridge cache (ieee={ieee or '?'}, "
@@ -2364,23 +2454,84 @@ class Plugin(indigo.PluginBase):
         if self.mqtt_client is None:
             return  # not started, or deliberately stopped
         silent = now - self.last_rx_ts
-        if silent > MQTT_SILENCE_LIMIT:
-            log(f"MQTT silent for {silent:.0f}s (limit {MQTT_SILENCE_LIMIT}s) — rebuilding "
-                f"connection (paho loop assumed wedged)", level="WARNING")
+        limit  = self._silence_limit()
+        if silent <= limit:
+            self._probe_sent_ts = 0.0   # traffic flowing — clear any stale probe
+            return
+
+        # v1.9.22: silence alone can't distinguish a wedged socket from a
+        # legitimately QUIET network (keepalive PINGRESPs don't fire on_message
+        # — a sparse install with a few battery sensors would rebuild every
+        # cycle forever). Two-stage check: first PROBE — request the device
+        # list, whose response arrives on the existing prefix/# subscription
+        # and stamps last_rx_ts. Only if a probe is still unanswered by the
+        # NEXT watchdog tick is the socket declared wedged and rebuilt.
+        if self._probe_sent_ts and self.last_rx_ts < self._probe_sent_ts:
+            log(f"MQTT silent for {silent:.0f}s (limit {limit}s) and liveness "
+                f"probe unanswered — rebuilding connection (paho loop assumed "
+                f"wedged)", level="WARNING")
+            self._probe_sent_ts = 0.0
+            self._rebuild_mqtt()
+            return
+        prefix = self._topic_prefix()
+        if self._publish(f"{prefix}/bridge/request/devices", {}):
+            self._probe_sent_ts = now
+            if self.debug:
+                log(f"MQTT silent for {silent:.0f}s — sent liveness probe "
+                    f"(bridge/request/devices), will rebuild if unanswered")
+        else:
+            # Client says it isn't even connected — no point probing.
+            log(f"MQTT silent for {silent:.0f}s (limit {limit}s) and client "
+                f"reports not connected — rebuilding", level="WARNING")
+            self._probe_sent_ts = 0.0
             self._rebuild_mqtt()
 
+    def _silence_limit(self):
+        """Watchdog silence limit in seconds — configurable for sparse/quiet
+        installs (pref mqtt_silence_limit), guarded coercion, floor of 60s."""
+        try:
+            return max(60, int(self.pluginPrefs.get("mqtt_silence_limit",
+                                                    MQTT_SILENCE_LIMIT)))
+        except (TypeError, ValueError):
+            return MQTT_SILENCE_LIMIT
+
     def _publish(self, topic, payload):
-        """Publish a JSON payload to an MQTT topic."""
+        """Publish a JSON payload to an MQTT topic.
+
+        Returns True only when the message was accepted by a live client with a
+        success rc — False when not connected, on a non-zero publish rc, or on
+        exception. Callers that report 'sent ...' to the user MUST check this
+        (v1.9.22): before, a command dropped on a disconnected/wedged client
+        still logged as sent."""
         with self.mqtt_lock:
             if not self.mqtt_connected or not self.mqtt_client:
                 log(f"MQTT not connected — cannot publish to {topic}", level="WARNING")
-                return
+                return False
             try:
-                self.mqtt_client.publish(topic, json.dumps(payload), qos=1)
+                info = self.mqtt_client.publish(topic, json.dumps(payload), qos=1)
+                rc = getattr(info, "rc", 0)
+                if rc != 0:
+                    log(f"MQTT publish rc={rc} on {topic} — message not queued",
+                        level="WARNING")
+                    return False
                 if self.debug:
                     log(f"MQTT publish -> {topic}: {payload}")
+                return True
             except Exception as e:
                 log(f"MQTT publish error on {topic}: {e}", level="ERROR")
+                return False
+
+    def _publish_cmd(self, topic, payload, dev, verb):
+        """Publish a device command and log honestly: 'sent ...' only when the
+        publish was actually handed to a live client, an ERROR naming the
+        device otherwise (the _publish WARNING alone doesn't say WHICH device's
+        command was lost)."""
+        if self._publish(topic, payload):
+            log(f'sent "{dev.name}" {verb}')
+            return True
+        log(f'FAILED to send "{dev.name}" {verb} — command not delivered',
+            level="ERROR")
+        return False
 
     def _request_state(self, friendly_name, device_type_id="z2mSensor", prefix=None):
         """Ask zigbee2mqtt to publish the current state for a device."""
@@ -2503,12 +2654,12 @@ class Plugin(indigo.PluginBase):
         # Handles friendly names with embedded slashes correctly
         if parts[-1] == "availability":
             fname = "/".join(parts[1:-1])
-            self._process_availability(fname, payload)
+            self._process_availability(fname, payload, prefix=effective_prefix)
             return
 
         # Device state: everything after prefix is the friendly_name
         fname = "/".join(parts[1:])
-        self._process_device_state(fname, payload)
+        self._process_device_state(fname, payload, prefix=effective_prefix)
 
     def _process_bridge_devices(self, payload, prefix=None):
         """Cache ALL non-coordinator, non-disabled zigbee2mqtt devices.
@@ -2575,12 +2726,16 @@ class Plugin(indigo.PluginBase):
                     if name_changed:
                         new_props["friendly_name"] = new_fname
                     dev.replacePluginPropsOnServer(new_props)
+                    # Repoint the prefix-qualified map on EITHER change — a
+                    # prefix migration moves the key even when the name is
+                    # unchanged (v1.9.22).
+                    with self.maps_lock:
+                        self.friendly_name_map.pop((stored_prefix, old_fname), None)
+                        self.friendly_name_map[
+                            (prefix, new_fname if name_changed else old_fname)] = dev.id
                     if name_changed:
                         dev.name = new_fname
                         dev.replaceOnServer()
-                        with self.maps_lock:
-                            self.friendly_name_map.pop(old_fname, None)
-                            self.friendly_name_map[new_fname] = dev.id
                     if prefix_changed and name_changed:
                         log(f"Device moved+renamed: '{old_fname}' -> '{new_fname}' "
                             f"(prefix: {stored_prefix} -> {prefix})")
@@ -2688,9 +2843,13 @@ class Plugin(indigo.PluginBase):
                 self.exception_handler(e, log_failing_statement=True,
                                        context=f"coordinator '{dev.name}' update")
 
-    def _process_availability(self, friendly_name, payload):
-        """Handle availability message — update the 'availability' state."""
-        dev_id = self.friendly_name_map.get(friendly_name)
+    def _process_availability(self, friendly_name, payload, prefix=None):
+        """Handle availability message — update the 'availability' state.
+        Lookup is prefix-qualified (v1.9.22) so a name shared across the two
+        bridges resolves to the right device."""
+        if prefix is None:
+            prefix = self._topic_prefix()
+        dev_id = self.friendly_name_map.get((prefix, friendly_name))
         if dev_id is None:
             return
         try:
@@ -2713,9 +2872,13 @@ class Plugin(indigo.PluginBase):
             self.exception_handler(e, log_failing_statement=True,
                                    context=f"availability update for '{friendly_name}'")
 
-    def _process_device_state(self, friendly_name, payload):
-        """Dispatch a device state payload to the type-specific handler."""
-        dev_id = self.friendly_name_map.get(friendly_name)
+    def _process_device_state(self, friendly_name, payload, prefix=None):
+        """Dispatch a device state payload to the type-specific handler.
+        Lookup is prefix-qualified (v1.9.22) so a name shared across the two
+        bridges routes each bridge's payloads to its own device."""
+        if prefix is None:
+            prefix = self._topic_prefix()
+        dev_id = self.friendly_name_map.get((prefix, friendly_name))
         if dev_id is None:
             return  # unknown device or from another plugin/prefix
         if not isinstance(payload, dict):
@@ -3237,6 +3400,7 @@ class Plugin(indigo.PluginBase):
                 data = d
                 break
         exposes = ((data or {}).get("definition") or {}).get("exposes") or []
+        exposes = [e for e in exposes if isinstance(e, dict)]
         if not exposes:
             # No exposes to re-check — only the no-output catch-all types may convert.
             return dev.deviceTypeId in ("z2mSensor", "z2mRepeater")
@@ -3330,7 +3494,7 @@ class Plugin(indigo.PluginBase):
                 props=new_props,
             )
             with self.maps_lock:
-                self.friendly_name_map[friendly_name] = new_dev.id
+                self.friendly_name_map[(mqtt_prefix, friendly_name)] = new_dev.id
                 if ieee_address:
                     self.ieee_map[ieee_address] = new_dev.id
             log(f"Reclassify complete: '{dev_name}' is now Z2M Button (id={new_dev.id})")

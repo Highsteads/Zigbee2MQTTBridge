@@ -180,7 +180,7 @@ def test_repeater_bogus_linkquality_silent(plugin, make_device):
 def test_availability_online_offline(plugin, make_device):
     dev = make_device(30, "Door", "z2mContactSensor",
                       pluginProps={"friendly_name": "Door"})
-    plugin.friendly_name_map["Door"] = 30
+    plugin.friendly_name_map[("zigbee2mqtt", "Door")] = 30
 
     plugin._process_availability("Door", {"state": "online"})
     assert dev.states["availability"] == "online"
@@ -193,7 +193,7 @@ def test_availability_bare_string_payload(plugin, make_device):
     """Some Z2M versions send the bare string 'online' instead of a JSON dict."""
     dev = make_device(31, "Door", "z2mContactSensor",
                       pluginProps={"friendly_name": "Door"})
-    plugin.friendly_name_map["Door"] = 31
+    plugin.friendly_name_map[("zigbee2mqtt", "Door")] = 31
 
     plugin._process_availability("Door", "online")
     assert dev.states["availability"] == "online"
@@ -203,7 +203,7 @@ def test_availability_repeater_mirrors_onoffstate(plugin, make_device):
     """Repeaters get onOffState = (state == 'online')."""
     dev = make_device(32, "Router", "z2mRepeater",
                       pluginProps={"friendly_name": "Router"})
-    plugin.friendly_name_map["Router"] = 32
+    plugin.friendly_name_map[("zigbee2mqtt", "Router")] = 32
 
     plugin._process_availability("Router", {"state": "online"})
     assert dev.states["onOffState"] is True
@@ -276,24 +276,30 @@ def test_reclassify_calls_ensure_folder_with_name(plugin, make_device, monkeypat
     dev = make_device(99, "MisidentifiedButton", "z2mRelay",
                       pluginProps={"friendly_name": "MisidentifiedButton",
                                    "ieee_address": "0xfff"})
-    # Avoid the real indigo.device.delete / create calls
+    # Avoid the real indigo.device.delete / create calls — MONKEYPATCHED (not a
+    # bare assignment, which permanently replaced indigo.device on the shared
+    # stub module and leaked into every later test — fixed v1.9.22).
     delete_calls = []
     create_calls = []
-    # Patch indigo at the stub level
     fake_delete = lambda d: delete_calls.append(d.id)
     fake_create = lambda **kw: (create_calls.append(kw) or
                                 _StubNewDev(create_calls[-1]))
-    indigo.device = type("X", (), {"delete": staticmethod(fake_delete),
-                                   "create": staticmethod(fake_create)})()
+    monkeypatch.setattr(
+        indigo, "device",
+        type("X", (), {"delete": staticmethod(fake_delete),
+                       "create": staticmethod(fake_create)})(),
+        raising=False)
     # set folderId attribute via the stub
     dev.folderId = 0   # root-level — this is the bug-triggering case
 
     plugin._reclassify_as_button(dev, {"action": "1_single"})
 
-    # The fix: _ensure_device_folder MUST have been called with a name argument
-    if calls:
-        assert calls[-1] != (), "_ensure_device_folder called with no arg (v1.9.8 bug)"
-        assert calls[-1][0] is not None
+    # The fix: _ensure_device_folder MUST have been called, with a name argument
+    # (a hard assertion — `if calls:` used to pass vacuously when the call never
+    # happened at all).
+    assert calls, "_ensure_device_folder was never called for a folderId=0 device"
+    assert calls[-1] != (), "_ensure_device_folder called with no arg (v1.9.8 bug)"
+    assert calls[-1][0] is not None
 
 
 # ── _should_reclassify_as_button gate (v1.9.15) ──────────────────────────────

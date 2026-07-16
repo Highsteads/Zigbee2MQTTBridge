@@ -18,10 +18,13 @@ def _capture_routes(plugin, monkeypatch):
                         lambda payload, prefix: calls.append(("bridge_state",   prefix, payload)))
     monkeypatch.setattr(plugin, "_process_bridge_info",
                         lambda payload, prefix: calls.append(("bridge_info",    prefix, payload)))
+    # fname handlers gained a prefix kwarg in v1.9.22 (prefix-qualified lookups)
     monkeypatch.setattr(plugin, "_process_availability",
-                        lambda fname, payload: calls.append(("availability",    fname, payload)))
+                        lambda fname, payload, prefix=None: calls.append(
+                            ("availability", fname, payload, prefix)))
     monkeypatch.setattr(plugin, "_process_device_state",
-                        lambda fname, payload: calls.append(("device_state",    fname, payload)))
+                        lambda fname, payload, prefix=None: calls.append(
+                            ("device_state", fname, payload, prefix)))
     return calls
 
 
@@ -36,7 +39,7 @@ def test_ignores_messages_from_unknown_prefix(plugin, monkeypatch):
 def test_routes_primary_prefix_device_state(plugin, monkeypatch):
     calls = _capture_routes(plugin, monkeypatch)
     plugin._process_message("zigbee2mqtt/Lounge Lamp", {"state": "ON"})
-    assert calls == [("device_state", "Lounge Lamp", {"state": "ON"})]
+    assert calls == [("device_state", "Lounge Lamp", {"state": "ON"}, "zigbee2mqtt")]
 
 
 def test_routes_garage_prefix(plugin_mod, monkeypatch):
@@ -45,7 +48,7 @@ def test_routes_garage_prefix(plugin_mod, monkeypatch):
          "mqtt_garage_topic_prefix": "zigbee2mqtt_garage"})
     calls = _capture_routes(plugin, monkeypatch)
     plugin._process_message("zigbee2mqtt_garage/Door", {"contact": True})
-    assert calls == [("device_state", "Door", {"contact": True})]
+    assert calls == [("device_state", "Door", {"contact": True}, "zigbee2mqtt_garage")]
 
 
 # ── Bridge sub-topics ────────────────────────────────────────────────────────
@@ -84,7 +87,7 @@ def test_bridge_unknown_subtopic_ignored(plugin, monkeypatch):
 def test_routes_availability(plugin, monkeypatch):
     calls = _capture_routes(plugin, monkeypatch)
     plugin._process_message("zigbee2mqtt/Door/availability", {"state": "online"})
-    assert calls == [("availability", "Door", {"state": "online"})]
+    assert calls == [("availability", "Door", {"state": "online"}, "zigbee2mqtt")]
 
 
 def test_routes_availability_with_slash_in_friendly_name(plugin, monkeypatch):
@@ -94,7 +97,7 @@ def test_routes_availability_with_slash_in_friendly_name(plugin, monkeypatch):
     calls = _capture_routes(plugin, monkeypatch)
     plugin._process_message("zigbee2mqtt/Hallway/Light/availability",
                             {"state": "online"})
-    assert calls == [("availability", "Hallway/Light", {"state": "online"})]
+    assert calls == [("availability", "Hallway/Light", {"state": "online"}, "zigbee2mqtt")]
 
 
 def test_routes_device_state_with_slash_in_friendly_name(plugin, monkeypatch):
@@ -102,7 +105,7 @@ def test_routes_device_state_with_slash_in_friendly_name(plugin, monkeypatch):
     calls = _capture_routes(plugin, monkeypatch)
     plugin._process_message("zigbee2mqtt/Hallway/Light",
                             {"state": "ON"})
-    assert calls == [("device_state", "Hallway/Light", {"state": "ON"})]
+    assert calls == [("device_state", "Hallway/Light", {"state": "ON"}, "zigbee2mqtt")]
 
 
 # ── Internal control topics ──────────────────────────────────────────────────

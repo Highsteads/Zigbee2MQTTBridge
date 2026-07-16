@@ -55,7 +55,7 @@ def test_light_brightness_nonzero_stays_on(plugin, make_device):
 def _eligible_sensor(plugin, make_device, dev_id):
     dev = make_device(dev_id, "Maybe Button", "z2mSensor",
                       pluginProps={"friendly_name": "Maybe Button", "ieee_address": f"0x{dev_id}"})
-    plugin.friendly_name_map["Maybe Button"] = dev.id
+    plugin.friendly_name_map[("zigbee2mqtt", "Maybe Button")] = dev.id
     plugin.bridge_devices = {}   # no exposes -> empty-exposes z2mSensor is eligible
     return dev
 
@@ -93,11 +93,11 @@ def test_maps_lock_is_reentrant(plugin):
 def test_device_stop_clears_all_maps(plugin, make_device):
     dev = make_device(820, "Gone", "z2mContactSensor",
                       pluginProps={"friendly_name": "Gone", "ieee_address": "0xgone"})
-    plugin.friendly_name_map["Gone"] = dev.id
+    plugin.friendly_name_map[("zigbee2mqtt", "Gone")] = dev.id
     plugin.ieee_map["0xgone"] = dev.id
     plugin._motion_states[dev.id] = {"presence": True}
     plugin.deviceStopComm(dev)
-    assert "Gone" not in plugin.friendly_name_map
+    assert ("zigbee2mqtt", "Gone") not in plugin.friendly_name_map
     assert "0xgone" not in plugin.ieee_map
     assert dev.id not in plugin._motion_states
 
@@ -194,7 +194,7 @@ def test_dispatch_routes_to_correct_handler(plugin, make_device, monkeypatch, ty
     monkeypatch.setattr(plugin, "_should_reclassify_as_button", lambda d: False)
 
     dev = make_device(850, "Dev", type_id, pluginProps={"friendly_name": "Dev"})
-    plugin.friendly_name_map["Dev"] = dev.id
+    plugin.friendly_name_map[("zigbee2mqtt", "Dev")] = dev.id
     plugin._process_device_state("Dev", {"state": "ON"})
 
     assert fired == [handler], f"{type_id} should route only to {handler}, got {fired}"

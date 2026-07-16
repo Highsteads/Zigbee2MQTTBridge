@@ -183,6 +183,21 @@ class FakeDevice:
     # ── server-side methods plugin.py calls on the device object ─────────────
 
     def updateStateOnServer(self, key, value, uiValue=None, **_kwargs):
+        # Optional strictness (v1.9.22, stub-drift fix): real Indigo REJECTS a
+        # write to a state key that isn't declared. Tests opt in by setting
+        # dev.strict_states = True after declaring static_state_keys (and any
+        # dynamic keys via pluginProps seenDynamicKeys) — the permissive default
+        # keeps the existing suite behaviour.
+        if getattr(self, "strict_states", False):
+            declared = set(self.static_state_keys)
+            declared.update(k for k in self.pluginProps.get(
+                "seenDynamicKeys", "").split(",") if k)
+            declared.update({"onOffState", "brightnessLevel", "sensorValue",
+                             "redLevel", "greenLevel", "blueLevel",
+                             "whiteTemperature"})   # native class states
+            if key not in declared:
+                raise KeyError(f"state key '{key}' not declared on {self.name} "
+                               f"(real Indigo rejects this write)")
         self.states[key]    = value
         self.state_writes.append((key, value, uiValue))
         if key == "onOffState":

@@ -175,12 +175,12 @@ def test_reclassify_repoints_friendly_and_ieee_maps(plugin, make_device, monkeyp
     dev = make_device(130, "Mystery Button", "z2mRelay",
                       pluginProps={"friendly_name": "Mystery Button",
                                    "ieee_address": "0xfeed"})
-    plugin.friendly_name_map["Mystery Button"] = dev.id
+    plugin.friendly_name_map[("zigbee2mqtt", "Mystery Button")] = dev.id
     plugin.ieee_map["0xfeed"] = dev.id
 
     plugin._reclassify_as_button(dev, {"action": "single"})
 
-    new_id = plugin.friendly_name_map.get("Mystery Button")
+    new_id = plugin.friendly_name_map.get(("zigbee2mqtt", "Mystery Button"))
     assert new_id is not None and new_id != 130
     assert plugin.ieee_map.get("0xfeed") == new_id
     assert 130 not in indigo.devices._by_id          # old device deleted
@@ -204,15 +204,15 @@ def test_bridge_devices_rename_updates_device_and_maps(plugin, make_device):
                                    "ieee_address": "0xr1",
                                    "mqtt_prefix": "zigbee2mqtt"})
     plugin.ieee_map["0xr1"] = dev.id
-    plugin.friendly_name_map["Old Name"] = dev.id
+    plugin.friendly_name_map[("zigbee2mqtt", "Old Name")] = dev.id
 
     plugin._process_bridge_devices([_z2m_dev("0xr1", "New Name")],
                                    prefix="zigbee2mqtt")
 
     assert dev.pluginProps["friendly_name"] == "New Name"
     assert dev.name == "New Name"
-    assert plugin.friendly_name_map.get("New Name") == dev.id
-    assert "Old Name" not in plugin.friendly_name_map
+    assert plugin.friendly_name_map.get(("zigbee2mqtt", "New Name")) == dev.id
+    assert ("zigbee2mqtt", "Old Name") not in plugin.friendly_name_map
 
 
 def test_bridge_devices_prefix_migration(plugin, make_device):

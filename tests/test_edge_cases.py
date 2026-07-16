@@ -17,7 +17,7 @@ def test_process_device_state_ignores_non_dict_payload(plugin, make_device):
     bridge/state) must NOT crash the device state dispatcher."""
     dev = make_device(1, "Plug", "z2mRelay",
                       pluginProps={"friendly_name": "Plug"})
-    plugin.friendly_name_map["Plug"] = 1
+    plugin.friendly_name_map[("zigbee2mqtt", "Plug")] = 1
     # bare string payload — should be a no-op, NOT raise
     plugin._process_device_state("Plug", "ON")
     plugin._process_device_state("Plug", None)
