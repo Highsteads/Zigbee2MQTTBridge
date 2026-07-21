@@ -7,7 +7,7 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Fable 5
 # Date:        16-07-2026
-# Version:     2.0.0
+# Version:     2.0.1
 # v2.0.0 (16-07-2026): paho-mqtt 1.6.1 -> 2.1.0 migration (the one deliberately
 #   deferred structural item from the deep reviews). Isolated change:
 #   * mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=...) — the
@@ -260,6 +260,12 @@
 #     prefix so a misbehaving Z2M build is visible instead of just "no devices".
 #   * NEW guard-rails: GitHub Actions CI runs the full pytest suite + ruff
 #     (errors-only) on every push/PR; ruff.toml added; 4 lint errors fixed.
+#
+# v2.0.1 (21-07-2026): LOG-LEVEL FIX. indigo.server.log(level=...) wants a Python
+# logging INT — a STRING is silently ignored and the line logs as plain Info.
+# The log() helper passed its level name straight through, so every WARNING and
+# ERROR raised through it had been appearing as an ordinary Info line. Added
+# _lvl() to map the name to a real level. Estate-wide sweep (38 files).
 #
 # v1.9.15 (06-06-2026): deep-review fixes.
 #   * HIGH: universal-action handler was named actionControlUniversalDevices — Indigo's
@@ -599,8 +605,32 @@ _RESERVED_STATE_NAMES = {
 
 # ── Pure helper functions (no Indigo dependency) ─────────────────────────────
 
+import logging
+
+
+_LOG_LEVELS = {
+    "DEBUG":   logging.DEBUG,
+    "INFO":    logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR":   logging.ERROR,
+    "CRITICAL": logging.CRITICAL,
+}
+
+
+def _lvl(level):
+    """Map a level NAME to a Python logging int.
+
+    indigo.server.log(level=...) wants an int. A STRING is silently ignored
+    and the line logs as plain Info, which hid every WARNING and ERROR raised
+    through log() until this was corrected (21-07-2026).
+    """
+    if isinstance(level, int):
+        return level
+    return _LOG_LEVELS.get(str(level).upper(), logging.INFO)
+
+
 def log(message, level="INFO"):
-    indigo.server.log(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] {message}", level=level)
+    indigo.server.log(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] {message}", level=_lvl(level))
 
 
 def _xy_to_rgb(x, y):
