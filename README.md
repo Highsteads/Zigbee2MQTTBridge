@@ -30,7 +30,7 @@ An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zig
 - Indigo 2023.2 or later (developed and run on Indigo 2025.2 / Python 3.13)
 - zigbee2mqtt running and reachable over MQTT
 - MQTT credentials in `IndigoSecrets.py` OR entered in PluginConfig (fallback added in v1.9.6)
-- Bundled Python dependencies, installed automatically on first run: `paho-mqtt` only (as of v1.9.16)
+- One bundled Python dependency, installed automatically on first run: `paho-mqtt` 2.1.0, pinned since v2.0.0
 
 ## Installation
 
@@ -116,6 +116,23 @@ survives a restart. It defaults to ON.
 Re-run **Discover & Create Devices** any time you add new Zigbee devices, and
 **Refresh Device Capabilities** after a device's zigbee2mqtt definition changes (it
 re-detects capabilities and corrects the Indigo subType without delete-and-recreate).
+
+## Plugin menu
+
+**Plugins → Zigbee2MQTT Bridge →**
+
+| Menu item | What it does |
+|-----------|--------------|
+| **Discover & Create Devices** | Create an Indigo device for every zigbee2mqtt device that does not have one yet, all in the **Zigbee2MQTT** folder. |
+| **Create Coordinator Devices** | Add one coordinator device per configured bridge, named `Z2M Bridge (<prefix>)`. |
+| **Refresh Device List from MQTT** | Ask each bridge to republish its device list, so the plugin's cache catches up without a restart. |
+| **Refresh Device Capabilities** | Re-read what each existing device can do from the live `exposes` definition and correct its capability flags and Indigo subType, with no delete and recreate. |
+| **Report Orphaned Devices** | List Indigo devices whose Zigbee counterpart has gone from the bridge. Reports only — it never deletes anything. |
+| **Enable Pairing (Permit Join, 254s)** | Open every configured bridge for pairing for 254 seconds, zigbee2mqtt's longest window. The coordinator device's permit-join state confirms it took. |
+| **Disable Pairing (Permit Join Off)** | Close every bridge to pairing at once. |
+| **Toggle Timestamps in Log (on/off)** | Turn the millisecond log prefix on or off. |
+| **Test MQTT Connection** | Dump the full banner and then check the broker, the traffic and the bridge in one go — made for a support post. |
+| **Show Plugin Info** | Log the full plugin and environment banner. |
 
 ## Acknowledgements
 
