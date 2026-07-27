@@ -289,3 +289,14 @@ PUSHOVER_APP_TOKEN = ""
 
 # Weekly home digest recipient (weekly_home_digest.py)
 DIGEST_EMAIL = ""
+
+# Hourly Indigo log error watch recipient (Log_Error_Watch.py). Falls back to
+# DIGEST_EMAIL if this is blank, so the watcher still reports either way.
+LOG_WATCH_EMAIL = ""
+
+# ESPHome Bridge — default API encryption key (optional)
+# Required by: ESPHomeBridge, for nodes whose YAML sets 'api: encryption: key:'.
+# Per-device keys entered in a device's Configure dialog take priority; this is
+# the fallback used for any node that has none of its own. Base64, as printed
+# by 'esphome config'.
+ESPHOME_DEFAULT_ENCRYPTION_KEY = ""
