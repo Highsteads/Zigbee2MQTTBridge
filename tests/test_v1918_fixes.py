@@ -13,8 +13,6 @@
 import queue
 import time
 
-import pytest
-
 
 # ── Robustness folds: colour + port coercion ─────────────────────────────────
 

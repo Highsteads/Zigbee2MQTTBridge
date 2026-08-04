@@ -61,7 +61,7 @@ def _eligible_sensor(plugin, make_device, dev_id):
 
 
 def test_reclassify_skips_bare_index_action(plugin, make_device, monkeypatch):
-    dev = _eligible_sensor(plugin, make_device, 810)
+    _eligible_sensor(plugin, make_device, 810)   # registers it; the object is not needed
     monkeypatch.setattr(plugin, "_should_reclassify_as_button", lambda d: True)
     monkeypatch.setattr(plugin, "_capture_raw_fields", lambda *a, **k: None)
     called = []
@@ -71,7 +71,7 @@ def test_reclassify_skips_bare_index_action(plugin, make_device, monkeypatch):
 
 
 def test_reclassify_fires_on_named_action(plugin, make_device, monkeypatch):
-    dev = _eligible_sensor(plugin, make_device, 811)
+    _eligible_sensor(plugin, make_device, 811)   # registers it; the object is not needed
     monkeypatch.setattr(plugin, "_should_reclassify_as_button", lambda d: True)
     monkeypatch.setattr(plugin, "_capture_raw_fields", lambda *a, **k: None)
     called = []

@@ -99,7 +99,6 @@ def test_creation_not_blocked_by_same_name_on_other_prefix(plugin, make_device):
             "definition": {"exposes": [
                 {"name": "action", "type": "enum", "access": 1,
                  "values": ["single"]}]}}
-    import pytest
     shim = DeviceShim(indigo.devices)
     old_device = getattr(indigo, "device", None)
     indigo.device = shim

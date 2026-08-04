@@ -247,9 +247,22 @@ def test_action_bad_numeric_value_logs_error_not_crash(plugin, make_device,
 
 # ── not-connected error paths (#53) ───────────────────────────────────────────
 
+# _start_mqtt_locked's first line is `if mqtt is None: log(ERROR); return` — the
+# paho-missing guard. Both tests below are about what happens AFTER it, so they
+# must assert that paho is present rather than assume it. Without this the two
+# tests passed on a Mac with paho in site-packages and failed on CI, which
+# installs pytest only — the suite is deliberately paho-free (see conftest's
+# FakeReasonCode), so nothing else in it noticed. Red from 02-Aug to 04-Aug-2026.
+def _pretend_paho_is_installed(monkeypatch, plugin_mod):
+    """Satisfy the import guard. Neither test touches the module beyond the
+    None check, so a bare sentinel is enough and keeps the suite paho-free."""
+    monkeypatch.setattr(plugin_mod, "mqtt", object())
+
+
 def test_start_mqtt_without_broker_is_not_an_error(plugin, plugin_mod,
                                                    monkeypatch):
     """First-run 'not configured' logs INFO, never ERROR (estate convention)."""
+    _pretend_paho_is_installed(monkeypatch, plugin_mod)
     logged = []
     monkeypatch.setattr(plugin_mod, "log",
                         lambda msg, level="INFO": logged.append((level, msg)))
@@ -262,6 +275,7 @@ def test_start_mqtt_without_broker_is_not_an_error(plugin, plugin_mod,
 
 
 def test_start_mqtt_guards_against_double_start(plugin, plugin_mod, monkeypatch):
+    _pretend_paho_is_installed(monkeypatch, plugin_mod)
     stopped = []
     monkeypatch.setattr(plugin, "_stop_mqtt_locked",
                         lambda: stopped.append(1) or setattr(
@@ -271,3 +285,15 @@ def test_start_mqtt_guards_against_double_start(plugin, plugin_mod, monkeypatch)
     plugin.mqtt_client = object()          # a client is already live
     plugin._start_mqtt()
     assert stopped == [1], "existing client must be stopped before a new start"
+
+
+def test_start_mqtt_without_paho_is_an_error(plugin, plugin_mod, monkeypatch):
+    """The guard those two step over deserves its own cover: with paho missing,
+    _start_mqtt must say so at ERROR and build no client."""
+    logged = []
+    monkeypatch.setattr(plugin_mod, "log",
+                        lambda msg, level="INFO": logged.append((level, msg)))
+    monkeypatch.setattr(plugin_mod, "mqtt", None)
+    plugin._start_mqtt()
+    assert plugin.mqtt_client is None
+    assert any(lv == "ERROR" and "paho-mqtt not available" in m for lv, m in logged)
