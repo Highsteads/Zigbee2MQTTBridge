@@ -91,6 +91,14 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+**v2.3.0** — **Device settings stay where you put them.** Some sensors keep their settings in their own firmware, not in Indigo — sensitivity, detection delays, reporting intervals. Nothing owned those settings, so when a device forgot them nothing noticed. Two presence sensors here were set deliberately in June, quietly reverted to factory defaults after a battery change, and stayed wrong for four weeks.
+
+Each device's settings dialog now has a **Device Settings** section, built from what that particular device says it can be told. Set a value there and the plugin remembers it, notices when the device drifts off it, says so in the log, and puts it back.
+
+Only real settings appear — ones the device can also report back, so the plugin can tell "it has drifted" from "it agrees". Things like *Restart Device* and *Start Learning* look like settings but are one-shot commands, and are deliberately left out: re-applying one every time a device reconnected would restart the sensor over and over.
+
+Leave a field blank and the plugin has no opinion about it, which is the default for everything.
+
 **v2.2.0** — **Mains-powered devices no longer show a flat battery.** zigbee2mqtt says how each device is powered and the plugin was ignoring it, so anything on mains was given a battery reading of 0% — which looks exactly like a dead cell. Those devices now carry no battery reading at all, and any that already picked one up is labelled "Mains" instead. A device whose power source zigbee2mqtt does not report keeps its battery reading, deliberately: hiding a genuinely flat one would be the worse mistake.
 
 Also a large internal tidy-up. The main plugin file had grown past 5,000 lines and is now split across a dozen focused modules. Nothing changes in use — same devices, same states, same settings — but future work lands in sensible places instead of one enormous file.
