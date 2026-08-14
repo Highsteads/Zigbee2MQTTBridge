@@ -106,6 +106,17 @@ class PluginBase:
         self.logger = _Logger()
 
     # plugin.py overrides most of these; PluginBase shouldn't need to do real work.
+    # PluginBase's dynamic-ConfigUI hook. The real one (plugin_base.py:1240)
+    # returns the type's static ConfigUIRawXml; the stub returns a minimal
+    # well-formed document so a mixin overriding it has something to append to.
+    device_config_ui_xml = "<?xml version=\"1.0\"?>\n<ConfigUI>\n</ConfigUI>"
+
+    def getDeviceConfigUiXml(self, typeId, devId):
+        return self.device_config_ui_xml
+
+    def closedDeviceConfigUi(self, values_dict, user_cancelled, type_id, dev_id):
+        return None
+
     def deviceUpdated(self, *_args, **_kwargs): pass
     def stateListOrDisplayStateIdChanged(self, *_args, **_kwargs): pass
 

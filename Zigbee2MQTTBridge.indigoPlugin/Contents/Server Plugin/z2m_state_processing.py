@@ -162,6 +162,18 @@ class StateProcessingMixin:
             self.exception_handler(e, log_failing_statement=True,
                                    context=f"{dev.name} raw-field capture")
 
+        # Compare the payload against any pinned device settings and re-apply
+        # what has drifted (v2.3.0).  Deliberately here, on the back of an
+        # INBOUND message: a battery sensor only accepts a write while it is
+        # awake and zigbee2mqtt does not reliably queue one for a sleeping
+        # device, so a device that has just published is the one moment a write
+        # is certain to land.
+        try:
+            self._check_setting_drift(dev, payload)
+        except Exception as e:
+            self.exception_handler(e, log_failing_statement=True,
+                                   context=f"{dev.name} setting drift check")
+
     def _is_valid_state_id(self, key):
         """Indigo XML state IDs must start with an ASCII letter and contain only
         ASCII letters and digits.  Underscores are NOT accepted — Indigo's XML

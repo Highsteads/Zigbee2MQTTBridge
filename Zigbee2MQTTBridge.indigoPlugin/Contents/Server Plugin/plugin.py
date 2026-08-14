@@ -7,7 +7,34 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 5
 # Date:        14-08-2026
-# Version:     2.2.0
+# Version:     2.3.0
+#
+# v2.3.0 (14-08-2026): MANAGED DEVICE SETTINGS. A device's firmware settings
+# (sensitivity, delays, reporting intervals) live on the SENSOR, not in Indigo,
+# so nothing owned them and nothing noticed when they changed. Two FP300s were
+# set to AI-adaptive OFF on 24-Jun-2026 and were back ON by 06-Jul, inside a
+# burst of power_outage_count increments — a battery change restoring the
+# firmware defaults. They stayed wrong for FOUR WEEKS while bedroom presence
+# fragmented nightly, with nothing logged.
+# * Each device's config dialog now grows a Device Settings section, generated
+#   from its own settable exposes, via getDeviceConfigUiXml — an UNDOCUMENTED
+#   PluginBase hook (plugin_base.py:1240) whose default returns the static
+#   ConfigUIRawXml. Any failure falls back to that default, because a device
+#   that cannot open its dialog would be far worse than one without the section.
+# * ONLY exposes with access & SET *and* access & PUBLISHED are managed. The
+#   second half is load-bearing, not tidiness: without a readback we could
+#   never tell drift from agreement, and it is what keeps us away from the
+#   write-only entries, which are COMMANDS wearing a setting's clothes —
+#   restart_device, spatial_learning, identify, and the FP300's 24
+#   detection_range_N flags. Re-asserting restart_device on every reconnect
+#   would reboot the sensor in a loop.
+# * Drift is checked on the back of an INBOUND payload, which is the whole
+#   trick: a battery sensor only accepts a write while awake and zigbee2mqtt
+#   does not reliably queue one for a sleeping device, so a device that has
+#   just published is the one moment a write is certain to land.
+# * A null reading is NOT drift. zigbee2mqtt publishes nulls after a restart;
+#   treating one as disagreement would fire a write off the back of no
+#   information. Caught by a test, not by review.
 #
 # v2.2.0 (14-08-2026): the file split, and mains devices stop reporting a
 # battery they do not have.
@@ -646,6 +673,7 @@ from z2m_device_states import DeviceStatesMixin
 from z2m_menus import MenusMixin
 from z2m_mqtt import MqttMixin
 from z2m_native import NativeAttributesMixin
+from z2m_settings import SettingsMixin
 from z2m_state_processing import StateProcessingMixin
 
 
@@ -658,6 +686,7 @@ class Plugin(
     MenusMixin,
     MqttMixin,
     NativeAttributesMixin,
+    SettingsMixin,
     StateProcessingMixin,
     indigo.PluginBase,
 ):
