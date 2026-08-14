@@ -294,6 +294,14 @@ class MenusMixin:
                     caps.get("has_color_temp", False),
                 ))
 
+            # Backfill power_source onto devices created before v2.2.0 stored
+            # it. Only when zigbee2mqtt actually reports one — writing an empty
+            # string would look like a deliberate "unknown" rather than an
+            # absent field, and the mains check reads it either way.
+            reported_source = data.get("power_source")
+            if reported_source:
+                target["power_source"] = reported_source
+
             new_props = dict(props)
             diffs = []
             for k, v in target.items():

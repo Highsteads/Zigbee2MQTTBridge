@@ -1019,6 +1019,11 @@ class Plugin(
             "ieee_address":          device_data.get("ieee_address", ""),
             "vendor":                definition.get("vendor", ""),
             "model":                 definition.get("model", ""),
+            # zigbee2mqtt tells us how the device is powered ("Battery",
+            # "Mains (single phase)", or absent). Stored so a mains device is
+            # never given a battery state it can only ever report as 0 —
+            # which reads as a flat cell rather than as "no battery here".
+            "power_source":          device_data.get("power_source") or "",
         }
 
         if device_type_id == "z2mLight":

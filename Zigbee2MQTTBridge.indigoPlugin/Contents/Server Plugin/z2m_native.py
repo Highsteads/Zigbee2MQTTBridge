@@ -227,8 +227,16 @@ class NativeAttributesMixin:
         device corrects itself on its next payload.
         """
         try:
+            mains = self._is_mains_powered(dev.ownerProps)
             battery = self._coerce_battery_percent(dev.states.get("battery"))
-            if battery:
+            if mains and battery is not None:
+                # An existing mains device may already carry a battery state
+                # seeded to 0 by an older version. The state cannot be removed
+                # once it exists, so label it instead — a bare 0 reads as a
+                # flat cell, and a number that means nothing is worse than no
+                # number at all (v2.2.0).
+                dev.updateStateOnServer("battery", 0, uiValue="Mains")
+            elif battery:
                 self._mirror_native_battery(dev, battery)
             elif battery == 0 and self.debug:
                 log(f"{dev.name}: stored battery is 0 — skipping the native "

@@ -538,3 +538,58 @@ def test_health_report_says_all_clear_when_nothing_is_flapping(plugin,
     plugin.report_network_health()
     lines = [m for _, m in indigo.server.log_lines]
     assert any("steady" in m for m in lines)
+
+
+# ── mains-powered devices get no battery state (v2.2.0) ───────────────────────
+
+def test_mains_device_is_not_seeded_a_battery_state(plugin, make_device):
+    """A mains device has no cell, so a battery state seeded to 0 would read as
+    a flat battery for ever — absent presented as a reading."""
+    dev = make_device(760, "Garage Presence", "z2mOccupancySensor",
+                      pluginProps={"friendly_name": "Garage Presence",
+                                   "power_source": "Mains (single phase)",
+                                   "has_battery": True})
+    plugin._ensure_device_states(dev)
+    assert "battery" not in dev.states
+
+
+def test_battery_device_still_gets_its_state(plugin, make_device):
+    dev = make_device(761, "Door Sensor", "z2mContactSensor",
+                      pluginProps={"friendly_name": "Door Sensor",
+                                   "power_source": "Battery",
+                                   "has_battery": True, "has_contact": True})
+    plugin._ensure_device_states(dev)
+    assert "battery" in dev.states
+
+
+def test_unknown_power_source_is_not_treated_as_mains(plugin, make_device):
+    """Absent means unknown. Suppressing the battery on a device that has one
+    would hide a genuinely flat cell — the costlier of the two mistakes."""
+    dev = make_device(762, "Mystery Sensor", "z2mContactSensor",
+                      pluginProps={"friendly_name": "Mystery Sensor",
+                                   "has_battery": True, "has_contact": True})
+    plugin._ensure_device_states(dev)
+    assert "battery" in dev.states
+
+
+def test_is_mains_powered_reads_only_an_explicit_answer(plugin_mod):
+    is_mains = plugin_mod.Plugin._is_mains_powered
+    assert is_mains({"power_source": "Mains (single phase)"}) is True
+    assert is_mains({"power_source": "mains"}) is True
+    assert is_mains({"power_source": "Battery"}) is False
+    assert is_mains({"power_source": ""}) is False
+    assert is_mains({}) is False
+    assert is_mains({"power_source": None}) is False
+
+
+def test_existing_mains_device_gets_its_zero_labelled(plugin, make_device):
+    """The state cannot be removed once it exists, so label it rather than
+    leave a bare 0 that reads as a flat cell."""
+    dev = make_device(763, "Garage Presence", "z2mOccupancySensor",
+                      pluginProps={"friendly_name": "Garage Presence",
+                                   "power_source": "Mains (single phase)"},
+                      states={"battery": 0})
+    plugin._backfill_native_attributes(dev)
+    ui = [w for w in dev.state_writes if w[0] == "battery"][-1][2]
+    assert ui == "Mains"
+    assert "batteryLevel" not in dev.states, "and no native battery either"

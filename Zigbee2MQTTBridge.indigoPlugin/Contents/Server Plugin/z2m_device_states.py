@@ -204,6 +204,18 @@ class DeviceStatesMixin:
                                 "battery": "has_battery"},
     }
 
+    @staticmethod
+    def _is_mains_powered(props):
+        """True only when zigbee2mqtt has SAID the device runs on mains.
+
+        Absent or unrecognised means UNKNOWN, and unknown must not be treated
+        as mains — suppressing the battery state on a device that does have a
+        cell would hide a genuinely flat one, which is the costlier mistake of
+        the two.  So this returns False unless the answer is explicit.
+        """
+        source = str(props.get("power_source") or "").strip().lower()
+        return source.startswith("mains")
+
     def _ensure_device_states(self, dev):
         """Initialise the states this device's hardware actually supports.
 
@@ -224,11 +236,18 @@ class DeviceStatesMixin:
         gates = self._STATE_CAPABILITY_GATE.get(dev.deviceTypeId, {})
         props = dev.ownerProps
         existing = set(dev.states.keys())
+        mains = self._is_mains_powered(props)
         to_write = []
         for key, val in defaults:
             if key in existing:
                 # State already exists on the device record.  We DO NOT clear it back
                 # to default — preserves any value already received.
+                continue
+            if key == "battery" and mains:
+                # A mains device has no cell, so seeding this to 0 would show a
+                # flat battery for ever — the exact "absent read as a reading"
+                # trap.  zigbee2mqtt's own power_source says which it is, so
+                # leave the state unwritten and therefore hidden (v2.2.0).
                 continue
             gate_prop = gates.get(key)
             if gate_prop and not props.get(gate_prop, False):
