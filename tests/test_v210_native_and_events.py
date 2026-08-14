@@ -593,3 +593,44 @@ def test_existing_mains_device_gets_its_zero_labelled(plugin, make_device):
     ui = [w for w in dev.state_writes if w[0] == "battery"][-1][2]
     assert ui == "Mains"
     assert "batteryLevel" not in dev.states, "and no native battery either"
+
+
+def test_power_source_is_backfilled_from_the_device_cache(plugin, make_device):
+    """deviceStartComm runs before MQTT connects, so the cache is empty then —
+    the bridge/devices arrival is the first moment the answer exists."""
+    dev = make_device(770, "Garage Presence", "z2mOccupancySensor",
+                      pluginProps={"friendly_name": "Garage Presence",
+                                   "ieee_address": "0xfff"},
+                      states={"battery": 0})
+    plugin.bridge_devices["0xfff"] = {
+        "ieee_address": "0xfff", "friendly_name": "Garage Presence",
+        "power_source": "Mains (single phase)", "_mqtt_prefix": "zigbee2mqtt",
+    }
+    plugin._backfill_power_source("zigbee2mqtt")
+    assert dev.pluginProps["power_source"] == "Mains (single phase)"
+    ui = [w for w in dev.state_writes if w[0] == "battery"][-1][2]
+    assert ui == "Mains"
+
+
+def test_backfill_skips_devices_that_already_have_it(plugin, make_device):
+    dev = make_device(771, "Door Sensor", "z2mContactSensor",
+                      pluginProps={"friendly_name": "Door Sensor",
+                                   "ieee_address": "0xeee",
+                                   "power_source": "Battery"})
+    plugin.bridge_devices["0xeee"] = {
+        "ieee_address": "0xeee", "power_source": "Mains (single phase)",
+        "_mqtt_prefix": "zigbee2mqtt",
+    }
+    plugin._backfill_power_source("zigbee2mqtt")
+    assert dev.pluginProps["power_source"] == "Battery", "existing value wins"
+
+
+def test_backfill_writes_nothing_when_z2m_reports_no_power_source(plugin,
+                                                                  make_device):
+    dev = make_device(772, "Mystery", "z2mSensor",
+                      pluginProps={"friendly_name": "Mystery",
+                                   "ieee_address": "0xddd"})
+    plugin.bridge_devices["0xddd"] = {"ieee_address": "0xddd",
+                                      "_mqtt_prefix": "zigbee2mqtt"}
+    plugin._backfill_power_source("zigbee2mqtt")
+    assert "power_source" not in dev.pluginProps

@@ -235,10 +235,54 @@ class BridgeMixin:
                 for ieee in new_ieee:
                     self._try_create_device(new_cache[ieee], folder_id, existing_names)
 
+        # Backfill power_source onto devices created before v2.2.0 stored it.
+        # Done HERE rather than in deviceStartComm because the cache is empty at
+        # that point — devices start before MQTT connects — so this is the first
+        # moment the answer actually exists.
+        self._backfill_power_source(prefix)
+
         # Update the coordinator's deviceCount + lastUpdate (if one exists for this prefix)
         self._update_coordinator(prefix, deviceCount=sum(
             1 for d in self.bridge_devices.values()
             if d.get("_mqtt_prefix") == prefix))
+
+    def _backfill_power_source(self, prefix):
+        """Store zigbee2mqtt's power_source on any device still missing it.
+
+        One-time per device: once the prop is set the loop skips it, so this
+        costs a dictionary lookup per device on subsequent cache updates.
+        Only a value zigbee2mqtt actually reported is written — an empty string
+        would look like a considered 'unknown' rather than an absent field.
+        """
+        for dev in indigo.devices.iter(self.pluginId):
+            if dev.deviceTypeId == "z2mCoordinator":
+                continue
+            props = dev.ownerProps
+            if props.get("power_source"):
+                continue
+            ieee = (props.get("ieee_address") or "").strip()
+            entry = self.bridge_devices.get(ieee) if ieee else None
+            if not entry or entry.get("_mqtt_prefix") != prefix:
+                continue
+            source = entry.get("power_source")
+            if not source:
+                continue
+            try:
+                with self.props_lock:
+                    new_props = dict(dev.pluginProps)
+                    new_props["power_source"] = source
+                    dev.replacePluginPropsOnServer(new_props)
+                dev.refreshFromServer()
+                if self._is_mains_powered({"power_source": source}) \
+                        and "battery" in dev.states:
+                    # Existing mains device carrying a seeded 0 — label it, as
+                    # the state itself cannot be removed once it exists.
+                    dev.updateStateOnServer("battery", 0, uiValue="Mains")
+                    log(f"{dev.name}: mains powered — its battery reading was a "
+                        f"seeded 0 and is now labelled accordingly")
+            except Exception as e:
+                self.exception_handler(e, log_failing_statement=True,
+                                       context=f"power_source backfill for '{dev.name}'")
 
     def _process_bridge_state(self, payload, prefix):
         """Handle prefix/bridge/state.  Payload is either a JSON dict
