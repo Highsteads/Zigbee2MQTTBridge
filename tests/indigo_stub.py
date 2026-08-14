@@ -180,8 +180,29 @@ class FakeDevice:
         self.pluginId        = "com.clives.indigoplugin.z2mbridge"
         self.supportsColor   = bool(pluginProps and pluginProps.get("has_color"))
         self.supportsWhiteTemperature = bool(pluginProps and pluginProps.get("has_color_temp"))
+        self.errorState      = ""
+        self.error_writes    = []                         # every setErrorStateOnServer call
+
+    # Native attributes exist ONLY while the matching Supports* property is set
+    # — Indigo's conditional inheritance, the same rule that governs
+    # sensorValue and onOffState.  Modelling it here is the point: a stub that
+    # accepted these writes unconditionally would pass whether or not the
+    # plugin ever sets the property, which is exactly the bug worth catching.
+    _CONDITIONAL_NATIVE_STATES = {
+        "batteryLevel":     "SupportsBatteryLevel",
+        "curEnergyLevel":   "SupportsEnergyMeterCurPower",
+        "accumEnergyTotal": "SupportsEnergyMeter",
+    }
 
     # ── server-side methods plugin.py calls on the device object ─────────────
+
+    def refreshFromServer(self):
+        return None
+
+    def setErrorStateOnServer(self, value):
+        # Real Indigo turns the state column red; None clears it.
+        self.errorState = "" if value is None else str(value)
+        self.error_writes.append(value)
 
     def updateStateOnServer(self, key, value, uiValue=None, **_kwargs):
         # Optional strictness (v1.9.22, stub-drift fix): real Indigo REJECTS a
@@ -189,6 +210,13 @@ class FakeDevice:
         # dev.strict_states = True after declaring static_state_keys (and any
         # dynamic keys via pluginProps seenDynamicKeys) — the permissive default
         # keeps the existing suite behaviour.
+        gate = self._CONDITIONAL_NATIVE_STATES.get(key)
+        if gate is not None and not self.pluginProps.get(gate, False):
+            # Enforced whether or not strict_states is on: this one is not
+            # about XML declaration, it is Indigo refusing a native attribute
+            # the device has not been given.
+            raise KeyError(f"native state '{key}' does not exist on "
+                           f"{self.name} — {gate} is not set")
         if getattr(self, "strict_states", False):
             declared = set(self.static_state_keys)
             declared.update(k for k in self.pluginProps.get(
@@ -196,6 +224,7 @@ class FakeDevice:
             declared.update({"onOffState", "brightnessLevel", "sensorValue",
                              "redLevel", "greenLevel", "blueLevel",
                              "whiteTemperature"})   # native class states
+            declared.update(self._CONDITIONAL_NATIVE_STATES)   # gated above
             if key not in declared:
                 raise KeyError(f"state key '{key}' not declared on {self.name} "
                                f"(real Indigo rejects this write)")
@@ -288,9 +317,31 @@ variables = _Vars()
 
 
 # Trigger execution stub.
+class FakeTrigger:
+    """Minimal stand-in for an indigo trigger of ours (v2.1.0 plugin events).
+
+    Only `id`, `name` and `pluginTypeId` are read by the plugin — the last is
+    what decides which triggers a raised event executes.
+    """
+
+    def __init__(self, id, pluginTypeId, name=None):
+        self.id           = id
+        self.pluginTypeId = pluginTypeId
+        self.name         = name or f"trigger-{id}"
+
+
 class _TriggerShim:
-    @staticmethod
-    def execute(_trigger): pass
+    """Records executions so tests can assert which triggers fired, and — just
+    as importantly — that the wrong ones did not."""
+
+    def __init__(self):
+        self.executed = []
+
+    def execute(self, trigger):
+        self.executed.append(trigger)
+
+    def reset(self):
+        self.executed.clear()
 
 
 trigger = _TriggerShim()

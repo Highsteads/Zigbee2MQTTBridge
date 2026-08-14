@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Zigbee2MQTT Bridge Plugin - Events.xml
+
+     Custom trigger events (new in v2.1.0).  Until now the plugin offered no
+     trigger types at all, so reacting to a device joining, leaving or failing
+     its interview needed a script watching the log.  Every event below is
+     raised from a zigbee2mqtt message the plugin already receives.
+
+     None of these take a ConfigUI — they fire for any device on any bridge.
+     The details of the event that fired are written to the matching Z2M
+     Coordinator device's lastEvent / lastEventDevice / lastEventTime states
+     first, so a trigger's actions can read them with a device-state
+     substitution (%%d:<coordinator id>:lastEventDevice%%).
+     ============================================================== -->
+<Events>
+    <SupportURL>https://github.com/Highsteads/Zigbee2MQTTBridge</SupportURL>
+
+    <Event id="deviceJoined">
+        <Name>Zigbee Device Joined the Network</Name>
+    </Event>
+    <Event id="deviceLeft">
+        <Name>Zigbee Device Left the Network</Name>
+    </Event>
+    <Event id="deviceAnnounced">
+        <Name>Zigbee Device Announced Itself</Name>
+    </Event>
+
+    <Event id="sepInterview" isSeparator="true"/>
+
+    <Event id="deviceInterviewFailed">
+        <Name>Zigbee Device Interview Failed</Name>
+    </Event>
+    <Event id="deviceInterviewSuccessful">
+        <Name>Zigbee Device Interview Succeeded</Name>
+    </Event>
+
+    <Event id="sepHealth" isSeparator="true"/>
+
+    <Event id="deviceRejoined">
+        <Name>Zigbee Device Rejoined (leave count rose)</Name>
+    </Event>
+    <Event id="deviceAddressChanged">
+        <Name>Zigbee Device Changed Network Address</Name>
+    </Event>
+
+    <Event id="sepBridge" isSeparator="true"/>
+
+    <Event id="bridgeOffline">
+        <Name>Zigbee2MQTT Bridge Went Offline</Name>
+    </Event>
+    <Event id="bridgeOnline">
+        <Name>Zigbee2MQTT Bridge Came Online</Name>
+    </Event>
+    <Event id="bridgeRestartRequired">
+        <Name>Zigbee2MQTT Bridge Needs a Restart</Name>
+    </Event>
+</Events>

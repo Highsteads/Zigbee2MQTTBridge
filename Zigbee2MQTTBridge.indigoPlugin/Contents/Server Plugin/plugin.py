@@ -5,9 +5,44 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Opus 4.8
-# Date:        21-07-2026
-# Version:     2.0.3
+# Author:      CliveS & Claude Opus 5
+# Date:        14-08-2026
+# Version:     2.1.0
+#
+# v2.1.0 (14-08-2026): Tier 1 of the Autolog comparison — the things Indigo
+# itself already knows how to show, which this plugin was never telling it,
+# plus the health topic that was arriving and being dropped.
+# * NATIVE BATTERY. 38 battery-powered Zigbee devices reported into a custom
+#   `battery` state and nothing else, so Indigo's own low-battery reporting,
+#   dev.batteryLevel and every plugin reading it saw nothing at all — only the
+#   11 Z-Wave devices had it estate-wide. The plugin now sets
+#   SupportsBatteryLevel and mirrors the reading into the native attribute
+#   from the same write, so the two can never disagree. The custom state is
+#   KEPT because other plugins read it. An absent or unparseable reading is
+#   left alone rather than written as 0 — a flat battery and a silent one are
+#   different facts, and only one of them should raise an alert.
+# * ERROR STATE. Nothing set dev.errorState when zigbee2mqtt reported a device
+#   offline, so an offline Zigbee device looked perfectly healthy to the
+#   Indigo UI and to DeviceHealthMonitor, which judges health by exactly that.
+# * NATIVE ENERGY METER. Metering plugs never reached Indigo's Energy UI.
+#   SupportsEnergyMeter / ...CurPower are now set and power/energy mirror into
+#   curEnergyLevel / accumEnergyTotal. Energy Reset works properly: z2m's kWh
+#   counter lives on the device and cannot be reset from here, so the reading
+#   at the moment of reset is stored in energyResetOffset and the difference
+#   reported — without that the next payload would silently undo the reset.
+# * bridge/health INGESTED. Published every 10 minutes and previously dropped.
+#   It is the only estate-wide evidence of a device rejoining or hopping
+#   routing parent (leave_count / network_address_changes), which is the
+#   answer to "why did that sensor go quiet". Coordinator devices gain the
+#   z2m process and host stats; each device gains its own counters; and a new
+#   "Report Network Health" menu item lists the troublemakers worst-first.
+#   Counters are cumulative since z2m started, so a RISE is the signal — never
+#   a non-zero value, which would fire every trigger in the house on startup.
+# * CUSTOM TRIGGER EVENTS. The plugin shipped no Events.xml at all, so
+#   reacting to a device joining, leaving or failing its interview needed a
+#   script watching the log. Eleven events now come from bridge/event and
+#   bridge/state. Bridge online/offline and restart-required fire on the
+#   EDGE only, because both topics are retained and replay on every reconnect.
 #
 # v2.0.3 (08-08-2026): REQUIRED Info.plist KEY. `CFBundleURLTypes` was PRESENT but
 # EMPTY, so the plugin shipped without the support URL that becomes its
@@ -1203,6 +1238,23 @@ class Plugin(indigo.PluginBase):
         # keys they contain, so the OR across all stored values is always correct.
         self._motion_states = {}  # type: dict[int, dict[str, bool]]
 
+        # Last bridge/health per prefix: ieee -> {leave_count, network_address_changes}.
+        # Held only to spot a RISE between reports; the counters themselves are
+        # cumulative since zigbee2mqtt started, so their absolute value says
+        # nothing about the last ten minutes.
+        self._health_cache = {}  # type: dict[str, dict[str, dict]]
+
+        # Enabled triggers of ours: trigger id -> trigger object.  Populated by
+        # triggerStartProcessing; the only route to raising a plugin event.
+        self.event_triggers = {}  # type: dict[int, object]
+
+        # Bridge status last announced per prefix, so bridgeOnline / bridgeOffline
+        # fire on a CHANGE rather than on every retained republish.
+        self._bridge_status_announced = {}  # type: dict[str, str]
+
+        # Last seen restart_required per prefix — same rising-edge reasoning.
+        self._bridge_info_previous = {}  # type: dict[str, bool]
+
         # Startup banner moved to showPluginInfo on demand (revised 25-May-2026 per Jay).
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -1317,6 +1369,10 @@ class Plugin(indigo.PluginBase):
                 return
             with self.maps_lock:
                 self.coordinator_map[prefix] = dev.id
+            # v2.1.0 added the health and lastEvent states — register them
+            # before anything tries to write one.
+            dev = self._refresh_state_list_if_missing(
+                dev, self._V210_COORDINATOR_STATES)
             self._ensure_device_states(dev)
             # If we already have a cached bridge/info or bridge/state for this
             # prefix (retained MQTT may have arrived before this device existed),
@@ -1356,6 +1412,15 @@ class Plugin(indigo.PluginBase):
         # Apply stored color/capability flags to Indigo device
         if dev.deviceTypeId == "z2mLight":
             self._apply_light_capabilities(dev)
+
+        # Backfill the native attributes from what the device already holds, so
+        # an existing install populates at restart rather than waiting hours for
+        # each battery device's next report (v2.1.0).
+        self._backfill_native_attributes(dev)
+
+        # v2.1.0 added the per-device network-health counters — register them
+        # before bridge/health arrives, or every write is refused server-side.
+        dev = self._refresh_state_list_if_missing(dev, self._V210_HEALTH_STATES)
 
         # Ensure all custom states exist — guards against states added to Devices.xml
         # after a device was originally created (avoids "state key not defined" errors)
@@ -2219,6 +2284,24 @@ class Plugin(indigo.PluginBase):
 
         if cmd == indigo.kUniversalAction.RequestStatus:
             self._request_state(fname, dev.deviceTypeId, prefix, dev_props=dict(dev.pluginProps))
+        elif cmd == indigo.kUniversalAction.EnergyUpdate:
+            # Re-poll rather than invent a value — z2m answers on the state topic.
+            self._request_state(fname, dev.deviceTypeId, prefix, dev_props=dict(dev.pluginProps))
+        elif cmd == indigo.kUniversalAction.EnergyReset:
+            # The kWh counter lives on the Zigbee device and cannot be reset
+            # from here, so rebase Indigo's accumulator against the current
+            # raw reading instead.  Writing accumEnergyTotal to 0.0 on its own
+            # would be undone by the next payload.
+            raw = self._coerce_meter_value(dev.states.get("energy"))
+            if raw is None:
+                log(f"{dev.name}: cannot reset the energy total — no energy "
+                    f"reading has arrived from zigbee2mqtt yet", level="WARNING")
+                return
+            self._set_energy_offset(dev, raw)
+            self._write_native_state(dev, "accumEnergyTotal", 0.0, "0.000 kWh",
+                                     just_enabled=False)
+            log(f"{dev.name}: energy total reset — Indigo now counts from the "
+                f"device's current {raw:.3f} kWh reading")
         else:
             log(f"Unhandled universal action {cmd} for {dev.name}", level="WARNING")
 
@@ -2817,6 +2900,59 @@ class Plugin(indigo.PluginBase):
         for name, ieee, fname in sorted(orphans):
             log(f"  {name}  (ieee={ieee}, friendly_name={fname})", level="WARNING")
 
+    def report_network_health(self, valuesDict=None, typeId=None):
+        """Menu: dump what bridge/health last reported for each bridge (v2.1.0).
+
+        Sorted worst-first on the counters that matter — a device that keeps
+        rejoining or hopping network address is the one causing trouble, and
+        neither fact is visible anywhere else in Indigo.
+        """
+        if not self._health_cache:
+            log("No health data yet. zigbee2mqtt publishes bridge/health every "
+                "10 minutes by default — wait for the next report, or check "
+                "'health' is enabled in the zigbee2mqtt configuration.",
+                level="WARNING")
+            return
+
+        for prefix, devices in sorted(self._health_cache.items()):
+            dev_id = self.coordinator_map.get(prefix)
+            header = f"Network health for '{prefix}'"
+            if dev_id:
+                try:
+                    coord = indigo.devices[dev_id]
+                    header += (f" — z2m up {coord.states.get('healthProcessUptime', '?')}, "
+                               f"host memory {coord.states.get('healthOsMemoryPercent', '?')}%, "
+                               f"MQTT queue {coord.states.get('healthMqttQueued', '?')} "
+                               f"(reported {coord.states.get('healthLastUpdate', '?')})")
+                except KeyError:
+                    pass
+            log(header)
+
+            rows = []
+            for ieee, record in devices.items():
+                with self.maps_lock:
+                    indigo_id = self.ieee_map.get(ieee)
+                try:
+                    name = indigo.devices[indigo_id].name if indigo_id else f"[{ieee}]"
+                except KeyError:
+                    name = f"[{ieee}]"
+                rows.append((int(record.get("leave_count") or 0),
+                             int(record.get("network_address_changes") or 0),
+                             name))
+
+            flagged = [r for r in rows if r[0] or r[1]]
+            if not flagged:
+                log(f"  All {len(rows)} device(s) steady — no rejoins and no "
+                    f"network address changes since zigbee2mqtt started")
+                continue
+            log(f"  {len(flagged)} of {len(rows)} device(s) have rejoined or "
+                f"moved since zigbee2mqtt started:", level="WARNING")
+            for leaves, changes, name in sorted(rows, reverse=True):
+                if not leaves and not changes:
+                    continue
+                log(f"    {name}: {leaves} rejoin(s), {changes} address change(s)",
+                    level="WARNING")
+
     def permit_join_enable(self, valuesDict=None, typeId=None):
         """Menu: open both bridges for pairing (254s, z2m's maximum window).
         The coordinator tile's permitJoin state confirms it took (v1.10.0)."""
@@ -3232,6 +3368,10 @@ class Plugin(indigo.PluginBase):
                     self._process_bridge_state(payload, effective_prefix)
                 elif bt == "info":
                     self._process_bridge_info(payload, effective_prefix)
+                elif bt == "health":
+                    self._process_bridge_health(payload, effective_prefix)
+                elif bt == "event":
+                    self._process_bridge_event(payload, effective_prefix)
             return
 
         # Availability: last path component is "availability"
@@ -3374,6 +3514,22 @@ class Plugin(indigo.PluginBase):
             return
         self._bridge_state_cache[prefix] = state
         self._update_coordinator(prefix, status=state)
+
+        # Raise the bridge events on a CHANGE only (v2.1.0).  bridge/state is
+        # retained, so it replays on every reconnect — firing on each arrival
+        # would announce an outage that never happened.
+        previous = self._bridge_status_announced.get(prefix)
+        if previous != state:
+            self._bridge_status_announced[prefix] = state
+            if previous is not None:
+                if state == "online":
+                    log(f"Zigbee2MQTT bridge '{prefix}' came back online")
+                    self._fire_event("bridgeOnline", prefix, prefix)
+                else:
+                    log(f"Zigbee2MQTT bridge '{prefix}' went {state}",
+                        level="WARNING")
+                    self._fire_event("bridgeOffline", prefix, prefix)
+
         if self.debug:
             log(f"Bridge '{prefix}' state: {state}")
 
@@ -3416,6 +3572,16 @@ class Plugin(indigo.PluginBase):
             if "extended_pan_id" in net:
                 kv["extendedPanId"] = str(net["extended_pan_id"])
 
+        # Fire the restart-required event on the rising edge only — bridge/info
+        # is retained and republished often, and a standing flag is not news.
+        was_required = bool(self._bridge_info_previous.get(prefix, False))
+        now_required = kv["restartRequired"]
+        self._bridge_info_previous[prefix] = now_required
+        if now_required and not was_required:
+            log(f"Zigbee2MQTT bridge '{prefix}' is asking to be restarted",
+                level="WARNING")
+            self._fire_event("bridgeRestartRequired", prefix, prefix)
+
         self._update_coordinator(prefix, **kv)
 
     def _update_coordinator(self, prefix, **state_kv):
@@ -3442,6 +3608,242 @@ class Plugin(indigo.PluginBase):
                 self.exception_handler(e, log_failing_statement=True,
                                        context=f"coordinator '{dev.name}' update")
 
+    # ── bridge/health (v2.1.0) ───────────────────────────────────────────────
+    # zigbee2mqtt publishes this every 10 minutes by default and it was being
+    # dropped on the floor.  It carries the only estate-wide evidence of a
+    # device rejoining or hopping routing parent — leave_count and
+    # network_address_changes — which is the answer to "why did that sensor go
+    # quiet".  Counters are cumulative since zigbee2mqtt started
+    # (reset_on_check defaults to false), so a RISE is the signal, never a
+    # non-zero value.
+
+    @staticmethod
+    def _format_uptime(seconds):
+        """Render an uptime in seconds as a short readable string."""
+        try:
+            secs = int(float(seconds))
+        except (TypeError, ValueError):
+            return ""
+        if secs < 0:
+            return ""
+        days, rem   = divmod(secs, 86400)
+        hours, rem  = divmod(rem, 3600)
+        mins        = rem // 60
+        if days:
+            return f"{days}d {hours}h"
+        if hours:
+            return f"{hours}h {mins}m"
+        return f"{mins}m"
+
+    def _process_bridge_health(self, payload, prefix):
+        """Update the coordinator and per-device health counters."""
+        if not isinstance(payload, dict):
+            log(f"bridge/health from '{prefix}' was not a JSON object — ignored",
+                level="WARNING")
+            return
+
+        os_info   = payload.get("os")      or {}
+        proc      = payload.get("process") or {}
+        mqtt_info = payload.get("mqtt")    or {}
+        devices   = payload.get("devices") or {}
+
+        load = os_info.get("load_average")
+        load1 = load[0] if isinstance(load, (list, tuple)) and load else None
+
+        reported = payload.get("response_time")
+        try:
+            reported_str = datetime.fromtimestamp(
+                float(reported) / 1000.0).strftime("%Y-%m-%d %H:%M:%S")
+        except (TypeError, ValueError, OSError, OverflowError):
+            reported_str = ""
+
+        coordinator_states = {
+            "healthOsMemoryPercent": os_info.get("memory_percent"),
+            "healthOsLoad1":         load1,
+            "healthProcessMemoryMb": proc.get("memory_used_mb"),
+            "healthProcessUptime":   self._format_uptime(proc.get("uptime_sec")),
+            "healthMqttQueued":      mqtt_info.get("queued"),
+            "healthMqttPublished":   mqtt_info.get("published"),
+            "healthMqttReceived":    mqtt_info.get("received"),
+            "healthLastUpdate":      reported_str,
+        }
+        self._update_coordinator(
+            prefix, **{k: v for k, v in coordinator_states.items() if v is not None})
+
+        if isinstance(devices, dict):
+            self._process_device_health(devices, prefix)
+
+    def _process_device_health(self, devices, prefix):
+        """Write per-device counters and raise events on a genuine rise."""
+        previous = self._health_cache.setdefault(prefix, {})
+        first_report = not previous
+
+        for ieee, record in devices.items():
+            if not isinstance(record, dict):
+                continue
+            with self.maps_lock:
+                dev_id = self.ieee_map.get(ieee)
+
+            leaves  = record.get("leave_count")
+            changes = record.get("network_address_changes")
+            was     = previous.get(ieee, {})
+            previous[ieee] = {"leave_count": leaves,
+                              "network_address_changes": changes}
+
+            if dev_id is None:
+                continue   # a Zigbee device with no Indigo device — nothing to write
+            try:
+                dev = indigo.devices[dev_id]
+            except KeyError:
+                continue
+
+            updates = []
+            rate = record.get("messages_per_sec")
+            if rate is not None:
+                updates.append(("messagesPerSec", round(float(rate), 4)))
+            if leaves is not None:
+                updates.append(("leaveCount", int(leaves)))
+            if changes is not None:
+                updates.append(("networkAddressChanges", int(changes)))
+            if updates:
+                self._apply_updates(dev, updates)
+
+            # On the first sighting of a device there is nothing to compare
+            # against, so a non-zero counter is history, not news.  Announcing
+            # it would fire every trigger in the house on plugin start.
+            #
+            # This is belt-and-braces: _counter_rose already returns False when
+            # either side is None, which covers the same ground.  Kept because
+            # the two guard different things — this one the absence of a prior
+            # READING, that one the absence of a VALUE — and a mutation test
+            # confirmed each masks the other, so neither alone is pinned.
+            if first_report or not was:
+                continue
+            if self._counter_rose(was.get("leave_count"), leaves):
+                log(f"{dev.name}: rejoined the Zigbee network "
+                    f"(leave count {was.get('leave_count')} -> {leaves})",
+                    level="WARNING")
+                self._fire_event("deviceRejoined", prefix, dev.name)
+            if self._counter_rose(was.get("network_address_changes"), changes):
+                log(f"{dev.name}: changed network address "
+                    f"({was.get('network_address_changes')} -> {changes})")
+                self._fire_event("deviceAddressChanged", prefix, dev.name)
+
+    @staticmethod
+    def _counter_rose(before, after):
+        """True only for a real increase between two readings.
+
+        A missing reading on either side means 'unknown', never 'no change' —
+        and a counter that went DOWN means zigbee2mqtt restarted, which is not
+        a rejoin either.
+        """
+        if before is None or after is None:
+            return False
+        try:
+            return int(after) > int(before)
+        except (TypeError, ValueError):
+            return False
+
+    # ── bridge/event (v2.1.0) ────────────────────────────────────────────────
+    # Payload shape per the zigbee2mqtt docs:
+    #   {"type": "device_joined",    "data": {"friendly_name": .., "ieee_address": ..}}
+    #   {"type": "device_announce",  "data": {...}}
+    #   {"type": "device_leave",     "data": {...}}
+    #   {"type": "device_interview", "data": {..., "status": "started|successful|failed"}}
+
+    _EVENT_TYPE_MAP = {
+        "device_joined":   "deviceJoined",
+        "device_leave":    "deviceLeft",
+        "device_announce": "deviceAnnounced",
+    }
+    _INTERVIEW_STATUS_MAP = {
+        "failed":     "deviceInterviewFailed",
+        "successful": "deviceInterviewSuccessful",
+    }
+
+    def _process_bridge_event(self, payload, prefix):
+        """Turn a bridge/event message into an Indigo trigger event."""
+        if not isinstance(payload, dict):
+            log(f"bridge/event from '{prefix}' was not a JSON object — ignored",
+                level="WARNING")
+            return
+
+        etype = payload.get("type")
+        data  = payload.get("data") or {}
+        name  = (data.get("friendly_name") or data.get("ieee_address") or "unknown")
+
+        event_id = self._EVENT_TYPE_MAP.get(etype)
+        if etype == "device_interview":
+            status   = str(data.get("status", "")).lower()
+            event_id = self._INTERVIEW_STATUS_MAP.get(status)
+            if event_id is None:
+                if self.debug:
+                    log(f"bridge/event interview '{status}' for {name} — "
+                        f"no matching Indigo event")
+                return
+            level = "WARNING" if status == "failed" else "INFO"
+            log(f"Zigbee device '{name}' interview {status}", level=level)
+        elif event_id is None:
+            # An unrecognised event type is worth saying out loud rather than
+            # dropping — zigbee2mqtt may add types we don't know about yet.
+            log(f"bridge/event: unhandled type '{etype}' for '{name}' on "
+                f"'{prefix}'")
+            return
+        else:
+            verb = {"deviceJoined": "joined the network",
+                    "deviceLeft":   "left the network",
+                    "deviceAnnounced": "announced itself"}[event_id]
+            log(f"Zigbee device '{name}' {verb} ({prefix})")
+
+        self._fire_event(event_id, prefix, name)
+
+    def _fire_event(self, event_id, prefix, device_name):
+        """Record the event on the coordinator, then execute matching triggers.
+
+        The coordinator states are written FIRST so a trigger's own actions can
+        read the device name straight out of them — plugin events carry no
+        payload of their own.
+        """
+        try:
+            self._update_coordinator(
+                prefix,
+                lastEvent=event_id,
+                lastEventDevice=device_name,
+                lastEventTime=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            )
+        except Exception as e:
+            self.exception_handler(e, log_failing_statement=True,
+                                   context=f"coordinator event stamp for {event_id}")
+
+        with self.maps_lock:
+            triggers = list(self.event_triggers.values())
+        for trigger in triggers:
+            try:
+                if trigger.pluginTypeId != event_id:
+                    continue
+                indigo.trigger.execute(trigger)
+            except Exception as e:
+                self.exception_handler(e, log_failing_statement=True,
+                                       context=f"executing trigger for {event_id}")
+
+    # ── Trigger lifecycle ────────────────────────────────────────────────────
+    # Indigo calls these as a trigger of ours is enabled or disabled.  There is
+    # no indigo.server.fireEvent and no inherited self.triggerEvent — the only
+    # way to raise a plugin event is to hold the trigger objects and call
+    # indigo.trigger.execute() on the ones whose pluginTypeId matches.
+
+    def triggerStartProcessing(self, trigger):
+        with self.maps_lock:
+            self.event_triggers[trigger.id] = trigger
+        if self.debug:
+            log(f"Watching trigger '{trigger.name}' ({trigger.pluginTypeId})")
+
+    def triggerStopProcessing(self, trigger):
+        with self.maps_lock:
+            self.event_triggers.pop(trigger.id, None)
+        if self.debug:
+            log(f"Stopped watching trigger '{trigger.name}'")
+
     def _process_availability(self, friendly_name, payload, prefix=None):
         """Handle availability message — update the 'availability' state.
         Lookup is prefix-qualified (v1.9.22) so a name shared across the two
@@ -3456,14 +3858,38 @@ class Plugin(indigo.PluginBase):
             state = payload.get("state", "offline") if isinstance(payload, dict) else str(payload)
             dev.updateStateOnServer("availability", state, uiValue=state.capitalize())
 
+            is_online = (state == "online")
+
             # For z2mRepeater devices mirror availability into onOffState so the
             # device list shows Online/Offline instead of the relay default On/Off.
             if dev.deviceTypeId == "z2mRepeater":
-                is_online = (state == "online")
                 dev.updateStateOnServer(
                     "onOffState", is_online,
                     uiValue="Online" if is_online else "Offline"
                 )
+
+            # Mirror offline into Indigo's own error state (v2.1.0), which turns
+            # the device red in the UI and is what DeviceHealthMonitor judges
+            # health by.  Until now an offline Zigbee device looked perfectly
+            # healthy to every other plugin on the server.
+            #
+            # This is zigbee2mqtt's own verdict after its configured timeout,
+            # not our guess, so it is a real fault and not a quiet battery
+            # device.  It is set LAST because updateStateOnServer clears the
+            # error state by default — and that default is right: a device
+            # that publishes anything is, by definition, not offline.
+            try:
+                if is_online:
+                    if dev.errorState:
+                        dev.setErrorStateOnServer(None)
+                        log(f"{dev.name}: back online")
+                elif dev.errorState != "offline":
+                    dev.setErrorStateOnServer("offline")
+                    log(f"{dev.name}: zigbee2mqtt reports this device offline",
+                        level="WARNING")
+            except Exception as e:
+                self.exception_handler(e, log_failing_statement=True,
+                                       context=f"error state for '{dev.name}'")
 
             if self.debug:
                 log(f"{dev.name}: availability = {state}")
@@ -4356,6 +4782,20 @@ class Plugin(indigo.PluginBase):
                         f"only)", level="WARNING")
                 elif self.debug:
                     log(f"{dev.name}: could not update '{key}': {e}", level="WARNING")
+
+        # Mirror into Indigo's native attributes from this same write path, so
+        # the custom state and the native one can never disagree (v2.1.0).
+        by_key = {item[0]: item[1] for item in updates}
+        try:
+            if "battery" in by_key:
+                self._mirror_native_battery(dev, by_key["battery"])
+            if "power" in by_key or "energy" in by_key:
+                self._mirror_native_energy(dev, by_key.get("power"),
+                                           by_key.get("energy"))
+        except Exception as e:
+            self.exception_handler(e, log_failing_statement=True,
+                                   context=f"native mirror for '{dev.name}'")
+
         if self.debug and updates:
             log(f"{dev.name}: updated {[u[0] for u in updates]}")
 
@@ -4574,3 +5014,216 @@ class Plugin(indigo.PluginBase):
             new_props = dict(dev.pluginProps)
             new_props.update(self._compute_light_native_flags(has_col, has_ct))
             dev.replacePluginPropsOnServer(new_props)
+
+    # ── Native Indigo attribute mirrors (v2.1.0) ─────────────────────────────
+    # Indigo carries first-class battery and energy-meter attributes that are
+    # entirely separate from any custom state, and a device only gets them when
+    # the matching Supports* property is True — the same conditional
+    # inheritance that governs sensorValue and onOffState.  Until v2.1.0 this
+    # plugin set neither, so every battery-powered Zigbee device was invisible
+    # to Indigo's own low-battery reporting (and to anything reading
+    # dev.batteryLevel), while metering plugs never reached the Energy UI.
+    #
+    # The custom `battery` / `power` / `energy` states are KEPT — other plugins
+    # read them — and both the custom state and the native attribute are
+    # written from the SAME call, so each fact still has exactly one writer.
+
+    @staticmethod
+    def _coerce_battery_percent(raw):
+        """Return an int 0-100, or None when the payload holds no usable reading.
+
+        None must never become 0.  A flat battery and an absent reading are
+        different facts, and reporting the absent one as 0 would raise a false
+        low-battery alert on a device that simply hasn't said yet.  Booleans
+        are rejected for the same reason — True would otherwise coerce to 1%.
+        """
+        if raw is None or isinstance(raw, bool):
+            return None
+        try:
+            pct = int(round(float(raw)))
+        except (TypeError, ValueError):
+            return None
+        return max(0, min(100, pct))
+
+    @staticmethod
+    def _coerce_meter_value(raw):
+        """Return a float for a power/energy reading, or None if unusable.
+
+        zigbee2mqtt publishes a null for these fields after a restart, which is
+        an absent reading rather than a genuine zero.
+        """
+        if raw is None or isinstance(raw, bool):
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+
+    def _enable_native_prop(self, dev, prop_name):
+        """Turn a native Supports* property on once.
+
+        Returns True only when this call was the one that set it, so the caller
+        can tell a first-time enable (where the native state may not exist yet)
+        from steady state.
+        """
+        if dev.pluginProps.get(prop_name, False):
+            return False
+        with self.props_lock:   # atomic RMW vs the other props writers
+            new_props = dict(dev.pluginProps)
+            new_props[prop_name] = True
+            dev.replacePluginPropsOnServer(new_props)
+        try:
+            dev.refreshFromServer()
+        except Exception:
+            pass   # stale local copy only — the next payload picks it up
+        return True
+
+    def _write_native_state(self, dev, key, value, ui_value, just_enabled):
+        """Write a native attribute, tolerating the first write after enabling.
+
+        Indigo materialises the native state as a side effect of the property
+        change, so the very first write can land before it exists.  That one is
+        expected and is not worth a warning; anything after it is real and is
+        surfaced once per (device, key).
+        """
+        try:
+            dev.updateStateOnServer(key, value, uiValue=ui_value)
+            return True
+        except Exception as e:
+            if just_enabled:
+                if self.debug:
+                    log(f"{dev.name}: native '{key}' not ready on first write "
+                        f"({e}) — the next payload will carry it")
+                return False
+            warn_key = (dev.id, f"native:{key}")
+            if warn_key not in self._state_write_warned:
+                self._state_write_warned.add(warn_key)
+                log(f"{dev.name}: could not update native '{key}': {e}",
+                    level="WARNING")
+            return False
+
+    def _mirror_native_battery(self, dev, raw):
+        """Mirror a battery percentage into Indigo's native batteryLevel."""
+        pct = self._coerce_battery_percent(raw)
+        if pct is None:
+            return
+        just_enabled = self._enable_native_prop(dev, "SupportsBatteryLevel")
+        if just_enabled:
+            log(f"{dev.name}: native battery reporting enabled — this device "
+                f"now appears in Indigo's own low-battery list")
+        self._write_native_state(dev, "batteryLevel", pct, f"{pct}%", just_enabled)
+
+    def _mirror_native_energy(self, dev, power_w=None, energy_kwh=None):
+        """Mirror power/energy into Indigo's native energy-meter attributes.
+
+        `curEnergyLevel` is instantaneous watts and maps straight across.
+        `accumEnergyTotal` is Indigo's own accumulator, which the user can
+        reset — but zigbee2mqtt reports a counter held on the device, which
+        this plugin cannot reset.  The gap is bridged by storing the raw
+        reading taken at the moment of the last reset in `energyResetOffset`
+        and reporting the difference.  Without that, an Energy Reset action
+        would appear to work and then be undone by the very next payload.
+        """
+        watts = self._coerce_meter_value(power_w)
+        kwh   = self._coerce_meter_value(energy_kwh)
+        if watts is None and kwh is None:
+            return
+
+        just_enabled = False
+        if watts is not None:
+            just_enabled |= self._enable_native_prop(dev, "SupportsEnergyMeterCurPower")
+        if kwh is not None:
+            just_enabled |= self._enable_native_prop(dev, "SupportsEnergyMeter")
+        if just_enabled:
+            log(f"{dev.name}: native energy metering enabled — this device now "
+                f"reports into Indigo's Energy UI")
+
+        if watts is not None:
+            self._write_native_state(dev, "curEnergyLevel", round(watts, 1),
+                                     f"{watts:.1f} W", just_enabled)
+        if kwh is not None:
+            offset = self._coerce_meter_value(
+                dev.pluginProps.get("energyResetOffset")) or 0.0
+            if kwh < offset:
+                # The device's own counter has gone backwards — a factory reset
+                # or firmware reflash.  Holding the old offset would report a
+                # negative total for ever, so drop it and start again from here.
+                log(f"{dev.name}: zigbee2mqtt energy counter went backwards "
+                    f"({kwh} < stored offset {offset}) — the device's own "
+                    f"counter was reset, so the Indigo accumulator baseline "
+                    f"has been cleared")
+                self._set_energy_offset(dev, 0.0)
+                offset = 0.0
+            total = max(0.0, kwh - offset)
+            self._write_native_state(dev, "accumEnergyTotal", round(total, 3),
+                                     f"{total:.3f} kWh", just_enabled)
+
+    # States added to Devices.xml after a device was created do NOT appear on
+    # that device until its cached state list is refreshed.  Indigo rejects the
+    # write SERVER-side and logs "state key <k> not defined (ignoring update
+    # request)" — it does not raise, so a try/except around the write sees
+    # nothing and the state silently never populates.  Live-hit on the v2.1.0
+    # health states: 20 devices logged three errors each and the coordinator
+    # populated nothing at all (its updater filters on `k in dev.states`, so it
+    # dropped them without even that).
+    _V210_HEALTH_STATES = ("messagesPerSec", "leaveCount", "networkAddressChanges")
+    _V210_COORDINATOR_STATES = ("healthOsMemoryPercent", "healthLastUpdate",
+                                "lastEvent")
+
+    def _refresh_state_list_if_missing(self, dev, required_keys):
+        """Re-register the device's state list when a declared state is absent.
+
+        Returns the device to keep using — refreshed if the list was rebuilt,
+        since the local copy is stale immediately afterwards.
+        """
+        missing = [k for k in required_keys if k not in dev.states]
+        if not missing:
+            return dev
+        try:
+            dev.stateListOrDisplayStateIdChanged()
+            dev.refreshFromServer()
+            log(f"{dev.name}: registered {len(missing)} new state(s) added in "
+                f"this version ({', '.join(missing)})")
+        except Exception as e:
+            log(f"{dev.name}: could not refresh the state list for "
+                f"{', '.join(missing)}: {e}", level="WARNING")
+        return dev
+
+    def _backfill_native_attributes(self, dev):
+        """Seed the native attributes at deviceStartComm from stored states.
+
+        Battery devices report every few hours, so without this an existing
+        install would populate only as each device happened to speak up.
+
+        A stored battery of exactly 0 is SKIPPED.  _ensure_device_states seeds
+        the custom `battery` state to 0, so 0 cannot be told apart from a
+        device that has never reported — and of the two ways to be wrong,
+        announcing a false flat battery is much the worse.  A genuinely flat
+        device corrects itself on its next payload.
+        """
+        try:
+            battery = self._coerce_battery_percent(dev.states.get("battery"))
+            if battery:
+                self._mirror_native_battery(dev, battery)
+            elif battery == 0 and self.debug:
+                log(f"{dev.name}: stored battery is 0 — skipping the native "
+                    f"backfill, since a never-reported battery reads the same")
+
+            power  = self._coerce_meter_value(dev.states.get("power"))
+            energy = self._coerce_meter_value(dev.states.get("energy"))
+            if power is not None or energy is not None:
+                self._mirror_native_energy(dev, power, energy)
+        except Exception as e:
+            self.exception_handler(e, log_failing_statement=True,
+                                   context=f"native backfill for '{dev.name}'")
+
+    def _set_energy_offset(self, dev, value):
+        """Store the raw zigbee2mqtt energy reading that means 'zero' from now on."""
+        with self.props_lock:
+            new_props = dict(dev.pluginProps)
+            new_props["energyResetOffset"] = float(value)
+            dev.replacePluginPropsOnServer(new_props)
+        try:
+            dev.refreshFromServer()
+        except Exception:
+            pass

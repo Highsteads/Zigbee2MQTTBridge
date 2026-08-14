@@ -23,6 +23,10 @@
         <Name>Report Orphaned Devices</Name>
         <CallbackMethod>report_orphaned_devices</CallbackMethod>
     </MenuItem>
+    <MenuItem id="reportNetworkHealth">
+        <Name>Report Network Health</Name>
+        <CallbackMethod>report_network_health</CallbackMethod>
+    </MenuItem>
     <MenuItem id="sepJoin" isSeparator="true"/>
     <MenuItem id="permitJoinEnable">
         <Name>Enable Pairing (Permit Join, 254s)</Name>

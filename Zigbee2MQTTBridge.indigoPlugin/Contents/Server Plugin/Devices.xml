@@ -65,6 +65,25 @@
                 <TriggerLabel>Link Quality Changed</TriggerLabel>
                 <ControlPageLabel>Link Quality</ControlPageLabel>
             </State>
+            <!-- Network-health counters, fed from the bridge/health topic
+                 (published every 10 min).  Cumulative since zigbee2mqtt last
+                 started, so it is a RISE in leaveCount / networkAddressChanges
+                 that means something, not a non-zero value. -->
+            <State id="messagesPerSec">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Message Rate Changed</TriggerLabel>
+                <ControlPageLabel>Messages / sec</ControlPageLabel>
+            </State>
+            <State id="leaveCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Leave Count Changed</TriggerLabel>
+                <ControlPageLabel>Leave Count</ControlPageLabel>
+            </State>
+            <State id="networkAddressChanges">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Address Changes Changed</TriggerLabel>
+                <ControlPageLabel>Network Address Changes</ControlPageLabel>
+            </State>
         </States>
     </Device>
 
@@ -116,6 +135,25 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Link Quality Changed</TriggerLabel>
                 <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+            <!-- Network-health counters, fed from the bridge/health topic
+                 (published every 10 min).  Cumulative since zigbee2mqtt last
+                 started, so it is a RISE in leaveCount / networkAddressChanges
+                 that means something, not a non-zero value. -->
+            <State id="messagesPerSec">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Message Rate Changed</TriggerLabel>
+                <ControlPageLabel>Messages / sec</ControlPageLabel>
+            </State>
+            <State id="leaveCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Leave Count Changed</TriggerLabel>
+                <ControlPageLabel>Leave Count</ControlPageLabel>
+            </State>
+            <State id="networkAddressChanges">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Address Changes Changed</TriggerLabel>
+                <ControlPageLabel>Network Address Changes</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -212,6 +250,25 @@
                 <TriggerLabel>Link Quality Changed</TriggerLabel>
                 <ControlPageLabel>Link Quality</ControlPageLabel>
             </State>
+            <!-- Network-health counters, fed from the bridge/health topic
+                 (published every 10 min).  Cumulative since zigbee2mqtt last
+                 started, so it is a RISE in leaveCount / networkAddressChanges
+                 that means something, not a non-zero value. -->
+            <State id="messagesPerSec">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Message Rate Changed</TriggerLabel>
+                <ControlPageLabel>Messages / sec</ControlPageLabel>
+            </State>
+            <State id="leaveCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Leave Count Changed</TriggerLabel>
+                <ControlPageLabel>Leave Count</ControlPageLabel>
+            </State>
+            <State id="networkAddressChanges">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Address Changes Changed</TriggerLabel>
+                <ControlPageLabel>Network Address Changes</ControlPageLabel>
+            </State>
         </States>
     </Device>
 
@@ -261,6 +318,25 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Link Quality Changed</TriggerLabel>
                 <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+            <!-- Network-health counters, fed from the bridge/health topic
+                 (published every 10 min).  Cumulative since zigbee2mqtt last
+                 started, so it is a RISE in leaveCount / networkAddressChanges
+                 that means something, not a non-zero value. -->
+            <State id="messagesPerSec">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Message Rate Changed</TriggerLabel>
+                <ControlPageLabel>Messages / sec</ControlPageLabel>
+            </State>
+            <State id="leaveCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Leave Count Changed</TriggerLabel>
+                <ControlPageLabel>Leave Count</ControlPageLabel>
+            </State>
+            <State id="networkAddressChanges">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Address Changes Changed</TriggerLabel>
+                <ControlPageLabel>Network Address Changes</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -345,6 +421,25 @@
                 <TriggerLabel>Link Quality Changed</TriggerLabel>
                 <ControlPageLabel>Link Quality</ControlPageLabel>
             </State>
+            <!-- Network-health counters, fed from the bridge/health topic
+                 (published every 10 min).  Cumulative since zigbee2mqtt last
+                 started, so it is a RISE in leaveCount / networkAddressChanges
+                 that means something, not a non-zero value. -->
+            <State id="messagesPerSec">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Message Rate Changed</TriggerLabel>
+                <ControlPageLabel>Messages / sec</ControlPageLabel>
+            </State>
+            <State id="leaveCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Leave Count Changed</TriggerLabel>
+                <ControlPageLabel>Leave Count</ControlPageLabel>
+            </State>
+            <State id="networkAddressChanges">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Address Changes Changed</TriggerLabel>
+                <ControlPageLabel>Network Address Changes</ControlPageLabel>
+            </State>
         </States>
     </Device>
 
@@ -400,6 +495,25 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Link Quality Changed</TriggerLabel>
                 <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+            <!-- Network-health counters, fed from the bridge/health topic
+                 (published every 10 min).  Cumulative since zigbee2mqtt last
+                 started, so it is a RISE in leaveCount / networkAddressChanges
+                 that means something, not a non-zero value. -->
+            <State id="messagesPerSec">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Message Rate Changed</TriggerLabel>
+                <ControlPageLabel>Messages / sec</ControlPageLabel>
+            </State>
+            <State id="leaveCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Leave Count Changed</TriggerLabel>
+                <ControlPageLabel>Leave Count</ControlPageLabel>
+            </State>
+            <State id="networkAddressChanges">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Address Changes Changed</TriggerLabel>
+                <ControlPageLabel>Network Address Changes</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -470,6 +584,25 @@
                 <TriggerLabel>Link Quality Changed</TriggerLabel>
                 <ControlPageLabel>Link Quality</ControlPageLabel>
             </State>
+            <!-- Network-health counters, fed from the bridge/health topic
+                 (published every 10 min).  Cumulative since zigbee2mqtt last
+                 started, so it is a RISE in leaveCount / networkAddressChanges
+                 that means something, not a non-zero value. -->
+            <State id="messagesPerSec">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Message Rate Changed</TriggerLabel>
+                <ControlPageLabel>Messages / sec</ControlPageLabel>
+            </State>
+            <State id="leaveCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Leave Count Changed</TriggerLabel>
+                <ControlPageLabel>Leave Count</ControlPageLabel>
+            </State>
+            <State id="networkAddressChanges">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Address Changes Changed</TriggerLabel>
+                <ControlPageLabel>Network Address Changes</ControlPageLabel>
+            </State>
         </States>
         <UiDisplayStateId>temperature</UiDisplayStateId>
     </Device>
@@ -510,6 +643,25 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Link Quality Changed</TriggerLabel>
                 <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+            <!-- Network-health counters, fed from the bridge/health topic
+                 (published every 10 min).  Cumulative since zigbee2mqtt last
+                 started, so it is a RISE in leaveCount / networkAddressChanges
+                 that means something, not a non-zero value. -->
+            <State id="messagesPerSec">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Message Rate Changed</TriggerLabel>
+                <ControlPageLabel>Messages / sec</ControlPageLabel>
+            </State>
+            <State id="leaveCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Leave Count Changed</TriggerLabel>
+                <ControlPageLabel>Leave Count</ControlPageLabel>
+            </State>
+            <State id="networkAddressChanges">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Address Changes Changed</TriggerLabel>
+                <ControlPageLabel>Network Address Changes</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -562,6 +714,25 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Link Quality Changed</TriggerLabel>
                 <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+            <!-- Network-health counters, fed from the bridge/health topic
+                 (published every 10 min).  Cumulative since zigbee2mqtt last
+                 started, so it is a RISE in leaveCount / networkAddressChanges
+                 that means something, not a non-zero value. -->
+            <State id="messagesPerSec">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Message Rate Changed</TriggerLabel>
+                <ControlPageLabel>Messages / sec</ControlPageLabel>
+            </State>
+            <State id="leaveCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Leave Count Changed</TriggerLabel>
+                <ControlPageLabel>Leave Count</ControlPageLabel>
+            </State>
+            <State id="networkAddressChanges">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Address Changes Changed</TriggerLabel>
+                <ControlPageLabel>Network Address Changes</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -674,6 +845,25 @@
                 <TriggerLabel>Link Quality Changed</TriggerLabel>
                 <ControlPageLabel>Link Quality</ControlPageLabel>
             </State>
+            <!-- Network-health counters, fed from the bridge/health topic
+                 (published every 10 min).  Cumulative since zigbee2mqtt last
+                 started, so it is a RISE in leaveCount / networkAddressChanges
+                 that means something, not a non-zero value. -->
+            <State id="messagesPerSec">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Message Rate Changed</TriggerLabel>
+                <ControlPageLabel>Messages / sec</ControlPageLabel>
+            </State>
+            <State id="leaveCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Leave Count Changed</TriggerLabel>
+                <ControlPageLabel>Leave Count</ControlPageLabel>
+            </State>
+            <State id="networkAddressChanges">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Address Changes Changed</TriggerLabel>
+                <ControlPageLabel>Network Address Changes</ControlPageLabel>
+            </State>
         </States>
         <UiDisplayStateId>lastAction</UiDisplayStateId>
     </Device>
@@ -726,6 +916,25 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Link Quality Changed</TriggerLabel>
                 <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+            <!-- Network-health counters, fed from the bridge/health topic
+                 (published every 10 min).  Cumulative since zigbee2mqtt last
+                 started, so it is a RISE in leaveCount / networkAddressChanges
+                 that means something, not a non-zero value. -->
+            <State id="messagesPerSec">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Message Rate Changed</TriggerLabel>
+                <ControlPageLabel>Messages / sec</ControlPageLabel>
+            </State>
+            <State id="leaveCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Leave Count Changed</TriggerLabel>
+                <ControlPageLabel>Leave Count</ControlPageLabel>
+            </State>
+            <State id="networkAddressChanges">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Address Changes Changed</TriggerLabel>
+                <ControlPageLabel>Network Address Changes</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -786,6 +995,25 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Link Quality Changed</TriggerLabel>
                 <ControlPageLabel>Link Quality</ControlPageLabel>
+            </State>
+            <!-- Network-health counters, fed from the bridge/health topic
+                 (published every 10 min).  Cumulative since zigbee2mqtt last
+                 started, so it is a RISE in leaveCount / networkAddressChanges
+                 that means something, not a non-zero value. -->
+            <State id="messagesPerSec">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Message Rate Changed</TriggerLabel>
+                <ControlPageLabel>Messages / sec</ControlPageLabel>
+            </State>
+            <State id="leaveCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Leave Count Changed</TriggerLabel>
+                <ControlPageLabel>Leave Count</ControlPageLabel>
+            </State>
+            <State id="networkAddressChanges">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Network Address Changes Changed</TriggerLabel>
+                <ControlPageLabel>Network Address Changes</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -865,6 +1093,68 @@
                 <ValueType>String</ValueType>
                 <TriggerLabel>Last Update Changed</TriggerLabel>
                 <ControlPageLabel>Last Update</ControlPageLabel>
+            </State>
+
+            <!-- Health, from the bridge/health topic (v2.1.0).  zigbee2mqtt
+                 publishes this every 10 minutes by default, so treat every
+                 value here as up to that old — healthLastUpdate says how old. -->
+            <State id="healthOsMemoryPercent">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Host Memory Use Changed</TriggerLabel>
+                <ControlPageLabel>Host Memory %</ControlPageLabel>
+            </State>
+            <State id="healthOsLoad1">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Host Load Average Changed</TriggerLabel>
+                <ControlPageLabel>Host Load (1 min)</ControlPageLabel>
+            </State>
+            <State id="healthProcessMemoryMb">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Z2M Memory Use Changed</TriggerLabel>
+                <ControlPageLabel>Z2M Memory MB</ControlPageLabel>
+            </State>
+            <State id="healthProcessUptime">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Z2M Uptime Changed</TriggerLabel>
+                <ControlPageLabel>Z2M Uptime</ControlPageLabel>
+            </State>
+            <State id="healthMqttQueued">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>MQTT Queue Depth Changed</TriggerLabel>
+                <ControlPageLabel>MQTT Queued</ControlPageLabel>
+            </State>
+            <State id="healthMqttPublished">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>MQTT Published Count Changed</TriggerLabel>
+                <ControlPageLabel>MQTT Published</ControlPageLabel>
+            </State>
+            <State id="healthMqttReceived">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>MQTT Received Count Changed</TriggerLabel>
+                <ControlPageLabel>MQTT Received</ControlPageLabel>
+            </State>
+            <State id="healthLastUpdate">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Health Report Time Changed</TriggerLabel>
+                <ControlPageLabel>Health Reported</ControlPageLabel>
+            </State>
+
+            <!-- Last bridge/event seen on this bridge, so a trigger's actions
+                 can name the device that joined / left without a script. -->
+            <State id="lastEvent">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Bridge Event Changed</TriggerLabel>
+                <ControlPageLabel>Last Event</ControlPageLabel>
+            </State>
+            <State id="lastEventDevice">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Bridge Event Device Changed</TriggerLabel>
+                <ControlPageLabel>Last Event Device</ControlPageLabel>
+            </State>
+            <State id="lastEventTime">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Bridge Event Time Changed</TriggerLabel>
+                <ControlPageLabel>Last Event Time</ControlPageLabel>
             </State>
         </States>
         <UiDisplayStateId>status</UiDisplayStateId>
