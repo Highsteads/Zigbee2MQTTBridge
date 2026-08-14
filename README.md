@@ -144,10 +144,6 @@ re-detects capabilities and corrects the Indigo subType without delete-and-recre
 | **Test MQTT Connection** | Dump the full banner and then check the broker, the traffic and the bridge in one go — made for a support post. |
 | **Show Plugin Info** | Log the full plugin and environment banner. |
 
-## Acknowledgements
-
-With thanks to **Autolog** for the [zigbee2mqtt plugin](https://github.com/autolog/zigbee2mqtt) — studying its design showed us the way to build this plugin, and the project would not exist without that prior work.
-
 ## Authors & licence
 
 Vibed into existence by **CliveS**, who knew what he wanted, argued until he got it, and tested it on a real house. Typed at inhuman speed by **Claude** (Anthropic), who mostly did as it was told.

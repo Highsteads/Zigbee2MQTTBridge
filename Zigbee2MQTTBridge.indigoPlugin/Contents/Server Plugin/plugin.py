@@ -9,7 +9,7 @@
 # Date:        14-08-2026
 # Version:     2.1.0
 #
-# v2.1.0 (14-08-2026): Tier 1 of the Autolog comparison — the things Indigo
+# v2.1.0 (14-08-2026): the things Indigo
 # itself already knows how to show, which this plugin was never telling it,
 # plus the health topic that was arriving and being dropped.
 # * NATIVE BATTERY. 38 battery-powered Zigbee devices reported into a custom
@@ -480,8 +480,8 @@
 #   bridge/state publishes "online" without JSON quotes) instead of dropping.
 #
 # v1.8.0 (22-05-2026):
-# - Indigo device subType applied to every device type (was 0 — confirmed gap
-#   vs autolog Zigbee2mqtt Bridge).  Lights, relays, contacts, occupancy,
+# - Indigo device subType applied to every device type (was 0).  Lights,
+#   relays, contacts, occupancy,
 #   temperature sensors and covers now get the right SDK subType so
 #   HomeKitLink-Siri, control pages and Indigo's UI render the right icon /
 #   accessory kind.  Set statically in Devices.xml + dynamically in
@@ -492,7 +492,7 @@
 # - exception_handler() helper added — logs traceback PLUS the failing source
 #   line and function name extracted from the deepest traceback frame.  Wired
 #   into the high-traffic raw-field capture path and availability handler so
-#   per-device failures finally name themselves.  Pattern lifted from autolog.
+#   per-device failures finally name themselves.
 #
 # v1.7.2 (13-05-2026):
 # - Secrets import split into per-key try/except blocks. Previous single-line
@@ -4909,7 +4909,7 @@ class Plugin(indigo.PluginBase):
         True, also extract the actual source line that raised from the deepest
         traceback frame — invaluable when one device out of dozens triggers a
         failure and the bare message doesn't say which line in which method
-        blew up. Modelled on autolog's exception_handler pattern.
+        blew up.
         """
         import traceback
         tb = exc.__traceback__
