@@ -191,7 +191,8 @@ class NativeAttributesMixin:
     # health states: 20 devices logged three errors each and the coordinator
     # populated nothing at all (its updater filters on `k in dev.states`, so it
     # dropped them without even that).
-    _V210_HEALTH_STATES = ("messagesPerSec", "leaveCount", "networkAddressChanges")
+    _V210_HEALTH_STATES = ("messagesPerSec", "leaveCount", "networkAddressChanges",
+                           "updateState", "updateAvailable")
     _V210_COORDINATOR_STATES = ("healthOsMemoryPercent", "healthLastUpdate",
                                 "lastEvent")
 

@@ -64,4 +64,17 @@
         <CallbackMethod>action_publish_custom</CallbackMethod>
     </Action>
 
+    <!-- Deliberately NOT filtered to a device type: any Zigbee device may
+         support over-the-air updates. The callback refuses anything whose
+         definition says otherwise, and anything with no update pending. -->
+    <Action id="updateFirmware" uiPath="DeviceActions">
+        <Name>Update Device Firmware</Name>
+        <CallbackMethod>action_update_firmware</CallbackMethod>
+        <ConfigUI>
+            <Field id="warning" type="label" fontColor="orange">
+                <Label>Starts a firmware update over the air. It can take several minutes, the device will be unresponsive throughout, and interrupting it can leave the device unusable. Run "Check for Firmware Updates" first — this does nothing unless an update is actually waiting.</Label>
+            </Field>
+        </ConfigUI>
+    </Action>
+
 </Actions>

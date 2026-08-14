@@ -27,6 +27,16 @@
         <Name>Report Network Health</Name>
         <CallbackMethod>report_network_health</CallbackMethod>
     </MenuItem>
+    <MenuItem id="sepFirmware" isSeparator="true"/>
+    <MenuItem id="checkFirmwareUpdates">
+        <Name>Check for Firmware Updates</Name>
+        <CallbackMethod>check_firmware_updates</CallbackMethod>
+    </MenuItem>
+    <MenuItem id="reportFirmwareStatus">
+        <Name>Report Firmware Status</Name>
+        <CallbackMethod>report_firmware_status</CallbackMethod>
+    </MenuItem>
+
     <MenuItem id="sepJoin" isSeparator="true"/>
     <MenuItem id="permitJoinEnable">
         <Name>Enable Pairing (Permit Join, 254s)</Name>

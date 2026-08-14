@@ -43,6 +43,10 @@
         <Name>Zigbee Device Changed Network Address</Name>
     </Event>
 
+    <Event id="otaUpdateAvailable">
+        <Name>Zigbee Device Firmware Update Available</Name>
+    </Event>
+
     <Event id="sepBridge" isSeparator="true"/>
 
     <Event id="bridgeOffline">

@@ -111,6 +111,9 @@ class BridgeMixin:
                     self._process_bridge_health(payload, effective_prefix)
                 elif bt == "event":
                     self._process_bridge_event(payload, effective_prefix)
+                elif bt == "response" and len(parts) >= 6 \
+                        and parts[3] == "device" and parts[4] == "ota_update":
+                    self._process_ota_response(parts[5], payload, effective_prefix)
             return
 
         # Availability: last path component is "availability"

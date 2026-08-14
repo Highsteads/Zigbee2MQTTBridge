@@ -168,6 +168,15 @@ class StateProcessingMixin:
         # awake and zigbee2mqtt does not reliably queue one for a sleeping
         # device, so a device that has just published is the one moment a write
         # is certain to land.
+        # Firmware: zigbee2mqtt rides an `update` object along with ordinary
+        # state payloads, so this is where update availability arrives.
+        if isinstance(payload.get("update"), dict):
+            try:
+                self._process_update_object(dev, payload["update"])
+            except Exception as e:
+                self.exception_handler(e, log_failing_statement=True,
+                                       context=f"{dev.name} firmware update object")
+
         try:
             self._check_setting_drift(dev, payload)
         except Exception as e:

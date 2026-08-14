@@ -673,6 +673,7 @@ from z2m_device_states import DeviceStatesMixin
 from z2m_menus import MenusMixin
 from z2m_mqtt import MqttMixin
 from z2m_native import NativeAttributesMixin
+from z2m_ota import OtaMixin
 from z2m_settings import SettingsMixin
 from z2m_state_processing import StateProcessingMixin
 
@@ -686,6 +687,7 @@ class Plugin(
     MenusMixin,
     MqttMixin,
     NativeAttributesMixin,
+    OtaMixin,
     SettingsMixin,
     StateProcessingMixin,
     indigo.PluginBase,

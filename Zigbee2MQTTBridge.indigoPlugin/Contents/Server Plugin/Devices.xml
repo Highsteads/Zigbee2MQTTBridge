@@ -84,6 +84,35 @@
                 <TriggerLabel>Network Address Changes Changed</TriggerLabel>
                 <ControlPageLabel>Network Address Changes</ControlPageLabel>
             </State>
+            <!-- Firmware, from the `update` object zigbee2mqtt puts in the
+                 device's own state payload. `updateState` is authoritative —
+                 the version numbers are opaque manufacturer values and cannot
+                 be compared to decide whether an update is due. -->
+            <State id="updateState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Update State Changed</TriggerLabel>
+                <ControlPageLabel>Firmware State</ControlPageLabel>
+            </State>
+            <State id="updateAvailable">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Firmware Update Available Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Update Available</ControlPageLabel>
+            </State>
+            <State id="updateInstalledVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Installed Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Installed Firmware</ControlPageLabel>
+            </State>
+            <State id="updateLatestVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Latest Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Latest Firmware</ControlPageLabel>
+            </State>
+            <State id="updateProgress">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Firmware Update Progress Changed</TriggerLabel>
+                <ControlPageLabel>Update Progress %</ControlPageLabel>
+            </State>
         </States>
     </Device>
 
@@ -154,6 +183,35 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Network Address Changes Changed</TriggerLabel>
                 <ControlPageLabel>Network Address Changes</ControlPageLabel>
+            </State>
+            <!-- Firmware, from the `update` object zigbee2mqtt puts in the
+                 device's own state payload. `updateState` is authoritative —
+                 the version numbers are opaque manufacturer values and cannot
+                 be compared to decide whether an update is due. -->
+            <State id="updateState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Update State Changed</TriggerLabel>
+                <ControlPageLabel>Firmware State</ControlPageLabel>
+            </State>
+            <State id="updateAvailable">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Firmware Update Available Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Update Available</ControlPageLabel>
+            </State>
+            <State id="updateInstalledVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Installed Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Installed Firmware</ControlPageLabel>
+            </State>
+            <State id="updateLatestVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Latest Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Latest Firmware</ControlPageLabel>
+            </State>
+            <State id="updateProgress">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Firmware Update Progress Changed</TriggerLabel>
+                <ControlPageLabel>Update Progress %</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -269,6 +327,35 @@
                 <TriggerLabel>Network Address Changes Changed</TriggerLabel>
                 <ControlPageLabel>Network Address Changes</ControlPageLabel>
             </State>
+            <!-- Firmware, from the `update` object zigbee2mqtt puts in the
+                 device's own state payload. `updateState` is authoritative —
+                 the version numbers are opaque manufacturer values and cannot
+                 be compared to decide whether an update is due. -->
+            <State id="updateState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Update State Changed</TriggerLabel>
+                <ControlPageLabel>Firmware State</ControlPageLabel>
+            </State>
+            <State id="updateAvailable">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Firmware Update Available Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Update Available</ControlPageLabel>
+            </State>
+            <State id="updateInstalledVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Installed Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Installed Firmware</ControlPageLabel>
+            </State>
+            <State id="updateLatestVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Latest Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Latest Firmware</ControlPageLabel>
+            </State>
+            <State id="updateProgress">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Firmware Update Progress Changed</TriggerLabel>
+                <ControlPageLabel>Update Progress %</ControlPageLabel>
+            </State>
         </States>
     </Device>
 
@@ -337,6 +424,35 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Network Address Changes Changed</TriggerLabel>
                 <ControlPageLabel>Network Address Changes</ControlPageLabel>
+            </State>
+            <!-- Firmware, from the `update` object zigbee2mqtt puts in the
+                 device's own state payload. `updateState` is authoritative —
+                 the version numbers are opaque manufacturer values and cannot
+                 be compared to decide whether an update is due. -->
+            <State id="updateState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Update State Changed</TriggerLabel>
+                <ControlPageLabel>Firmware State</ControlPageLabel>
+            </State>
+            <State id="updateAvailable">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Firmware Update Available Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Update Available</ControlPageLabel>
+            </State>
+            <State id="updateInstalledVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Installed Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Installed Firmware</ControlPageLabel>
+            </State>
+            <State id="updateLatestVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Latest Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Latest Firmware</ControlPageLabel>
+            </State>
+            <State id="updateProgress">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Firmware Update Progress Changed</TriggerLabel>
+                <ControlPageLabel>Update Progress %</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -440,6 +556,35 @@
                 <TriggerLabel>Network Address Changes Changed</TriggerLabel>
                 <ControlPageLabel>Network Address Changes</ControlPageLabel>
             </State>
+            <!-- Firmware, from the `update` object zigbee2mqtt puts in the
+                 device's own state payload. `updateState` is authoritative —
+                 the version numbers are opaque manufacturer values and cannot
+                 be compared to decide whether an update is due. -->
+            <State id="updateState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Update State Changed</TriggerLabel>
+                <ControlPageLabel>Firmware State</ControlPageLabel>
+            </State>
+            <State id="updateAvailable">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Firmware Update Available Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Update Available</ControlPageLabel>
+            </State>
+            <State id="updateInstalledVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Installed Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Installed Firmware</ControlPageLabel>
+            </State>
+            <State id="updateLatestVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Latest Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Latest Firmware</ControlPageLabel>
+            </State>
+            <State id="updateProgress">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Firmware Update Progress Changed</TriggerLabel>
+                <ControlPageLabel>Update Progress %</ControlPageLabel>
+            </State>
         </States>
     </Device>
 
@@ -514,6 +659,35 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Network Address Changes Changed</TriggerLabel>
                 <ControlPageLabel>Network Address Changes</ControlPageLabel>
+            </State>
+            <!-- Firmware, from the `update` object zigbee2mqtt puts in the
+                 device's own state payload. `updateState` is authoritative —
+                 the version numbers are opaque manufacturer values and cannot
+                 be compared to decide whether an update is due. -->
+            <State id="updateState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Update State Changed</TriggerLabel>
+                <ControlPageLabel>Firmware State</ControlPageLabel>
+            </State>
+            <State id="updateAvailable">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Firmware Update Available Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Update Available</ControlPageLabel>
+            </State>
+            <State id="updateInstalledVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Installed Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Installed Firmware</ControlPageLabel>
+            </State>
+            <State id="updateLatestVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Latest Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Latest Firmware</ControlPageLabel>
+            </State>
+            <State id="updateProgress">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Firmware Update Progress Changed</TriggerLabel>
+                <ControlPageLabel>Update Progress %</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -603,6 +777,35 @@
                 <TriggerLabel>Network Address Changes Changed</TriggerLabel>
                 <ControlPageLabel>Network Address Changes</ControlPageLabel>
             </State>
+            <!-- Firmware, from the `update` object zigbee2mqtt puts in the
+                 device's own state payload. `updateState` is authoritative —
+                 the version numbers are opaque manufacturer values and cannot
+                 be compared to decide whether an update is due. -->
+            <State id="updateState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Update State Changed</TriggerLabel>
+                <ControlPageLabel>Firmware State</ControlPageLabel>
+            </State>
+            <State id="updateAvailable">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Firmware Update Available Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Update Available</ControlPageLabel>
+            </State>
+            <State id="updateInstalledVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Installed Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Installed Firmware</ControlPageLabel>
+            </State>
+            <State id="updateLatestVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Latest Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Latest Firmware</ControlPageLabel>
+            </State>
+            <State id="updateProgress">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Firmware Update Progress Changed</TriggerLabel>
+                <ControlPageLabel>Update Progress %</ControlPageLabel>
+            </State>
         </States>
         <UiDisplayStateId>temperature</UiDisplayStateId>
     </Device>
@@ -662,6 +865,35 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Network Address Changes Changed</TriggerLabel>
                 <ControlPageLabel>Network Address Changes</ControlPageLabel>
+            </State>
+            <!-- Firmware, from the `update` object zigbee2mqtt puts in the
+                 device's own state payload. `updateState` is authoritative —
+                 the version numbers are opaque manufacturer values and cannot
+                 be compared to decide whether an update is due. -->
+            <State id="updateState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Update State Changed</TriggerLabel>
+                <ControlPageLabel>Firmware State</ControlPageLabel>
+            </State>
+            <State id="updateAvailable">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Firmware Update Available Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Update Available</ControlPageLabel>
+            </State>
+            <State id="updateInstalledVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Installed Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Installed Firmware</ControlPageLabel>
+            </State>
+            <State id="updateLatestVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Latest Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Latest Firmware</ControlPageLabel>
+            </State>
+            <State id="updateProgress">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Firmware Update Progress Changed</TriggerLabel>
+                <ControlPageLabel>Update Progress %</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -733,6 +965,35 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Network Address Changes Changed</TriggerLabel>
                 <ControlPageLabel>Network Address Changes</ControlPageLabel>
+            </State>
+            <!-- Firmware, from the `update` object zigbee2mqtt puts in the
+                 device's own state payload. `updateState` is authoritative —
+                 the version numbers are opaque manufacturer values and cannot
+                 be compared to decide whether an update is due. -->
+            <State id="updateState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Update State Changed</TriggerLabel>
+                <ControlPageLabel>Firmware State</ControlPageLabel>
+            </State>
+            <State id="updateAvailable">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Firmware Update Available Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Update Available</ControlPageLabel>
+            </State>
+            <State id="updateInstalledVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Installed Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Installed Firmware</ControlPageLabel>
+            </State>
+            <State id="updateLatestVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Latest Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Latest Firmware</ControlPageLabel>
+            </State>
+            <State id="updateProgress">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Firmware Update Progress Changed</TriggerLabel>
+                <ControlPageLabel>Update Progress %</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -864,6 +1125,35 @@
                 <TriggerLabel>Network Address Changes Changed</TriggerLabel>
                 <ControlPageLabel>Network Address Changes</ControlPageLabel>
             </State>
+            <!-- Firmware, from the `update` object zigbee2mqtt puts in the
+                 device's own state payload. `updateState` is authoritative —
+                 the version numbers are opaque manufacturer values and cannot
+                 be compared to decide whether an update is due. -->
+            <State id="updateState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Update State Changed</TriggerLabel>
+                <ControlPageLabel>Firmware State</ControlPageLabel>
+            </State>
+            <State id="updateAvailable">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Firmware Update Available Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Update Available</ControlPageLabel>
+            </State>
+            <State id="updateInstalledVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Installed Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Installed Firmware</ControlPageLabel>
+            </State>
+            <State id="updateLatestVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Latest Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Latest Firmware</ControlPageLabel>
+            </State>
+            <State id="updateProgress">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Firmware Update Progress Changed</TriggerLabel>
+                <ControlPageLabel>Update Progress %</ControlPageLabel>
+            </State>
         </States>
         <UiDisplayStateId>lastAction</UiDisplayStateId>
     </Device>
@@ -935,6 +1225,35 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Network Address Changes Changed</TriggerLabel>
                 <ControlPageLabel>Network Address Changes</ControlPageLabel>
+            </State>
+            <!-- Firmware, from the `update` object zigbee2mqtt puts in the
+                 device's own state payload. `updateState` is authoritative —
+                 the version numbers are opaque manufacturer values and cannot
+                 be compared to decide whether an update is due. -->
+            <State id="updateState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Update State Changed</TriggerLabel>
+                <ControlPageLabel>Firmware State</ControlPageLabel>
+            </State>
+            <State id="updateAvailable">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Firmware Update Available Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Update Available</ControlPageLabel>
+            </State>
+            <State id="updateInstalledVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Installed Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Installed Firmware</ControlPageLabel>
+            </State>
+            <State id="updateLatestVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Latest Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Latest Firmware</ControlPageLabel>
+            </State>
+            <State id="updateProgress">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Firmware Update Progress Changed</TriggerLabel>
+                <ControlPageLabel>Update Progress %</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -1014,6 +1333,35 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>Network Address Changes Changed</TriggerLabel>
                 <ControlPageLabel>Network Address Changes</ControlPageLabel>
+            </State>
+            <!-- Firmware, from the `update` object zigbee2mqtt puts in the
+                 device's own state payload. `updateState` is authoritative —
+                 the version numbers are opaque manufacturer values and cannot
+                 be compared to decide whether an update is due. -->
+            <State id="updateState">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Update State Changed</TriggerLabel>
+                <ControlPageLabel>Firmware State</ControlPageLabel>
+            </State>
+            <State id="updateAvailable">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Firmware Update Available Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Update Available</ControlPageLabel>
+            </State>
+            <State id="updateInstalledVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Installed Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Installed Firmware</ControlPageLabel>
+            </State>
+            <State id="updateLatestVersion">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Latest Firmware Changed</TriggerLabel>
+                <ControlPageLabel>Latest Firmware</ControlPageLabel>
+            </State>
+            <State id="updateProgress">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Firmware Update Progress Changed</TriggerLabel>
+                <ControlPageLabel>Update Progress %</ControlPageLabel>
             </State>
         </States>
     </Device>

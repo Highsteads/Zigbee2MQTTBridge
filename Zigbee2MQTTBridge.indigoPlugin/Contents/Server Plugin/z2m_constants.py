@@ -47,6 +47,8 @@ _BUTTON_ACTION_VALUES = frozenset({
 # last_seen left this set in v1.10.0 — _capture_raw_fields transforms it into a
 # human-readable `lastSeen` dynamic String state instead of swallowing it.
 _ALWAYS_CONSUMED_KEYS = {
+    # Handled by the OTA mixin, which turns it into update* states.
+    "update", "update_available",
     "linkquality",                    # written as linkQuality by every handler
     "update_available", "update",     # OTA meta — deliberately not states
     "click",                          # legacy reclassification trigger only
