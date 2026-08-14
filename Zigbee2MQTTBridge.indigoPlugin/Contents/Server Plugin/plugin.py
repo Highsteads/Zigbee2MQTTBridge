@@ -7,7 +7,31 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 5
 # Date:        14-08-2026
-# Version:     2.1.1
+# Version:     2.2.0
+#
+# v2.2.0 (14-08-2026): the file split, and mains devices stop reporting a
+# battery they do not have.
+# * plugin.py 5,238 -> 1,219 lines. Constants, pure helpers and the
+#   exposes-driven classifier became z2m_constants / z2m_helpers /
+#   z2m_detection; the Plugin class is now composed from seven mixins
+#   (actions, bridge, device states, menus, MQTT, native attributes, state
+#   processing) with indigo.PluginBase LAST so a mixin still wins over its
+#   defaults. All 115 methods present, each defined exactly once.
+# * log() and the MQTT credentials are now LATE-BOUND through the module that
+#   owns them. `from x import y` binds once at import, so patching one module
+#   left the others calling the original — that broke 15 tests on the first
+#   attempt and would have broken any future change the same silent way. The
+#   tests now patch the owning module, which is more correct than what came
+#   before, where patching plugin.py worked only because it was one file.
+# * MAINS DEVICES: zigbee2mqtt reports power_source and the plugin ignored it,
+#   so a mains device was seeded a battery state of 0 and showed a flat cell
+#   for ever — absent presented as a reading. New devices no longer get the
+#   state; an existing one cannot have it removed, so its 0 is labelled
+#   "Mains". Unknown is NOT read as mains: hiding a genuinely flat cell is the
+#   costlier mistake. Backfilled automatically when bridge/devices arrives,
+#   which is the first moment the answer exists — deviceStartComm runs before
+#   MQTT connects, so the cache is empty there. Live: 53 devices resolved,
+#   15 mains.
 #
 # v2.1.1 (14-08-2026): added Contents/Resources/icon.png — the Plugin Store
 # icon, one of the bundle pieces the official Developer's Guide expects and

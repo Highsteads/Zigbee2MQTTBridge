@@ -91,6 +91,10 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+**v2.2.0** — **Mains-powered devices no longer show a flat battery.** zigbee2mqtt says how each device is powered and the plugin was ignoring it, so anything on mains was given a battery reading of 0% — which looks exactly like a dead cell. Those devices now carry no battery reading at all, and any that already picked one up is labelled "Mains" instead. A device whose power source zigbee2mqtt does not report keeps its battery reading, deliberately: hiding a genuinely flat one would be the worse mistake.
+
+Also a large internal tidy-up. The main plugin file had grown past 5,000 lines and is now split across a dozen focused modules. Nothing changes in use — same devices, same states, same settings — but future work lands in sensible places instead of one enormous file.
+
 **v2.1.1** — added the plugin's icon. It had never had one, so it showed as a blank tile wherever Indigo lists plugins by picture. Nothing else changed.
 
 **v2.1.0** — **Indigo now sees what it was always able to show.** Battery-powered Zigbee devices reported their charge into a plugin state and nowhere else, so Indigo's own low-battery list, and every other plugin that reads a device's battery, saw nothing at all — only Z-Wave devices had it. They now carry the real Indigo battery level. Metering plugs reach the Energy UI for the first time, and Reset Energy Total works properly: the kilowatt-hour counter lives on the Zigbee device and cannot be reset from Indigo, so the plugin stores the reading taken at the moment you reset and counts from there. When zigbee2mqtt says a device is offline, that device now goes red in Indigo and shows as being in error, which is what health-monitoring plugins look at — until now an offline sensor looked perfectly well.
