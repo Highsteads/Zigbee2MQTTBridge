@@ -179,9 +179,9 @@ def test_publish_custom_valid_json(plugin, make_device, monkeypatch):
 
 
 def test_publish_custom_rejects_bad_json(plugin, make_device, plugin_mod,
-                                         monkeypatch):
+                                         monkeypatch, helpers_mod):
     logged, sent = [], []
-    monkeypatch.setattr(plugin_mod, "log",
+    monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": logged.append((level, msg)))
     monkeypatch.setattr(plugin, "_publish",
                         lambda t, p: sent.append((t, p)) or True)
@@ -257,9 +257,9 @@ def test_permit_join_publishes_to_all_prefixes(plugin_mod, monkeypatch):
 
 
 def test_orphan_report_flags_missing_ieee(plugin, make_device, plugin_mod,
-                                          monkeypatch):
+                                          monkeypatch, helpers_mod):
     logged = []
-    monkeypatch.setattr(plugin_mod, "log",
+    monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": logged.append((level, msg)))
     live   = make_device(440, "Live Sensor", "z2mSensor",
                          pluginProps={"friendly_name": "Live Sensor",
@@ -281,12 +281,12 @@ def test_orphan_report_flags_missing_ieee(plugin, make_device, plugin_mod,
 
 
 def test_orphan_report_skips_coordinator_radio(plugin, make_device, plugin_mod,
-                                               monkeypatch):
+                                               monkeypatch, helpers_mod):
     """Live false positive (16-07-2026): the SLZB coordinator radio's repeater
     tile read as orphaned because bridge/devices Coordinator entries are
     excluded from the cache by design."""
     logged = []
-    monkeypatch.setattr(plugin_mod, "log",
+    monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": logged.append((level, msg)))
     radio = make_device(442, "SLZB Radio", "z2mRepeater",
                         pluginProps={"friendly_name": "SLZB Radio",

@@ -165,9 +165,9 @@ def test_publish_returns_false_on_bad_rc(plugin):
 
 
 def test_publish_cmd_logs_error_on_failure(plugin, make_device, plugin_mod,
-                                            monkeypatch):
+                                            monkeypatch, helpers_mod):
     logged = []
-    monkeypatch.setattr(plugin_mod, "log",
+    monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": logged.append((level, msg)))
     plugin.mqtt_connected = False
     plugin.mqtt_client    = None

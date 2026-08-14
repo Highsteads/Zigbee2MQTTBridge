@@ -24,15 +24,15 @@ def test_hs_to_rgb_clamps_out_of_range(plugin_mod):
         assert all(isinstance(c, int) and 0 <= c <= 100 for c in (r, g, b)), (hue, sat, (r, g, b))
 
 
-def test_effective_port_coerces_string_secret(plugin, plugin_mod, monkeypatch):
-    monkeypatch.setattr(plugin_mod, "MQTT_PORT", "1884")   # IndigoSecrets as a string
+def test_effective_port_coerces_string_secret(plugin, plugin_mod, monkeypatch, secrets_mod):
+    monkeypatch.setattr(secrets_mod, "MQTT_PORT", "1884")   # IndigoSecrets as a string
     assert plugin._effective_port() == 1884
     assert isinstance(plugin._effective_port(), int)
 
 
-def test_effective_port_invalid_secret_falls_back(plugin, plugin_mod, monkeypatch):
-    monkeypatch.setattr(plugin_mod, "log", lambda *a, **k: None)
-    monkeypatch.setattr(plugin_mod, "MQTT_PORT", "not-a-port")
+def test_effective_port_invalid_secret_falls_back(plugin, plugin_mod, monkeypatch, helpers_mod, secrets_mod):
+    monkeypatch.setattr(helpers_mod, "log", lambda *a, **k: None)
+    monkeypatch.setattr(secrets_mod, "MQTT_PORT", "not-a-port")
     assert plugin._effective_port() == 1883
 
 
@@ -59,8 +59,8 @@ def test_rebuild_mqtt_orders_stop_then_start_and_resets_clock(plugin, monkeypatc
 
 # ── MQTT liveness watchdog (was entirely untested) ───────────────────────────
 
-def test_liveness_rebuilds_when_silent_too_long(plugin, plugin_mod, monkeypatch):
-    monkeypatch.setattr(plugin_mod, "log", lambda *a, **k: None)
+def test_liveness_rebuilds_when_silent_too_long(plugin, plugin_mod, monkeypatch, helpers_mod):
+    monkeypatch.setattr(helpers_mod, "log", lambda *a, **k: None)
     calls = []
     monkeypatch.setattr(plugin, "_rebuild_mqtt", lambda: calls.append(1))
     plugin.mqtt_client    = object()          # a live-looking client
@@ -157,9 +157,9 @@ def test_on_disconnect_clears_connected_and_queues(plugin):
     assert payload["rc"] == 1
 
 
-def test_disconnect_route_warns_on_unexpected_clean_on_zero(plugin, plugin_mod, monkeypatch):
+def test_disconnect_route_warns_on_unexpected_clean_on_zero(plugin, plugin_mod, monkeypatch, helpers_mod):
     logs = []
-    monkeypatch.setattr(plugin_mod, "log",
+    monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": logs.append((level, msg)))
     plugin._process_message("__disconnected__", {"rc": 1})
     plugin._process_message("__disconnected__", {"rc": 0})

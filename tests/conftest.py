@@ -60,6 +60,38 @@ def plugin():
 
 
 @pytest.fixture
+def helpers_mod():
+    """The module that OWNS log().
+
+    Patch logging here, never on plugin.py. Since the v2.2.0 split the plugin
+    is several modules and each calls log through z2m_helpers, so this is the
+    single place a patch takes effect everywhere. Patching plugin.py would
+    silently miss every mixin — which is exactly what happened when the split
+    first landed.
+    """
+    import z2m_helpers
+    return z2m_helpers
+
+
+@pytest.fixture
+def secrets_mod():
+    """The module that OWNS the MQTT credentials.
+
+    Same reasoning as helpers_mod: z2m_mqtt reads them through the module
+    rather than importing the names, so this is the one place a patch lands.
+    """
+    import z2m_secrets
+    return z2m_secrets
+
+
+@pytest.fixture
+def mqtt_mod():
+    """The module that OWNS the paho client handle (z2m_mqtt.mqtt)."""
+    import z2m_mqtt
+    return z2m_mqtt
+
+
+@pytest.fixture
 def make_device():
     """Factory: build a FakeDevice and register it in the indigo.devices stub."""
     import indigo  # the stub

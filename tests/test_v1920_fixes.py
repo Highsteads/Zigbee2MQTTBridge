@@ -135,9 +135,9 @@ def test_orphan_dynamic_type_pruned(plugin, make_device):
 
 # ── #23 _drain_queue: one bad message logs-and-continues, liveness still runs ─
 
-def test_drain_queue_isolates_a_bad_message(plugin, plugin_mod, monkeypatch):
+def test_drain_queue_isolates_a_bad_message(plugin, plugin_mod, monkeypatch, helpers_mod):
     errors = []
-    monkeypatch.setattr(plugin_mod, "log",
+    monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": errors.append((level, msg)))
     processed = []
 
@@ -161,8 +161,8 @@ def test_drain_queue_isolates_a_bad_message(plugin, plugin_mod, monkeypatch):
     assert any(lvl == "ERROR" for lvl, _ in errors)
 
 
-def test_drain_queue_liveness_error_isolated(plugin, plugin_mod, monkeypatch):
-    monkeypatch.setattr(plugin_mod, "log", lambda *a, **k: None)
+def test_drain_queue_liveness_error_isolated(plugin, plugin_mod, monkeypatch, helpers_mod):
+    monkeypatch.setattr(helpers_mod, "log", lambda *a, **k: None)
     monkeypatch.setattr(plugin, "_mqtt_liveness_check",
                         lambda: (_ for _ in ()).throw(RuntimeError("rebuild boom")))
     plugin.msg_queue = queue.Queue()

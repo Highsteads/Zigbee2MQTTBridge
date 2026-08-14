@@ -107,9 +107,9 @@ def test_reclassify_derives_has_battery(plugin, make_device, monkeypatch):
 # ── _apply_updates warns once per (device, state) ─────────────────────────────
 
 def test_apply_updates_warns_once_per_state(plugin, make_device, plugin_mod,
-                                            monkeypatch):
+                                            monkeypatch, helpers_mod):
     logged = []
-    monkeypatch.setattr(plugin_mod, "log",
+    monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": logged.append((level, msg)))
     dev = make_device(307, "Strict", "z2mSensor",
                       static_state_keys=["temperature"])
@@ -231,9 +231,9 @@ def test_action_set_cover_position_publishes(plugin, make_device, monkeypatch):
 
 
 def test_action_bad_numeric_value_logs_error_not_crash(plugin, make_device,
-                                                       plugin_mod, monkeypatch):
+                                                       plugin_mod, monkeypatch, helpers_mod):
     logged = []
-    monkeypatch.setattr(plugin_mod, "log",
+    monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": logged.append((level, msg)))
     sent = []
     monkeypatch.setattr(plugin, "_publish",
@@ -260,13 +260,13 @@ def _pretend_paho_is_installed(monkeypatch, plugin_mod):
 
 
 def test_start_mqtt_without_broker_is_not_an_error(plugin, plugin_mod,
-                                                   monkeypatch):
+                                                   monkeypatch, helpers_mod, secrets_mod):
     """First-run 'not configured' logs INFO, never ERROR (estate convention)."""
     _pretend_paho_is_installed(monkeypatch, plugin_mod)
     logged = []
-    monkeypatch.setattr(plugin_mod, "log",
+    monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": logged.append((level, msg)))
-    monkeypatch.setattr(plugin_mod, "MQTT_BROKER", "")
+    monkeypatch.setattr(secrets_mod, "MQTT_BROKER", "")
     plugin.pluginPrefs["mqtt_broker"] = ""
     plugin._start_mqtt()
     assert plugin.mqtt_client is None
@@ -274,26 +274,26 @@ def test_start_mqtt_without_broker_is_not_an_error(plugin, plugin_mod,
     assert broker_lines and all(lv == "INFO" for lv, _m in broker_lines)
 
 
-def test_start_mqtt_guards_against_double_start(plugin, plugin_mod, monkeypatch):
+def test_start_mqtt_guards_against_double_start(plugin, plugin_mod, monkeypatch, secrets_mod):
     _pretend_paho_is_installed(monkeypatch, plugin_mod)
     stopped = []
     monkeypatch.setattr(plugin, "_stop_mqtt_locked",
                         lambda: stopped.append(1) or setattr(
                             plugin, "mqtt_client", None))
-    monkeypatch.setattr(plugin_mod, "MQTT_BROKER", "")
+    monkeypatch.setattr(secrets_mod, "MQTT_BROKER", "")
     plugin.pluginPrefs["mqtt_broker"] = ""
     plugin.mqtt_client = object()          # a client is already live
     plugin._start_mqtt()
     assert stopped == [1], "existing client must be stopped before a new start"
 
 
-def test_start_mqtt_without_paho_is_an_error(plugin, plugin_mod, monkeypatch):
+def test_start_mqtt_without_paho_is_an_error(plugin, monkeypatch, helpers_mod, mqtt_mod):
     """The guard those two step over deserves its own cover: with paho missing,
     _start_mqtt must say so at ERROR and build no client."""
     logged = []
-    monkeypatch.setattr(plugin_mod, "log",
+    monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": logged.append((level, msg)))
-    monkeypatch.setattr(plugin_mod, "mqtt", None)
+    monkeypatch.setattr(mqtt_mod, "mqtt", None)
     plugin._start_mqtt()
     assert plugin.mqtt_client is None
     assert any(lv == "ERROR" and "paho-mqtt not available" in m for lv, m in logged)

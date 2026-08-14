@@ -10,8 +10,8 @@
 
 # ── _effective_broker / _effective_port ──────────────────────────────────────
 
-def test_effective_broker_falls_back_to_pluginPrefs(plugin_mod, monkeypatch):
-    monkeypatch.setattr(plugin_mod, "MQTT_BROKER", "")
+def test_effective_broker_falls_back_to_pluginPrefs(plugin_mod, monkeypatch, secrets_mod):
+    monkeypatch.setattr(secrets_mod, "MQTT_BROKER", "")
     p = plugin_mod.Plugin(
         "com.clives.indigoplugin.z2mbridge", "Zigbee2MQTT Bridge", "1.9.8",
         {"mqtt_broker": "10.0.0.5"},
@@ -19,8 +19,8 @@ def test_effective_broker_falls_back_to_pluginPrefs(plugin_mod, monkeypatch):
     assert p._effective_broker() == "10.0.0.5"
 
 
-def test_effective_broker_prefers_indigosecrets(plugin_mod, monkeypatch):
-    monkeypatch.setattr(plugin_mod, "MQTT_BROKER", "192.168.1.1")
+def test_effective_broker_prefers_indigosecrets(plugin_mod, monkeypatch, secrets_mod):
+    monkeypatch.setattr(secrets_mod, "MQTT_BROKER", "192.168.1.1")
     p = plugin_mod.Plugin(
         "com.clives.indigoplugin.z2mbridge", "Zigbee2MQTT Bridge", "1.9.8",
         {"mqtt_broker": "10.0.0.5"},
@@ -28,21 +28,21 @@ def test_effective_broker_prefers_indigosecrets(plugin_mod, monkeypatch):
     assert p._effective_broker() == "192.168.1.1"
 
 
-def test_effective_port_fallback_to_pluginPrefs(plugin_mod, monkeypatch):
-    monkeypatch.setattr(plugin_mod, "MQTT_PORT", None)
+def test_effective_port_fallback_to_pluginPrefs(plugin_mod, monkeypatch, secrets_mod):
+    monkeypatch.setattr(secrets_mod, "MQTT_PORT", None)
     p = plugin_mod.Plugin("a", "b", "1.0", {"mqtt_port": "8883"})
     assert p._effective_port() == 8883
 
 
-def test_effective_port_garbage_pluginPrefs_returns_default(plugin_mod, monkeypatch):
+def test_effective_port_garbage_pluginPrefs_returns_default(plugin_mod, monkeypatch, secrets_mod):
     """A non-integer pluginPrefs value must NOT crash startup."""
-    monkeypatch.setattr(plugin_mod, "MQTT_PORT", None)
+    monkeypatch.setattr(secrets_mod, "MQTT_PORT", None)
     p = plugin_mod.Plugin("a", "b", "1.0", {"mqtt_port": "abc"})
     assert p._effective_port() == 1883
 
 
-def test_effective_port_empty_pluginPrefs_returns_default(plugin_mod, monkeypatch):
-    monkeypatch.setattr(plugin_mod, "MQTT_PORT", None)
+def test_effective_port_empty_pluginPrefs_returns_default(plugin_mod, monkeypatch, secrets_mod):
+    monkeypatch.setattr(secrets_mod, "MQTT_PORT", None)
     p = plugin_mod.Plugin("a", "b", "1.0", {"mqtt_port": ""})
     assert p._effective_port() == 1883
 
