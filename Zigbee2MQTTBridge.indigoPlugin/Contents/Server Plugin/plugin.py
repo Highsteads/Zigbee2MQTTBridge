@@ -7,7 +7,25 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 5
 # Date:        14-08-2026
-# Version:     2.3.0
+# Version:     2.4.0
+#
+# v2.4.0 (14-08-2026): FIRMWARE UPDATES. zigbee2mqtt already tracks each
+# device's firmware and rides an `update` object along with ordinary state
+# payloads; the plugin was dropping it. 19 of the 52 devices here support OTA.
+# * Per-device updateState / updateAvailable / installed + latest version /
+#   progress, plus an otaUpdateAvailable event on the RISING EDGE only — a
+#   device with a pending update republishes "available" every few minutes, so
+#   firing each time would turn one update into a trigger storm.
+# * NOTHING UPDATES A DEVICE ON ITS OWN. An OTA runs for minutes over a battery
+#   radio link and a failed one can leave a device unusable, so it takes an
+#   explicit action, and that action refuses unless an update is genuinely
+#   waiting, the definition says OTA is supported, and none is already running.
+#   Checking is a separate, read-only menu item.
+# * update.state is trusted rather than comparing installed against latest —
+#   version numbers are opaque manufacturer values and some devices report a
+#   latest EQUAL to installed while still saying idle, so the comparison would
+#   invent updates that do not exist. Live-confirmed: found one genuine pending
+#   update (Living Room Colour Lamp) on first run.
 #
 # v2.3.0 (14-08-2026): MANAGED DEVICE SETTINGS. A device's firmware settings
 # (sensitivity, delays, reporting intervals) live on the SENSOR, not in Indigo,

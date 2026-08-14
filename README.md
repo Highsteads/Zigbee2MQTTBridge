@@ -91,6 +91,10 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+**v2.4.0** — **Firmware updates, surfaced at last.** zigbee2mqtt already keeps track of which devices have a firmware update waiting, and the plugin was quietly discarding it. Each device now shows its firmware state, the version it is on and the version available, and there is a trigger for when one appears. Two new menu items check for updates and report what is waiting.
+
+Installing one is always your decision — nothing updates on its own. An update runs for several minutes over a radio link and interrupting it can leave a device unusable, so the action refuses unless an update is genuinely waiting and the device is not already busy with one.
+
 **v2.3.0** — **Device settings stay where you put them.** Some sensors keep their settings in their own firmware, not in Indigo — sensitivity, detection delays, reporting intervals. Nothing owned those settings, so when a device forgot them nothing noticed. Two presence sensors here were set deliberately in June, quietly reverted to factory defaults after a battery change, and stayed wrong for four weeks.
 
 Each device's settings dialog now has a **Device Settings** section, built from what that particular device says it can be told. Set a value there and the plugin remembers it, notices when the device drifts off it, says so in the log, and puts it back.
