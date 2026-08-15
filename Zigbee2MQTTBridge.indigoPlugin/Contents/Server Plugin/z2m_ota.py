@@ -152,21 +152,68 @@ class OtaMixin:
                 level=level)
         if not pending:
             return
-        log("  To install one: right-click the device, Zigbee2MQTT Bridge -> "
-            "Update Device Firmware. Do it when the device can be busy for a "
-            "few minutes — an interrupted update can leave it unusable.")
+        log("  To install one: Plugins -> Zigbee2MQTT Bridge -> Update Device "
+            "Firmware... and pick it from the list. Do it when the device can "
+            "be busy for a few minutes — an interrupted update can leave it "
+            "unusable.")
 
     # ── Starting an update, only ever on request ─────────────────────────────
 
     def action_update_firmware(self, action, dev=None, callerWaitingForResult=None):
-        """Action: start an OTA update for one device.
+        """Action: start an OTA update for one device (for use in a trigger,
+        schedule or action group). The menu item below is the easier route for
+        a one-off; both go through the same guards."""
+        if dev is None:
+            log("Update Device Firmware: no device given", level="ERROR")
+            return
+        self._start_firmware_update(dev)
+
+    def list_devices_with_updates(self, filter="", valuesDict=None, typeId="",
+                                  targetId=0):
+        """Devices with an update genuinely waiting, for the menu picker.
+
+        Only `available` devices are listed. Offering the whole estate and
+        refusing most of it afterwards would be a worse dialog than one that
+        simply shows what can be done.
+        """
+        rows = []
+        for dev in indigo.devices.iter(self.pluginId):
+            if dev.states.get("updateState") != STATE_AVAILABLE:
+                continue
+            installed = dev.states.get("updateInstalledVersion") or "?"
+            latest    = dev.states.get("updateLatestVersion") or "?"
+            rows.append((str(dev.id), f"{dev.name}  ({installed} -> {latest})"))
+        if not rows:
+            # A menu with no options looks broken. Say why it is empty, and the
+            # callback refuses this value.
+            return [("", "-- no updates waiting --")]
+        return sorted(rows, key=lambda r: r[1])
+
+    def menu_update_firmware(self, valuesDict=None, typeId=None):
+        """Menu: pick a device with an update waiting and start it.
+
+        Menu ConfigUIs are never validated by Indigo — the validation stubs are
+        commented out in plugin_base.py — so everything is checked here rather
+        than relying on the dialog to have done it.
+        """
+        chosen = str((valuesDict or {}).get("targetDevice") or "").strip()
+        if not chosen:
+            log("No device chosen — nothing to update.", level="WARNING")
+            return True
+        try:
+            dev = indigo.devices[int(chosen)]
+        except (ValueError, KeyError):
+            log(f"Could not find the chosen device ({chosen!r}).", level="ERROR")
+            return True
+        self._start_firmware_update(dev)
+        return True
+
+    def _start_firmware_update(self, dev):
+        """The one guarded path to starting an update, shared by both routes.
 
         Guarded rather than trusting the caller: an update fired at a device
         that cannot take one is the expensive mistake here.
         """
-        if dev is None:
-            log("Update Device Firmware: no device given", level="ERROR")
-            return
         ieee = (dev.ownerProps.get("ieee_address") or "").strip()
         if not ieee:
             log(f"{dev.name}: no IEEE address stored — cannot start a firmware "
@@ -190,7 +237,7 @@ class OtaMixin:
                          {"id": ieee}):
             log(f"{dev.name}: firmware update started. It can take several "
                 f"minutes and the device will be unresponsive meanwhile — do "
-                f"not power it off.", level="WARNING")
+                f"not power it off. Watch its Update Progress state.")
 
     # ── Replies from zigbee2mqtt ─────────────────────────────────────────────
 

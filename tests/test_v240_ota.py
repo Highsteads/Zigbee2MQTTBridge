@@ -259,3 +259,62 @@ def test_ota_responses_are_routed(plugin, monkeypatch):
     plugin._process_message(
         "zigbee2mqtt/bridge/response/device/ota_update/update", {"status": "ok"})
     assert seen == ["check", "update"]
+
+
+# ── the menu picker (v2.6.0) ──────────────────────────────────────────────────
+
+def test_the_picker_lists_only_devices_with_an_update(plugin, make_device):
+    """Offering the whole estate and refusing most of it afterwards would be a
+    worse dialog than one showing only what can actually be done."""
+    _dev(plugin, make_device, dev_id=910, states={
+        "updateState": "available", "updateInstalledVersion": "100",
+        "updateLatestVersion": "101"})
+    make_device(911, "Up To Date Lamp", "z2mLight",
+                pluginProps={"ieee_address": "0xb"},
+                states={"updateState": "idle"})
+    make_device(912, "Never Checked", "z2mLight", pluginProps={"ieee_address": "0xc"})
+    rows = plugin.list_devices_with_updates()
+    assert len(rows) == 1
+    value, label = rows[0]
+    assert value == "910"
+    assert "100 -> 101" in label
+
+
+def test_an_empty_picker_says_why(plugin, make_device):
+    """A menu with no options looks broken."""
+    make_device(913, "Up To Date Lamp", "z2mLight", states={"updateState": "idle"})
+    rows = plugin.list_devices_with_updates()
+    assert rows == [("", "-- no updates waiting --")]
+
+
+def test_the_menu_starts_the_update_for_the_chosen_device(plugin, make_device,
+                                                          monkeypatch):
+    dev = _dev(plugin, make_device, dev_id=914, states={"updateState": "available"})
+    sent = _sent(monkeypatch, plugin)
+    plugin.menu_update_firmware({"targetDevice": str(dev.id)}, None)
+    assert sent == [("zigbee2mqtt/bridge/request/device/ota_update/update",
+                     {"id": "0xota1"})]
+
+
+def test_the_menu_refuses_the_empty_placeholder(plugin, monkeypatch):
+    """Menu ConfigUIs are never validated by Indigo, so the callback must check
+    rather than assume the dialog did."""
+    sent = _sent(monkeypatch, plugin)
+    plugin.menu_update_firmware({"targetDevice": ""}, None)
+    assert sent == []
+
+
+def test_the_menu_survives_a_device_deleted_mid_dialog(plugin, monkeypatch):
+    sent = _sent(monkeypatch, plugin)
+    plugin.menu_update_firmware({"targetDevice": "99999999"}, None)
+    assert sent == []
+
+
+def test_the_menu_obeys_the_same_guards_as_the_action(plugin, make_device,
+                                                      monkeypatch):
+    """Both routes go through one guarded path — the menu must not be a way
+    round the checks."""
+    dev = _dev(plugin, make_device, dev_id=915, states={"updateState": "idle"})
+    sent = _sent(monkeypatch, plugin)
+    plugin.menu_update_firmware({"targetDevice": str(dev.id)}, None)
+    assert sent == [], "no update waiting, so nothing sent"

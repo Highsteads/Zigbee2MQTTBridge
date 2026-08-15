@@ -7,7 +7,25 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 5
 # Date:        14-08-2026
-# Version:     2.5.1
+# Version:     2.6.0
+#
+# v2.6.0 (15-08-2026): installing a firmware update is now two clicks.
+# * New menu item "Update Device Firmware..." with a picker listing ONLY the
+#   devices that have an update waiting, with their versions. Building an
+#   Action Group to press a button once was the wrong shape for a one-off, and
+#   that was my design, not Indigo's.
+# * Both routes go through ONE guarded path, `_start_firmware_update`. The menu
+#   must not become a way round the checks — mutation-tested by making it
+#   publish directly, which fails the guard test.
+# * Menu ConfigUIs are NEVER validated by Indigo (the stubs are commented out
+#   in plugin_base.py), so the callback validates its own input rather than
+#   trusting the dialog: an empty pick and a device deleted mid-dialog are both
+#   handled.
+# * The action lost `uiPath="DeviceActions"`, which had filed it inside
+#   Indigo's OWN Device Actions submenu next to Turn On / Toggle — the exact
+#   ambiguity that has sent repoints to the wrong action before. It now appears
+#   under the plugin's own name. Safe to change: the action is new and has no
+#   stored steps to invalidate.
 #
 # v2.5.1 (15-08-2026): the first real firmware check produced EIGHT red lines,
 # which is how a log stops being worth reading. Found by looking at the log

@@ -67,7 +67,7 @@
     <!-- Deliberately NOT filtered to a device type: any Zigbee device may
          support over-the-air updates. The callback refuses anything whose
          definition says otherwise, and anything with no update pending. -->
-    <Action id="updateFirmware" uiPath="DeviceActions">
+    <Action id="updateFirmware">
         <Name>Update Device Firmware</Name>
         <CallbackMethod>action_update_firmware</CallbackMethod>
         <ConfigUI>

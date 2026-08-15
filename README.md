@@ -91,6 +91,10 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+**v2.6.0** — **Installing a firmware update is now two clicks.** There is a new **Plugins → Zigbee2MQTT Bridge → Update Device Firmware...** menu item, listing only the devices that actually have an update waiting, with the version they are on and the version they would move to. Pick one and it starts.
+
+Previously this meant building an Action Group to press a button once, which was the wrong shape for a one-off job. The action is still there for use in a trigger or schedule, and both routes go through exactly the same safety checks.
+
 **v2.5.1** — Quieter firmware checks. Asking a houseful of battery sensors about their firmware means most of them are asleep and will not answer, which is normal rather than a fault — those replies no longer appear as errors, and a real failure still does. The log also no longer refers to a device called "?" when zigbee2mqtt's reply does not identify one.
 
 **v2.5.0** — **Split a sensor's extra readings into their own devices.** A presence sensor that also measures temperature, humidity and light puts all of it into one Indigo device, where the extra readings sit as plain states — no sensor type, nothing HomeKit can see, and nowhere obvious to put them on a control page.

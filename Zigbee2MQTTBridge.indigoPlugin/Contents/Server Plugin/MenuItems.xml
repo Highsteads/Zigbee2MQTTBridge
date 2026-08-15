@@ -36,6 +36,20 @@
         <Name>Report Firmware Status</Name>
         <CallbackMethod>report_firmware_status</CallbackMethod>
     </MenuItem>
+    <MenuItem id="updateFirmwareMenu">
+        <Name>Update Device Firmware...</Name>
+        <CallbackMethod>menu_update_firmware</CallbackMethod>
+        <ConfigUI>
+            <Field id="targetDevice" type="menu">
+                <Label>Device:</Label>
+                <List class="self" method="list_devices_with_updates" dynamicReload="true"/>
+                <Description>Only devices with an update waiting are listed. Run "Check for Firmware Updates" first if this is empty.</Description>
+            </Field>
+            <Field id="warning" type="label" fontColor="orange">
+                <Label>The update runs over the air and takes several minutes. The device will be unresponsive throughout — do not switch it off at the wall while it is running, as an interrupted update can leave it unusable.</Label>
+            </Field>
+        </ConfigUI>
+    </MenuItem>
 
     <MenuItem id="sepJoin" isSeparator="true"/>
     <MenuItem id="permitJoinEnable">
