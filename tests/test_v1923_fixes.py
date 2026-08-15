@@ -253,16 +253,22 @@ def test_action_bad_numeric_value_logs_error_not_crash(plugin, make_device,
 # tests passed on a Mac with paho in site-packages and failed on CI, which
 # installs pytest only — the suite is deliberately paho-free (see conftest's
 # FakeReasonCode), so nothing else in it noticed. Red from 02-Aug to 04-Aug-2026.
-def _pretend_paho_is_installed(monkeypatch, plugin_mod):
+def _pretend_paho_is_installed(monkeypatch, mqtt_mod):
     """Satisfy the import guard. Neither test touches the module beyond the
-    None check, so a bare sentinel is enough and keeps the suite paho-free."""
-    monkeypatch.setattr(plugin_mod, "mqtt", object())
+    None check, so a bare sentinel is enough and keeps the suite paho-free.
+
+    Patched on z2m_mqtt, which OWNS the handle. It used to patch plugin.py,
+    which stopped meaning anything at the v2.2.0 split — and the breakage was
+    invisible on any machine with paho actually installed, because the real
+    module satisfied the guard regardless. CI, which has no paho, failed for
+    eight consecutive runs while local stayed green."""
+    monkeypatch.setattr(mqtt_mod, "mqtt", object())
 
 
-def test_start_mqtt_without_broker_is_not_an_error(plugin, plugin_mod,
+def test_start_mqtt_without_broker_is_not_an_error(plugin, mqtt_mod,
                                                    monkeypatch, helpers_mod, secrets_mod):
     """First-run 'not configured' logs INFO, never ERROR (estate convention)."""
-    _pretend_paho_is_installed(monkeypatch, plugin_mod)
+    _pretend_paho_is_installed(monkeypatch, mqtt_mod)
     logged = []
     monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": logged.append((level, msg)))
@@ -274,8 +280,8 @@ def test_start_mqtt_without_broker_is_not_an_error(plugin, plugin_mod,
     assert broker_lines and all(lv == "INFO" for lv, _m in broker_lines)
 
 
-def test_start_mqtt_guards_against_double_start(plugin, plugin_mod, monkeypatch, secrets_mod):
-    _pretend_paho_is_installed(monkeypatch, plugin_mod)
+def test_start_mqtt_guards_against_double_start(plugin, mqtt_mod, monkeypatch, secrets_mod):
+    _pretend_paho_is_installed(monkeypatch, mqtt_mod)
     stopped = []
     monkeypatch.setattr(plugin, "_stop_mqtt_locked",
                         lambda: stopped.append(1) or setattr(
