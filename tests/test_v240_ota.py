@@ -173,15 +173,64 @@ def test_check_never_starts_an_update(plugin, make_device, monkeypatch):
 
 # ── replies ───────────────────────────────────────────────────────────────────
 
+def test_a_sleeping_device_is_not_reported_as_an_error(plugin, make_device,
+                                                       monkeypatch, helpers_mod):
+    """A battery sensor spends nearly all its life asleep and simply will not
+    answer. Eight red lines from one routine check across 19 devices is how a
+    log stops being worth reading."""
+    _dev(plugin, make_device)
+    logged = []
+    monkeypatch.setattr(helpers_mod, "log",
+                        lambda msg, level="INFO": logged.append((level, msg)))
+    for reason in ("Failed to check if OTA update available for 'X' "
+                   "(Device didn't respond to OTA request)",
+                   "Failed to check ... (No endpoint found with OTA cluster support)",
+                   "OTA update or check for update already in progress for 'X'"):
+        plugin._process_ota_response("check", {"status": "error", "error": reason,
+                                               "data": {}}, "zigbee2mqtt")
+    assert logged, "it still says something"
+    assert not any(lv == "ERROR" for lv, _ in logged), \
+        "but none of these are faults"
+
+
+def test_an_unidentifiable_reply_does_not_invent_a_device_name(plugin,
+                                                               monkeypatch,
+                                                               helpers_mod):
+    """zigbee2mqtt sends `data: {}` on an error, so there is no id to look up.
+    The error text names the device itself."""
+    logged = []
+    monkeypatch.setattr(helpers_mod, "log",
+                        lambda msg, level="INFO": logged.append((level, msg)))
+    plugin._process_ota_response(
+        "check", {"status": "error", "data": {},
+                  "error": "Failed for 'Bathroom Basin Presence Sensor'"},
+        "zigbee2mqtt")
+    assert not any(m.startswith("?") for _, m in logged)
+    assert any("Bathroom Basin Presence Sensor" in m for _, m in logged)
+
+
+def test_an_unexpected_failure_is_still_an_error(plugin, make_device,
+                                                 monkeypatch, helpers_mod):
+    """Demoting the routine ones must not silence a real fault."""
+    _dev(plugin, make_device)
+    logged = []
+    monkeypatch.setattr(helpers_mod, "log",
+                        lambda msg, level="INFO": logged.append((level, msg)))
+    plugin._process_ota_response(
+        "check", {"status": "error", "error": "image signature invalid",
+                  "data": {"id": "0xota1"}}, "zigbee2mqtt")
+    assert any(lv == "ERROR" for lv, _ in logged)
+
+
 def test_an_error_reply_is_reported(plugin, make_device, monkeypatch, helpers_mod):
     _dev(plugin, make_device)
     logged = []
     monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": logged.append((level, msg)))
     plugin._process_ota_response(
-        "check", {"status": "error", "error": "device did not respond",
+        "check", {"status": "error", "error": "coordinator refused the request",
                   "data": {"id": "0xota1"}}, "zigbee2mqtt")
-    assert any(lv == "ERROR" and "did not respond" in m for lv, m in logged)
+    assert any(lv == "ERROR" and "refused" in m for lv, m in logged)
 
 
 def test_a_successful_check_reply_is_reported(plugin, make_device, monkeypatch,

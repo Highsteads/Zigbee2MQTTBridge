@@ -7,7 +7,19 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 5
 # Date:        14-08-2026
-# Version:     2.5.0
+# Version:     2.5.1
+#
+# v2.5.1 (15-08-2026): the first real firmware check produced EIGHT red lines,
+# which is how a log stops being worth reading. Found by looking at the log
+# rather than by anything failing.
+# * "Device didn't respond to OTA request", "No endpoint found with OTA cluster
+#   support" and "already in progress" are ORDINARY outcomes of asking a mesh
+#   of sleeping battery sensors about firmware, not faults. They log at INFO
+#   now. Anything else is still an ERROR, so a real failure keeps its colour.
+# * The device name resolved to "?" on every one of them. On an ERROR reply
+#   zigbee2mqtt sends `data: {}` — there is no id to look up. The error text
+#   already names the device, so it now says nothing rather than inventing a
+#   device called "?".
 #
 # v2.5.0 (15-08-2026): SECONDARY DEVICES. A presence sensor that also measures
 # temperature, humidity and light buries all of it in one device as custom

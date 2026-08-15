@@ -91,6 +91,8 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+**v2.5.1** — Quieter firmware checks. Asking a houseful of battery sensors about their firmware means most of them are asleep and will not answer, which is normal rather than a fault — those replies no longer appear as errors, and a real failure still does. The log also no longer refers to a device called "?" when zigbee2mqtt's reply does not identify one.
+
 **v2.5.0** — **Split a sensor's extra readings into their own devices.** A presence sensor that also measures temperature, humidity and light puts all of it into one Indigo device, where the extra readings sit as plain states — no sensor type, nothing HomeKit can see, and nowhere obvious to put them on a control page.
 
 Open such a device's settings and you will now find a **Separate Devices** section listing what else it measures. Tick one and that reading gets its own Indigo device, grouped with the original, showing up as a proper temperature or humidity sensor.

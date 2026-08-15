@@ -194,24 +194,50 @@ class OtaMixin:
 
     # ── Replies from zigbee2mqtt ─────────────────────────────────────────────
 
+    # Ordinary outcomes of asking a Zigbee mesh about firmware, NOT faults.
+    # A battery sensor spends nearly all its life asleep and simply will not
+    # answer; some devices advertise OTA support they cannot actually perform;
+    # and asking twice while one check is still running is harmless. Logging
+    # these at ERROR turned a routine check across 19 devices into eight red
+    # lines, which is how a log stops being worth reading.
+    _EXPECTED_OTA_FAILURES = (
+        "didn't respond",
+        "did not respond",
+        "no endpoint found",
+        "already in progress",
+        "timeout",
+    )
+
     def _process_ota_response(self, action, payload, prefix):
         """Handle bridge/response/device/ota_update/{check,update}."""
         if not isinstance(payload, dict):
             return
         status = str(payload.get("status") or "").lower()
         data = payload.get("data") or {}
-        who = data.get("id") or "?"
-        with self.maps_lock:
-            dev_id = self.ieee_map.get(who)
-        name = who
-        if dev_id is not None:
-            try:
-                name = indigo.devices[dev_id].name
-            except KeyError:
-                pass
+
+        # On an ERROR reply zigbee2mqtt sends `data: {}` — there is no id to
+        # look up, which is why this used to announce a device called "?".
+        # The error text names the device itself, so say nothing rather than
+        # inventing a name for it.
+        who = data.get("id")
+        name = ""
+        if who:
+            with self.maps_lock:
+                dev_id = self.ieee_map.get(who)
+            name = who
+            if dev_id is not None:
+                try:
+                    name = indigo.devices[dev_id].name
+                except KeyError:
+                    pass
+
         if status == "error":
-            log(f"{name}: firmware {action} failed — "
-                f"{payload.get('error') or 'no reason given'}", level="ERROR")
+            reason = payload.get("error") or "no reason given"
+            expected = any(token in str(reason).lower()
+                           for token in self._EXPECTED_OTA_FAILURES)
+            prefix_text = f"{name}: " if name else ""
+            log(f"{prefix_text}firmware {action} did not complete — {reason}",
+                level="INFO" if expected else "ERROR")
             return
         if action == "check":
             updated = data.get("updateAvailable")
