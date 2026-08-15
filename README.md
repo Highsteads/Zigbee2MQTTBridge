@@ -91,6 +91,8 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+**v2.4.2** — Housekeeping. Settings you leave blank are no longer stored, so a device's properties show only the handful you actually chose. And a startup message about two devices displaying an older state in the device list is now an ordinary note rather than a warning — it is cosmetic, the only cure would be deleting and recreating the device, and a warning you can never act on just teaches you to ignore warnings.
+
 **v2.4.1** — **Fixed a settings comparison that could nag a device.** Devices describe an on/off setting in their own words — some say `"ON"` and `"OFF"`, some say true and false, and the same device can do both for different settings. The plugin compared them carelessly, so a setting that was already correct could look wrong. In practice that meant it wrote the value again when you saved the dialog, and would have kept rewriting it every time the device mentioned that setting — wasteful on a battery device.
 
 Settings that cannot be compared with confidence are now left alone rather than assumed wrong.

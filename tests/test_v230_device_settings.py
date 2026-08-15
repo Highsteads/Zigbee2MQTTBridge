@@ -434,3 +434,27 @@ def test_real_drift_on_a_token_binary_is_still_caught_and_sent_as_a_token(
     plugin._check_setting_drift(dev, {"ai_sensitivity_adaptive": True})
     assert sent == [("zigbee2mqtt/Bedroom 1 Wall/set",
                      {"ai_sensitivity_adaptive": "OFF"})]
+
+
+def test_blank_settings_are_not_stored(plugin, make_device):
+    """A generated dialog offers a field per settable expose — two dozen on an
+    FP300 — and Indigo stores every one. Keeping the blanks buries the handful
+    that mean something."""
+    dev = _sensor(make_device, dev_id=810)
+    ok, values = plugin.validateDeviceConfigUi(
+        {"z2mset_ai_sensitivity_adaptive": "false",
+         "z2mset_motion_sensitivity": "",
+         "z2mset_absence_delay_timer": "   ",
+         "friendly_name": "Bedroom 1 Wall"},
+        "z2mOccupancySensor", dev.id)
+    assert ok is True
+    assert values == {"z2mset_ai_sensitivity_adaptive": "false",
+                      "friendly_name": "Bedroom 1 Wall"}
+
+
+def test_stripping_blanks_leaves_other_props_alone(plugin, make_device):
+    dev = _sensor(make_device, dev_id=811)
+    _, values = plugin.validateDeviceConfigUi(
+        {"ieee_address": "", "z2mset_x": ""}, "z2mOccupancySensor", dev.id)
+    assert "ieee_address" in values, "only pinned settings are stripped"
+    assert "z2mset_x" not in values

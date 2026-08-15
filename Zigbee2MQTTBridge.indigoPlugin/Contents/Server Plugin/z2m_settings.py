@@ -387,6 +387,21 @@ class SettingsMixin:
             parts.append('    </Field>')
         return "\n".join(parts)
 
+    def validateDeviceConfigUi(self, valuesDict, typeId, devId):
+        """Drop the settings the user left blank before Indigo stores them.
+
+        A generated dialog offers a field per settable expose — two dozen on an
+        FP300 — and Indigo stores every one, so leaving them alone buries the
+        handful that mean something under a pile of empty props. Blank already
+        means "no opinion", so removing them changes nothing except how
+        readable the device's properties are.
+        """
+        for key in [k for k in list(valuesDict.keys())
+                    if k.startswith(SETTING_PREFIX)
+                    and str(valuesDict.get(k) or "").strip() == ""]:
+            del valuesDict[key]
+        return (True, valuesDict)
+
     def closedDeviceConfigUi(self, valuesDict, userCancelled, typeId, devId):
         """Publish any setting the user changed, once the dialog is saved."""
         if userCancelled:

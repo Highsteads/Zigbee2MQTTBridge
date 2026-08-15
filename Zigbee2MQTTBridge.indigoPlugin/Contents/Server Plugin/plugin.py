@@ -7,7 +7,24 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 5
 # Date:        14-08-2026
-# Version:     2.4.1
+# Version:     2.4.2
+#
+# v2.4.2 (15-08-2026): tidy-up, and a WARNING deliberately demoted.
+# * Blank pinned settings are stripped before Indigo stores them. A generated
+#   dialog offers a field per settable expose — two dozen on an FP300 — and
+#   Indigo stores every one, burying the handful that mean something.
+# * The displayStateId mismatch is now an INFO noted ONCE per session, not a
+#   WARNING at every deviceStartComm. Indigo caches displayStateId at creation
+#   and it is read-only afterwards, so the only cure is delete-and-recreate.
+#   A dependency audit of the affected devices found REAL references — six
+#   Python Scripts across four rooms' lighting for the presence sensors, and a
+#   trigger each for the two garage devices — so the cure costs far more than
+#   the symptom and the answer is to leave them be. An amber warning that
+#   recurs for ever and can never be acted on teaches you to skim startup
+#   warnings, which is precisely when a real one appears.
+#   NOTE: indigo.device.getDependencies reported ZERO references for all
+#   three presence sensors. It does not see Python Scripts or plugin configs.
+#   Never read a clean getDependencies as "safe to delete".
 #
 # v2.4.1 (15-08-2026): BINARY SETTINGS COMPARED WRONGLY — found live, minutes
 # after v2.3.0 shipped, by watching what the first real pinning actually did.
@@ -844,6 +861,10 @@ class Plugin(
         # keys they contain, so the OR across all stored values is always correct.
         self._motion_states = {}  # type: dict[int, dict[str, bool]]
 
+        # Devices whose cached displayStateId disagrees with the XML, noted
+        # once per session rather than at every deviceStartComm.
+        self._display_state_noted = set()  # type: set[int]
+
         # Last bridge/health per prefix: ieee -> {leave_count, network_address_changes}.
         # Held only to spot a RISE between reports; the counters themselves are
         # cumulative since zigbee2mqtt started, so their absolute value says
@@ -1037,10 +1058,25 @@ class Plugin(
         # <UiDisplayStateId> change in Devices.xml is delete + recreate.
         expected_display = self._EXPECTED_DISPLAY_STATE.get(dev.deviceTypeId)
         if expected_display and dev.displayStateId != expected_display:
-            log(f"{dev.name}: displayStateId is {dev.displayStateId!r} but XML "
-                f"now declares {expected_display!r} — delete + recreate this "
-                f"device to pick up the new primary display state",
-                level="WARNING")
+            # INFO, not WARNING, and deliberately so. Indigo caches
+            # displayStateId on the device record at creation and it is
+            # read-only afterwards, so the ONLY cure is delete-and-recreate —
+            # which changes the device id and breaks every trigger, script and
+            # control page pointing at it. On this estate those references are
+            # real, so the cure costs more than the symptom and the answer is
+            # to leave it alone.
+            #
+            # An amber warning that recurs at every restart and can never be
+            # acted on does active harm: it teaches you to skim startup
+            # warnings, which is exactly when a real one appears. The fact is
+            # still recorded, just not dressed as a problem.
+            if self.debug or dev.id not in self._display_state_noted:
+                self._display_state_noted.add(dev.id)
+                log(f"{dev.name}: shows {dev.displayStateId!r} in the device "
+                    f"list where the current XML would use {expected_display!r}. "
+                    f"Cosmetic only — Indigo fixes this at creation time, so it "
+                    f"would take a delete and recreate, which is rarely worth "
+                    f"breaking the device's id for.")
 
         # v1.9.12 one-time migration: lastAction became a List enumeration, so
         # Indigo now auto-generates lastAction.<value> boolean sub-states. A
