@@ -7,7 +7,24 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 5
 # Date:        14-08-2026
-# Version:     2.7.0
+# Version:     2.7.1
+#
+# v2.7.1 (15-08-2026): the completion line was scruffy and about to be printed
+# twice. Both found by CliveS reading the actual log line, not by any test.
+# * zigbee2mqtt sends the reply's `to` field as a DICT, and it was printed raw:
+#   "now on version {'date_code': '20260514', 'file_version': 16788992,
+#   'software_build_id': '1.163.1'}". Now "now running 1.163.1 (build 16788992,
+#   14 May 2026)" — the build id is the part a person recognises.
+# * TWO routes notice an update ending (the bridge's reply, and the device
+#   leaving `updating`) seconds apart, so v2.7.0 would have logged two
+#   "finished" lines for one update, each phrased differently. They now share
+#   one announcement, first through wins — which favours the reply, since it
+#   carries the readable version and usually lands first.
+# * THE FIRST MUTATION CHECK ON THIS WAS WORTHLESS: the search string did not
+#   match, so nothing was mutated and the suite passed for no reason. A
+#   mutation test must ASSERT THE MUTATION APPLIED before the result means
+#   anything. Redone with that assertion, and the real mutation (the two routes
+#   keying differently — exactly the bug that shipped) fails as it should.
 #
 # v2.7.0 (15-08-2026): you can now be TOLD an update finished, rather than
 # having to watch for it. v2.4.0 raised an event when an update became

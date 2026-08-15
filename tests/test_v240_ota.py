@@ -423,3 +423,75 @@ def test_progress_ticks_mid_update_fire_nothing(plugin, make_device):
     # ...and only when it leaves `updating` does it count as finished
     plugin._process_update_object(dev, UPDATE_DONE)
     assert [t.pluginTypeId for t in indigo.trigger.executed] == ["otaUpdateFinished"]
+
+
+# ── readable version, announced once (v2.7.1) ─────────────────────────────────
+
+REPLY_TO = {"date_code": "20260514", "file_version": 16788992,
+            "software_build_id": "1.163.1"}
+
+
+def test_a_version_dict_reads_as_a_sentence(plugin_mod):
+    """z2m sends `to` as a DICT, and printing it raw put a Python dict in the
+    middle of a sentence in the event log."""
+    fmt = plugin_mod.Plugin._format_firmware_version
+    assert fmt(REPLY_TO) == "1.163.1 (build 16788992, 14 May 2026)"
+
+
+def test_version_formatting_copes_with_every_shape(plugin_mod):
+    fmt = plugin_mod.Plugin._format_firmware_version
+    assert fmt(16788992) == "16788992", "a bare value passes through"
+    assert fmt({"file_version": 16788992}) == "16788992"
+    assert fmt({"software_build_id": "2.0.0", "date_code": "nonsense"}) == "2.0.0"
+    assert fmt(None) == ""
+    assert fmt({}) == ""
+
+
+def test_completion_is_announced_once_not_twice(plugin, make_device, monkeypatch,
+                                                helpers_mod):
+    """Both the bridge's reply and the device leaving `updating` notice the end,
+    seconds apart. Without deduping, one update produces two 'finished' lines
+    saying the same thing differently."""
+    plugin._update_announced.clear()
+    dev = _dev(plugin, make_device, dev_id=930)
+    logged = []
+    monkeypatch.setattr(helpers_mod, "log",
+                        lambda msg, level="INFO": logged.append(msg))
+    plugin._process_update_object(dev, UPDATE_RUNNING)
+    plugin._process_ota_response(
+        "update", {"status": "ok", "data": {"id": "0xota1", "to": REPLY_TO}},
+        "zigbee2mqtt")
+    plugin._process_update_object(dev, UPDATE_DONE)
+    finished = [m for m in logged if "firmware update finished" in m]
+    assert len(finished) == 1, f"expected one line, got {finished}"
+    assert "1.163.1" in finished[0], "and it should be the readable one"
+
+
+def test_the_event_still_fires_even_though_the_line_was_deduped(plugin,
+                                                                make_device):
+    """Quietening the log must not quieten the trigger."""
+    indigo.trigger.reset()
+    plugin._update_announced.clear()
+    dev = _dev(plugin, make_device, dev_id=931)
+    plugin.triggerStartProcessing(FakeTrigger(1, "otaUpdateFinished"))
+    plugin._process_update_object(dev, UPDATE_RUNNING)
+    plugin._process_ota_response(
+        "update", {"status": "ok", "data": {"id": "0xota1", "to": REPLY_TO}},
+        "zigbee2mqtt")
+    plugin._process_update_object(dev, UPDATE_DONE)
+    assert [t.pluginTypeId for t in indigo.trigger.executed] == ["otaUpdateFinished"]
+
+
+def test_the_state_change_announces_it_if_no_reply_arrives(plugin, make_device,
+                                                           monkeypatch,
+                                                           helpers_mod):
+    """The reply can be missed while the device reboots — the state change must
+    still say something."""
+    plugin._update_announced.clear()
+    dev = _dev(plugin, make_device, dev_id=932)
+    logged = []
+    monkeypatch.setattr(helpers_mod, "log",
+                        lambda msg, level="INFO": logged.append(msg))
+    plugin._process_update_object(dev, UPDATE_RUNNING)
+    plugin._process_update_object(dev, UPDATE_DONE)
+    assert any("firmware update finished" in m for m in logged)

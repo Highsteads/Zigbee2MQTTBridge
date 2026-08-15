@@ -14,6 +14,8 @@
 # Date:        14-08-2026
 # Version:     1.0
 
+import time
+
 import z2m_helpers
 
 try:
@@ -43,6 +45,10 @@ STATE_UPDATING  = "updating"
 class OtaMixin:
     """Firmware update reporting and explicit, user-driven updates."""
 
+    # dev id (or name) -> when completion was last announced, so the two
+    # routes that both notice an update ending cannot say so twice.
+    _update_announced = {}
+
     # ── Reading what z2m already tells us ────────────────────────────────────
 
     def _process_update_object(self, dev, update):
@@ -62,7 +68,6 @@ class OtaMixin:
             return
 
         previous = dev.states.get("updateState")
-        was_version = dev.states.get("updateInstalledVersion")
         updates = [
             ("updateState", state),
             ("updateAvailable", state == STATE_AVAILABLE),
@@ -101,9 +106,9 @@ class OtaMixin:
         if previous == STATE_UPDATING and state != STATE_UPDATING:
             now_version = update.get("installed_version")
             if state == STATE_IDLE:
-                log(f"{dev.name}: firmware update finished — now on version "
-                    f"{now_version if now_version is not None else 'unknown'} "
-                    f"(was {was_version or 'unknown'})")
+                self._announce_update_finished(
+                    dev.name, self._format_firmware_version(now_version),
+                    dev_id=dev.id)
                 self._fire_event("otaUpdateFinished", self._device_prefix(dev),
                                  dev.name)
             else:
@@ -264,6 +269,64 @@ class OtaMixin:
                 f"minutes and the device will be unresponsive meanwhile — do "
                 f"not power it off. Watch its Update Progress state.")
 
+
+    @staticmethod
+    def _format_firmware_version(value):
+        """Render a firmware version readably, whatever shape it arrives in.
+
+        zigbee2mqtt sends the `to` field of an update reply as a DICT —
+        {'date_code': '20260514', 'file_version': 16788992,
+         'software_build_id': '1.163.1'} — and printing that raw put a Python
+        dict in the middle of a sentence in the event log. The build id is the
+        part a person recognises ("1.163.1"); the file version is the opaque
+        integer the rest of the plugin compares on.
+        """
+        if value is None:
+            return ""
+        if not isinstance(value, dict):
+            return str(value)
+        build = value.get("software_build_id")
+        file_version = value.get("file_version")
+        date_code = str(value.get("date_code") or "")
+        parts = []
+        if build:
+            parts.append(str(build))
+        if file_version is not None:
+            parts.append(f"build {file_version}" if build else str(file_version))
+        if len(date_code) == 8 and date_code.isdigit():
+            months = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+            try:
+                parts.append(f"{int(date_code[6:8])} "
+                             f"{months[int(date_code[4:6]) - 1]} {date_code[0:4]}")
+            except (ValueError, IndexError):
+                pass
+        return f"{parts[0]} ({', '.join(parts[1:])})" if len(parts) > 1 else \
+            (parts[0] if parts else "")
+
+    def _announce_update_finished(self, name, version_text, dev_id=None):
+        """Say an update finished — ONCE.
+
+        Both routes reach this: the bridge's reply, which carries the readable
+        version, and the device leaving `updating`, which is the reliable
+        signal but knows only the opaque file version. They arrive seconds
+        apart, so without this the log would carry two "finished" lines for one
+        update, saying the same thing differently.
+
+        First one through wins, which is the right way round: the reply usually
+        lands first and has the better text, and if it never comes the state
+        change still announces it.
+        """
+        key = dev_id if dev_id is not None else name
+        now = time.time()
+        last = self._update_announced.get(key, 0)
+        self._update_announced[key] = now
+        if now - last < 300:
+            return False
+        on_version = f" — now running {version_text}" if version_text else ""
+        log(f"{name}: firmware update finished{on_version}")
+        return True
+
     # ── Replies from zigbee2mqtt ─────────────────────────────────────────────
 
     # Ordinary outcomes of asking a Zigbee mesh about firmware, NOT faults.
@@ -293,6 +356,7 @@ class OtaMixin:
         # inventing a name for it.
         who = data.get("id")
         name = ""
+        dev_id = None
         if who:
             with self.maps_lock:
                 dev_id = self.ieee_map.get(who)
@@ -325,5 +389,10 @@ class OtaMixin:
                 log(f"{name}: firmware check completed — "
                     f"{'an update is available' if updated else 'already current'}")
         else:
-            log(f"{name}: firmware update finished — now on version "
-                f"{data.get('to') or '?'}")
+            # Keyed on the device id, the SAME key the state-change route
+            # uses. Keying one on the id and the other on the name meant the
+            # two never matched and both spoke — which is the whole thing this
+            # was meant to prevent.
+            self._announce_update_finished(
+                name or "A device", self._format_firmware_version(data.get("to")),
+                dev_id=dev_id)

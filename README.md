@@ -91,6 +91,8 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+**v2.7.1** — Tidier completion message. The log said *"now on version {'date_code': '20260514', 'file_version': 16788992, 'software_build_id': '1.163.1'}"* — the raw reply from zigbee2mqtt, dropped straight into the sentence. It now reads *"now running 1.163.1 (build 16788992, 14 May 2026)"*. And because two separate signals both notice an update ending, it no longer says so twice.
+
 **v2.7.0** — **You can be told when a firmware update finishes.** There were events for an update becoming available but none for it ending, so you had to keep checking. There are now triggers for **Firmware Update Finished** and **Firmware Update Failed** — hook one to a notification and the lamp tells you itself.
 
 Worth knowing what "finished" means: progress reaching 100% only means the file has transferred. The device then writes it and restarts, and it is coming back that counts. The trigger waits for that, so it fires when the device is genuinely running the new firmware.
