@@ -342,3 +342,95 @@ def test_saving_an_invalid_value_warns_and_sends_nothing(plugin, make_device,
                                 False, "z2mOccupancySensor", dev.id)
     assert sent == []
     assert any(lv == "WARNING" and "not valid" in m for lv, m in logged)
+
+
+# ── binary tokens: the live shapes, which broke this once already ─────────────
+#
+# The FP300 publishes ai_sensitivity_adaptive as the STRINGS "ON"/"OFF" and
+# led_disabled_night as REAL BOOLEANS — on the same device. The original tests
+# used a binary with no value_on/value_off, which defaults to True/False, so
+# they exercised the one shape that happened to work and the bug shipped.
+
+BIN_TOKENS = {"property": "ai_sensitivity_adaptive", "type": "binary", "access": 7,
+              "value_on": "ON", "value_off": "OFF"}
+BIN_BOOLS  = {"property": "led_disabled_night", "type": "binary", "access": 7,
+              "value_on": True, "value_off": False}
+
+
+def test_string_token_binary_agrees_with_a_reported_bool(plugin_mod):
+    """`bool("OFF")` is True, so naive truthiness made intent "OFF" and a
+    reported False disagree for ever — republishing on every payload that
+    mentioned the property. On a battery sensor that is a write storm."""
+    agree = plugin_mod.Plugin._values_agree
+    assert agree(BIN_TOKENS, "OFF", False) is True
+    assert agree(BIN_TOKENS, "ON", True) is True
+    assert agree(BIN_TOKENS, "OFF", True) is False
+    assert agree(BIN_TOKENS, "ON", False) is False
+
+
+def test_string_token_binary_agrees_with_a_reported_token(plugin_mod):
+    agree = plugin_mod.Plugin._values_agree
+    assert agree(BIN_TOKENS, "OFF", "OFF") is True
+    assert agree(BIN_TOKENS, "OFF", "ON") is False
+
+
+def test_boolean_binary_still_compares(plugin_mod):
+    agree = plugin_mod.Plugin._values_agree
+    assert agree(BIN_BOOLS, False, False) is True
+    assert agree(BIN_BOOLS, True, False) is False
+
+
+def test_an_uncomparable_binary_is_unknown_not_drift(plugin_mod):
+    compare = plugin_mod.Plugin._compare_values
+    assert compare(BIN_TOKENS, "OFF", "MAYBE") is None
+    assert compare(BIN_TOKENS, "OFF", None) is None
+
+
+def test_unknown_never_triggers_a_write(plugin, make_device, monkeypatch):
+    """Only a DEFINITE difference is drift. Anything we cannot compare leaves
+    the device alone rather than writing off a value we did not understand."""
+    plugin.bridge_devices["0xfp300"] = {
+        "ieee_address": "0xfp300", "friendly_name": "Bedroom 1 Wall",
+        "_mqtt_prefix": "zigbee2mqtt",
+        "definition": {"exposes": [BIN_TOKENS]},
+    }
+    dev = _sensor(make_device, props={"z2mset_ai_sensitivity_adaptive": "false"})
+    sent = _sent(monkeypatch, plugin)
+    plugin._check_setting_drift(dev, {"ai_sensitivity_adaptive": "MAYBE"})
+    assert sent == []
+
+
+def test_the_live_case_sends_nothing_when_already_correct(plugin, make_device,
+                                                          monkeypatch):
+    """The exact live shape: pinned OFF, device reporting False. This published
+    on save and would have republished for ever."""
+    plugin.bridge_devices["0xfp300"] = {
+        "ieee_address": "0xfp300", "friendly_name": "Bedroom 1 Wall",
+        "_mqtt_prefix": "zigbee2mqtt",
+        "definition": {"exposes": [BIN_TOKENS]},
+    }
+    dev = _sensor(make_device, props={"z2mset_ai_sensitivity_adaptive": "false"},
+                  states={"aiSensitivityAdaptive": False})
+    sent = _sent(monkeypatch, plugin)
+    plugin._check_setting_drift(dev, {"ai_sensitivity_adaptive": False})
+    assert sent == [], "already correct — nothing to send"
+    # ...and the dialog save path, which is what actually fired live
+    plugin.closedDeviceConfigUi({"z2mset_ai_sensitivity_adaptive": "false"},
+                                False, "z2mOccupancySensor", dev.id)
+    assert sent == [], "saving an already-correct value must not disturb the device"
+
+
+def test_real_drift_on_a_token_binary_is_still_caught_and_sent_as_a_token(
+        plugin, make_device, monkeypatch):
+    """The fix must not blunt detection: a genuine change is still caught, and
+    published using the device's OWN token rather than a Python bool."""
+    plugin.bridge_devices["0xfp300"] = {
+        "ieee_address": "0xfp300", "friendly_name": "Bedroom 1 Wall",
+        "_mqtt_prefix": "zigbee2mqtt",
+        "definition": {"exposes": [BIN_TOKENS]},
+    }
+    dev = _sensor(make_device, props={"z2mset_ai_sensitivity_adaptive": "false"})
+    sent = _sent(monkeypatch, plugin)
+    plugin._check_setting_drift(dev, {"ai_sensitivity_adaptive": True})
+    assert sent == [("zigbee2mqtt/Bedroom 1 Wall/set",
+                     {"ai_sensitivity_adaptive": "OFF"})]

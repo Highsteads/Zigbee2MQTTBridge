@@ -7,7 +7,26 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 5
 # Date:        14-08-2026
-# Version:     2.4.0
+# Version:     2.4.1
+#
+# v2.4.1 (15-08-2026): BINARY SETTINGS COMPARED WRONGLY — found live, minutes
+# after v2.3.0 shipped, by watching what the first real pinning actually did.
+# A binary expose declares its OWN on/off tokens and devices disagree about
+# what they are: the FP300 publishes `ai_sensitivity_adaptive` as the STRINGS
+# "ON"/"OFF" and `led_disabled_night` as REAL BOOLEANS, on the same device.
+# The comparison used Python truthiness, and `bool("OFF")` is True, so an
+# intended "OFF" could never match a reported False. Consequences: it wrote on
+# save when the device was already correct, and it would have re-written on
+# EVERY payload mentioning that property — a write storm at a battery sensor.
+# * Both sides now reduce through the spec's own value_on / value_off before
+#   comparing; Python truthiness is never applied to a binary.
+# * Comparison became TRI-STATE (agrees / differs / cannot tell), because the
+#   two callers want opposite defaults for "cannot tell": a drift check must
+#   stay its hand, a dialog save should proceed. Only a DEFINITE difference is
+#   now treated as drift.
+# * THE TESTS MISSED IT because the fixture omitted value_on/value_off, so it
+#   exercised the one binary shape that happens to work. The new tests use the
+#   live shapes, and the fix is mutation-checked.
 #
 # v2.4.0 (14-08-2026): FIRMWARE UPDATES. zigbee2mqtt already tracks each
 # device's firmware and rides an `update` object along with ordinary state

@@ -156,25 +156,77 @@ class SettingsMixin:
         return text   # text
 
     @staticmethod
-    def _values_agree(spec, intended, reported):
-        """True when the device already holds the intended value.
+    def _binary_as_bool(spec, value):
+        """Reduce a binary value to a real bool, or None if it makes no sense.
 
-        Compared after coercion so "true" and True, or 30 and 30.0, are not
-        mistaken for drift. A reported value of None is NOT agreement — it
-        means the device has not told us, which is unknown, and unknown must
-        never satisfy a comparison.
+        A binary expose declares its OWN on/off tokens, and devices genuinely
+        disagree about what they are — the FP300 publishes
+        `ai_sensitivity_adaptive` as the strings "ON"/"OFF" while publishing
+        `led_disabled_night` as real booleans, on the same device.
+
+        So NEVER use Python truthiness here. `bool("OFF")` is True, because a
+        non-empty string is truthy — which made the intended value "OFF" and a
+        reported False disagree for ever, publishing the setting again on every
+        payload that mentioned it. On a battery sensor that is a write storm.
+        Live-hit 15-08-2026 minutes after the feature shipped; the tests missed
+        it because the fixture omitted value_on/value_off, so it exercised the
+        one shape that happens to work.
+        """
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return None
+        text = str(value).strip().lower()
+        if text == str(spec.get("value_on", "\0")).strip().lower():
+            return True
+        if text == str(spec.get("value_off", "\0")).strip().lower():
+            return False
+        if text in ("true", "1", "yes", "on"):
+            return True
+        if text in ("false", "0", "no", "off"):
+            return False
+        return None
+
+    @staticmethod
+    def _compare_values(spec, intended, reported):
+        """True (agrees), False (genuinely differs), or None (cannot tell).
+
+        Three answers rather than two, because the two callers want opposite
+        things from "cannot tell": a drift check must stay its hand, while a
+        dialog save should go ahead — the user has just asked for that value.
+        Collapsing unknown into either one gets the other caller wrong, and the
+        wrong one is a write storm at a battery device.
         """
         if reported is None or intended is None:
-            return False
-        if spec.get("type") == "numeric":
+            return None
+        kind = spec.get("type")
+        if kind == "numeric":
             try:
                 return abs(float(intended) - float(reported)) < 1e-9
             except (TypeError, ValueError):
-                return False
-        if spec.get("type") == "binary":
-            return bool(intended) == bool(reported) if isinstance(reported, bool) \
-                else str(intended).lower() == str(reported).lower()
+                return None
+        if kind == "binary":
+            want = SettingsMixin._binary_as_bool(spec, intended)
+            have = SettingsMixin._binary_as_bool(spec, reported)
+            if want is None or have is None:
+                return None
+            return want == have
         return str(intended).lower() == str(reported).lower()
+
+    @staticmethod
+    def _values_agree(spec, intended, reported):
+        """True only when the device DEFINITELY holds the intended value.
+
+        Both sides are reduced to a common form first, because they arrive in
+        different ones: the intended value has been coerced into whatever token
+        the device wants to be SENT, while the reported value is whatever the
+        device chose to PUBLISH, and for binaries those are often not the same
+        type at all.
+
+        Unknown is not agreement, so this is safe for "should I send it?" —
+        but do NOT invert it to mean drift. Use _compare_values for that.
+        """
+        return SettingsMixin._compare_values(spec, intended, reported) is True
 
     # ── Drift detection and re-assertion ─────────────────────────────────────
 
@@ -215,7 +267,10 @@ class SettingsMixin:
             want = self._coerce_setting(spec, raw_intent)
             if want is None:
                 continue          # unusable stored value — never publish a guess
-            if self._values_agree(spec, want, reported):
+            if self._compare_values(spec, want, reported) is not False:
+                # Agrees, or cannot be compared. Only a definite difference is
+                # drift — anything else and we stay our hand rather than write
+                # to a device off the back of a value we did not understand.
                 continue
             drifted[prop] = (want, reported)
 

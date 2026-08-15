@@ -91,6 +91,10 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+**v2.4.1** — **Fixed a settings comparison that could nag a device.** Devices describe an on/off setting in their own words — some say `"ON"` and `"OFF"`, some say true and false, and the same device can do both for different settings. The plugin compared them carelessly, so a setting that was already correct could look wrong. In practice that meant it wrote the value again when you saved the dialog, and would have kept rewriting it every time the device mentioned that setting — wasteful on a battery device.
+
+Settings that cannot be compared with confidence are now left alone rather than assumed wrong.
+
 **v2.4.0** — **Firmware updates, surfaced at last.** zigbee2mqtt already keeps track of which devices have a firmware update waiting, and the plugin was quietly discarding it. Each device now shows its firmware state, the version it is on and the version available, and there is a trigger for when one appears. Two new menu items check for updates and report what is waiting.
 
 Installing one is always your decision — nothing updates on its own. An update runs for several minutes over a radio link and interrupting it can leave a device unusable, so the action refuses unless an update is genuinely waiting and the device is not already busy with one.
