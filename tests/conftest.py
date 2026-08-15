@@ -41,6 +41,24 @@ import plugin as plugin_module  # noqa: E402
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
+@pytest.fixture(autouse=True)
+def _isolate_device_registry():
+    """Clear devices the PLUGIN created between tests.
+
+    make_device removes what it made, but devices created through
+    indigo.device.create (secondary devices, reclassify) are invisible to it
+    and used to accumulate — which made a name-clash test see leftovers from
+    three earlier tests and assert on the wrong suffix.
+    """
+    import indigo
+    before = set(indigo.devices._by_id)
+    yield
+    for dev_id in set(indigo.devices._by_id) - before:
+        indigo.devices._by_id.pop(dev_id, None)
+    if hasattr(indigo.device, "groups"):
+        indigo.device.groups.clear()
+
+
 @pytest.fixture
 def plugin_mod():
     """The imported plugin module — for tests of module-level helpers."""

@@ -1508,4 +1508,176 @@
         <UiDisplayStateId>status</UiDisplayStateId>
     </Device>
 
+    <!-- ================================================================
+         Z2M Temperature [Secondary]
+         A reading split out of a multi-capability device into its own
+         Indigo device, grouped with its parent (v2.5.0).
+
+         allowUserCreation="false" — these are only ever made by ticking the
+         box on the parent device, never by hand, because a secondary with no
+         parent has nothing to feed it.
+
+         NOTE there is deliberately NO <State id="sensorValue">. On a native
+         sensor that name belongs to Indigo and only exists while the
+         SupportsSensorValue property is True, which the plugin sets at
+         creation. Declaring it here would be REJECTED by the client and the
+         value would silently never appear.
+         ================================================================ -->
+    <Device type="sensor" id="z2mTemperatureSecondary" subType="indigo.kSensorDeviceSubType.Temperature" allowUserCreation="false">
+        <Name>Z2M Temperature [Secondary]</Name>
+        <ConfigUI>
+            <Field id="primary_device_id" type="textfield" readonly="true" defaultValue="">
+                <Label>Parent Device Id:</Label>
+                <Description>The device this reading was split out of. Untick the box on that device to stop using this one.</Description>
+            </Field>
+            <Field id="friendly_name" type="textfield" readonly="true" defaultValue="">
+                <Label>Friendly Name:</Label>
+            </Field>
+            <Field id="secondary_reading" type="textfield" readonly="true" defaultValue="">
+                <Label>Reading:</Label>
+            </Field>
+        </ConfigUI>
+        <States>
+            <State id="temperature">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Temperature Changed</TriggerLabel>
+                <ControlPageLabel>Temperature</ControlPageLabel>
+            </State>
+            <State id="lastUpdate">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Update Changed</TriggerLabel>
+                <ControlPageLabel>Last Update</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         Z2M Humidity [Secondary]
+         A reading split out of a multi-capability device into its own
+         Indigo device, grouped with its parent (v2.5.0).
+
+         allowUserCreation="false" — these are only ever made by ticking the
+         box on the parent device, never by hand, because a secondary with no
+         parent has nothing to feed it.
+
+         NOTE there is deliberately NO <State id="sensorValue">. On a native
+         sensor that name belongs to Indigo and only exists while the
+         SupportsSensorValue property is True, which the plugin sets at
+         creation. Declaring it here would be REJECTED by the client and the
+         value would silently never appear.
+         ================================================================ -->
+    <Device type="sensor" id="z2mHumiditySecondary" subType="indigo.kSensorDeviceSubType.Humidity" allowUserCreation="false">
+        <Name>Z2M Humidity [Secondary]</Name>
+        <ConfigUI>
+            <Field id="primary_device_id" type="textfield" readonly="true" defaultValue="">
+                <Label>Parent Device Id:</Label>
+                <Description>The device this reading was split out of. Untick the box on that device to stop using this one.</Description>
+            </Field>
+            <Field id="friendly_name" type="textfield" readonly="true" defaultValue="">
+                <Label>Friendly Name:</Label>
+            </Field>
+            <Field id="secondary_reading" type="textfield" readonly="true" defaultValue="">
+                <Label>Reading:</Label>
+            </Field>
+        </ConfigUI>
+        <States>
+            <State id="humidity">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Humidity Changed</TriggerLabel>
+                <ControlPageLabel>Humidity</ControlPageLabel>
+            </State>
+            <State id="lastUpdate">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Update Changed</TriggerLabel>
+                <ControlPageLabel>Last Update</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         Z2M Illuminance [Secondary]
+         A reading split out of a multi-capability device into its own
+         Indigo device, grouped with its parent (v2.5.0).
+
+         allowUserCreation="false" — these are only ever made by ticking the
+         box on the parent device, never by hand, because a secondary with no
+         parent has nothing to feed it.
+
+         NOTE there is deliberately NO <State id="sensorValue">. On a native
+         sensor that name belongs to Indigo and only exists while the
+         SupportsSensorValue property is True, which the plugin sets at
+         creation. Declaring it here would be REJECTED by the client and the
+         value would silently never appear.
+         ================================================================ -->
+    <Device type="sensor" id="z2mIlluminanceSecondary" subType="indigo.kSensorDeviceSubType.Illuminance" allowUserCreation="false">
+        <Name>Z2M Illuminance [Secondary]</Name>
+        <ConfigUI>
+            <Field id="primary_device_id" type="textfield" readonly="true" defaultValue="">
+                <Label>Parent Device Id:</Label>
+                <Description>The device this reading was split out of. Untick the box on that device to stop using this one.</Description>
+            </Field>
+            <Field id="friendly_name" type="textfield" readonly="true" defaultValue="">
+                <Label>Friendly Name:</Label>
+            </Field>
+            <Field id="secondary_reading" type="textfield" readonly="true" defaultValue="">
+                <Label>Reading:</Label>
+            </Field>
+        </ConfigUI>
+        <States>
+            <State id="illuminance">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Illuminance Changed</TriggerLabel>
+                <ControlPageLabel>Illuminance</ControlPageLabel>
+            </State>
+            <State id="lastUpdate">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Update Changed</TriggerLabel>
+                <ControlPageLabel>Last Update</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         Z2M Pressure [Secondary]
+         A reading split out of a multi-capability device into its own
+         Indigo device, grouped with its parent (v2.5.0).
+
+         allowUserCreation="false" — these are only ever made by ticking the
+         box on the parent device, never by hand, because a secondary with no
+         parent has nothing to feed it.
+
+         NOTE there is deliberately NO <State id="sensorValue">. On a native
+         sensor that name belongs to Indigo and only exists while the
+         SupportsSensorValue property is True, which the plugin sets at
+         creation. Declaring it here would be REJECTED by the client and the
+         value would silently never appear.
+         ================================================================ -->
+    <Device type="sensor" id="z2mPressureSecondary" subType="indigo.kSensorDeviceSubType.Pressure" allowUserCreation="false">
+        <Name>Z2M Pressure [Secondary]</Name>
+        <ConfigUI>
+            <Field id="primary_device_id" type="textfield" readonly="true" defaultValue="">
+                <Label>Parent Device Id:</Label>
+                <Description>The device this reading was split out of. Untick the box on that device to stop using this one.</Description>
+            </Field>
+            <Field id="friendly_name" type="textfield" readonly="true" defaultValue="">
+                <Label>Friendly Name:</Label>
+            </Field>
+            <Field id="secondary_reading" type="textfield" readonly="true" defaultValue="">
+                <Label>Reading:</Label>
+            </Field>
+        </ConfigUI>
+        <States>
+            <State id="pressure">
+                <ValueType>Float</ValueType>
+                <TriggerLabel>Pressure Changed</TriggerLabel>
+                <ControlPageLabel>Pressure</ControlPageLabel>
+            </State>
+            <State id="lastUpdate">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Update Changed</TriggerLabel>
+                <ControlPageLabel>Last Update</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
 </Devices>

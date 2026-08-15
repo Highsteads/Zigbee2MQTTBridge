@@ -7,7 +7,33 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 5
 # Date:        14-08-2026
-# Version:     2.4.2
+# Version:     2.5.0
+#
+# v2.5.0 (15-08-2026): SECONDARY DEVICES. A presence sensor that also measures
+# temperature, humidity and light buries all of it in one device as custom
+# states — no sensor subtype, nothing HomeKit can route, no natural place on a
+# control page. NINETEEN devices on this estate hide temperature, humidity and
+# illuminance that way.
+# * Tick a box on the parent and the reading gets its own Indigo device,
+#   grouped with it, with the right subType and a working native sensorValue.
+# * ADDITIVE BY DESIGN, and that is what makes it safe where delete-and-
+#   recreate never was: the parent keeps its id, its states, and every trigger,
+#   script and control page pointing at it. Nothing existing moves.
+# * SupportsSensorValue is set at creation. A native sensor only HAS
+#   sensorValue while that property is True — without it every write is
+#   silently dropped and the device shows nothing, the trap that left
+#   ShellyDirect's sensor values dead for months.
+# * Unticking NEVER deletes. The device is ungrouped and renamed with a
+#   marker, because the user may have pointed something at it and a silent
+#   delete would break that invisibly. Mutation-tested.
+# * Offered from the device's own exposes, not from whether a state holds a
+#   value: several sensors here report temperature 0.0 having never measured
+#   one, and offering those would invite splitting out a reading that never
+#   arrives.
+# * Grouping is best-effort. Whether the parent becomes the group ROOT is
+#   expected (per Simon's ADR-0009: root = oldest member) but UNVERIFIED here —
+#   the obvious check is meaningless because Indigo device ids are not
+#   sequential. The consequence either way is cosmetic.
 #
 # v2.4.2 (15-08-2026): tidy-up, and a WARNING deliberately demoted.
 # * Blank pinned settings are stripped before Indigo stores them. A generated
@@ -728,6 +754,7 @@ from z2m_menus import MenusMixin
 from z2m_mqtt import MqttMixin
 from z2m_native import NativeAttributesMixin
 from z2m_ota import OtaMixin
+from z2m_secondary import SecondaryDevicesMixin
 from z2m_settings import SettingsMixin
 from z2m_state_processing import StateProcessingMixin
 
@@ -742,6 +769,7 @@ class Plugin(
     MqttMixin,
     NativeAttributesMixin,
     OtaMixin,
+    SecondaryDevicesMixin,
     SettingsMixin,
     StateProcessingMixin,
     indigo.PluginBase,

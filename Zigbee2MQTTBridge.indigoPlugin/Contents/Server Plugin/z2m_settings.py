@@ -404,6 +404,12 @@ class SettingsMixin:
 
     def closedDeviceConfigUi(self, valuesDict, userCancelled, typeId, devId):
         """Publish any setting the user changed, once the dialog is saved."""
+        # Chain first: more than one mixin hooks this, and whichever appears
+        # earlier in the MRO would otherwise silently swallow the others.
+        try:
+            super().closedDeviceConfigUi(valuesDict, userCancelled, typeId, devId)
+        except AttributeError:
+            pass
         if userCancelled:
             return
         try:

@@ -276,6 +276,16 @@ class _DeviceRegistry:
             raise KeyError(key)
         return self._by_id[key]
 
+    def __contains__(self, key):
+        # Live-verified on real Indigo: `<id> in indigo.devices` returns False
+        # for an unknown id rather than raising. Without this the `in` would
+        # fall back to __iter__ and compare an int against device OBJECTS,
+        # which is False even for ids that DO exist — a silently wrong answer.
+        if isinstance(key, int):
+            return key in self._by_id
+        return any(d is key or getattr(d, "name", None) == key
+                   for d in self._by_id.values())
+
     def __iter__(self):
         return iter(self._by_id.values())
 
@@ -366,6 +376,7 @@ class DeviceShim:
     def __init__(self, registry):
         self._registry = registry
         self._next_id = 900000
+        self.groups = {}
 
     def create(self, protocol=None, name="", pluginId="", deviceTypeId="",
                folder=0, props=None, **_kwargs):
@@ -374,6 +385,22 @@ class DeviceShim:
                          pluginProps=dict(props or {}), folderId=folder)
         self._registry.add(dev)
         return dev
+
+    def groupWithDevice(self, dev_id, target_id=None):
+        """Records the grouping. Real Indigo makes the OLDEST member the root
+        regardless of argument order, so tests assert on membership only."""
+        self.groups.setdefault(target_id, set()).add(dev_id)
+
+    def ungroupDevice(self, dev):
+        dev_id = getattr(dev, "id", dev)
+        for members in self.groups.values():
+            members.discard(dev_id)
+
+    def getGroupList(self, dev_id):
+        for root, members in self.groups.items():
+            if dev_id == root or dev_id in members:
+                return [root] + sorted(members)
+        return [dev_id]
 
     def delete(self, dev):
         dev_id = getattr(dev, "id", dev)

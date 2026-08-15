@@ -91,6 +91,12 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+**v2.5.0** — **Split a sensor's extra readings into their own devices.** A presence sensor that also measures temperature, humidity and light puts all of it into one Indigo device, where the extra readings sit as plain states — no sensor type, nothing HomeKit can see, and nowhere obvious to put them on a control page.
+
+Open such a device's settings and you will now find a **Separate Devices** section listing what else it measures. Tick one and that reading gets its own Indigo device, grouped with the original, showing up as a proper temperature or humidity sensor.
+
+The original device is left completely alone — same device, same id, same states — so every trigger, script and control page pointing at it carries on working. And if you change your mind, unticking the box never deletes anything: the extra device is renamed and set aside, in case something is pointing at it, and you delete it yourself when you are sure.
+
 **v2.4.2** — Housekeeping. Settings you leave blank are no longer stored, so a device's properties show only the handful you actually chose. And a startup message about two devices displaying an older state in the device list is now an ordinary note rather than a warning — it is cosmetic, the only cure would be deleting and recreating the device, and a warning you can never act on just teaches you to ignore warnings.
 
 **v2.4.1** — **Fixed a settings comparison that could nag a device.** Devices describe an on/off setting in their own words — some say `"ON"` and `"OFF"`, some say true and false, and the same device can do both for different settings. The plugin compared them carelessly, so a setting that was already correct could look wrong. In practice that meant it wrote the value again when you saved the dialog, and would have kept rewriting it every time the device mentioned that setting — wasteful on a battery device.

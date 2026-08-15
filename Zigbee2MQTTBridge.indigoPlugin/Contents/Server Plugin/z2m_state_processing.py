@@ -177,6 +177,13 @@ class StateProcessingMixin:
                 self.exception_handler(e, log_failing_statement=True,
                                        context=f"{dev.name} firmware update object")
 
+        # Copy any split-out readings to their own devices (v2.5.0).
+        try:
+            self._route_to_secondaries(dev, payload)
+        except Exception as e:
+            self.exception_handler(e, log_failing_statement=True,
+                                   context=f"{dev.name} secondary devices")
+
         try:
             self._check_setting_drift(dev, payload)
         except Exception as e:
