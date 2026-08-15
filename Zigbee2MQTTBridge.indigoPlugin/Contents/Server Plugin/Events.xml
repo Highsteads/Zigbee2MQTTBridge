@@ -46,6 +46,12 @@
     <Event id="otaUpdateAvailable">
         <Name>Zigbee Device Firmware Update Available</Name>
     </Event>
+    <Event id="otaUpdateFinished">
+        <Name>Zigbee Device Firmware Update Finished</Name>
+    </Event>
+    <Event id="otaUpdateFailed">
+        <Name>Zigbee Device Firmware Update Failed</Name>
+    </Event>
 
     <Event id="sepBridge" isSeparator="true"/>
 

@@ -62,6 +62,7 @@ class OtaMixin:
             return
 
         previous = dev.states.get("updateState")
+        was_version = dev.states.get("updateInstalledVersion")
         updates = [
             ("updateState", state),
             ("updateAvailable", state == STATE_AVAILABLE),
@@ -89,6 +90,30 @@ class OtaMixin:
                 f"(installed {update.get('installed_version')}, "
                 f"latest {update.get('latest_version')})")
             self._fire_event("otaUpdateAvailable", self._device_prefix(dev), dev.name)
+
+        # Leaving `updating` is how an update ENDS, and the device itself is the
+        # one saying so — which makes this more reliable than the bridge's reply,
+        # since that can be missed while the device reboots into its new image.
+        #
+        # Note that progress reaching 100 is NOT the end: that only means the
+        # image has transferred. The device then writes it and restarts, and it
+        # is the state leaving `updating` that says it came back.
+        if previous == STATE_UPDATING and state != STATE_UPDATING:
+            now_version = update.get("installed_version")
+            if state == STATE_IDLE:
+                log(f"{dev.name}: firmware update finished — now on version "
+                    f"{now_version if now_version is not None else 'unknown'} "
+                    f"(was {was_version or 'unknown'})")
+                self._fire_event("otaUpdateFinished", self._device_prefix(dev),
+                                 dev.name)
+            else:
+                # Back to `available` means the device is still on the old
+                # image: the update did not take.
+                log(f"{dev.name}: firmware update did not complete — the device "
+                    f"is still on version {now_version if now_version is not None else 'unknown'}",
+                    level="WARNING")
+                self._fire_event("otaUpdateFailed", self._device_prefix(dev),
+                                 dev.name)
 
     # ── Asking zigbee2mqtt to look ───────────────────────────────────────────
 
@@ -280,11 +305,17 @@ class OtaMixin:
 
         if status == "error":
             reason = payload.get("error") or "no reason given"
-            expected = any(token in str(reason).lower()
-                           for token in self._EXPECTED_OTA_FAILURES)
+            # The demotion applies to a CHECK only. Asking a sleeping sensor
+            # whether it has an update and getting no answer is routine; an
+            # UPDATE you deliberately started failing is not, whatever the
+            # reason given.
+            expected = action == "check" and any(
+                token in str(reason).lower() for token in self._EXPECTED_OTA_FAILURES)
             prefix_text = f"{name}: " if name else ""
             log(f"{prefix_text}firmware {action} did not complete — {reason}",
                 level="INFO" if expected else "ERROR")
+            if action == "update":
+                self._fire_event("otaUpdateFailed", prefix, name or "unknown")
             return
         if action == "check":
             updated = data.get("updateAvailable")

@@ -91,6 +91,10 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+**v2.7.0** — **You can be told when a firmware update finishes.** There were events for an update becoming available but none for it ending, so you had to keep checking. There are now triggers for **Firmware Update Finished** and **Firmware Update Failed** — hook one to a notification and the lamp tells you itself.
+
+Worth knowing what "finished" means: progress reaching 100% only means the file has transferred. The device then writes it and restarts, and it is coming back that counts. The trigger waits for that, so it fires when the device is genuinely running the new firmware.
+
 **v2.6.0** — **Installing a firmware update is now two clicks.** There is a new **Plugins → Zigbee2MQTT Bridge → Update Device Firmware...** menu item, listing only the devices that actually have an update waiting, with the version they are on and the version they would move to. Pick one and it starts.
 
 Previously this meant building an Action Group to press a button once, which was the wrong shape for a one-off job. The action is still there for use in a trigger or schedule, and both routes go through exactly the same safety checks.

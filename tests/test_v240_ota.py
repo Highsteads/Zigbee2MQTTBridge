@@ -318,3 +318,108 @@ def test_the_menu_obeys_the_same_guards_as_the_action(plugin, make_device,
     sent = _sent(monkeypatch, plugin)
     plugin.menu_update_firmware({"targetDevice": str(dev.id)}, None)
     assert sent == [], "no update waiting, so nothing sent"
+
+
+# ── finishing and failing (v2.7.0) ────────────────────────────────────────────
+
+UPDATE_DONE = {"installed_version": 16682, "latest_version": 16682, "state": "idle"}
+
+
+def test_finishing_fires_the_finished_event(plugin, make_device):
+    """Leaving `updating` is how an update ends, and the device itself says so —
+    more reliable than the bridge's reply, which can be missed while the device
+    reboots into its new image."""
+    indigo.trigger.reset()
+    dev = _dev(plugin, make_device, dev_id=920)
+    plugin.triggerStartProcessing(FakeTrigger(1, "otaUpdateFinished"))
+    plugin.triggerStartProcessing(FakeTrigger(2, "otaUpdateFailed"))
+    plugin._process_update_object(dev, UPDATE_RUNNING)
+    plugin._process_update_object(dev, UPDATE_DONE)
+    assert [t.pluginTypeId for t in indigo.trigger.executed] == ["otaUpdateFinished"]
+    assert dev.states["updateInstalledVersion"] == "16682"
+
+
+def test_progress_reaching_100_is_not_finished(plugin, make_device):
+    """100% only means the image transferred. The device then writes it and
+    restarts — announcing success there would be a lie roughly every time."""
+    indigo.trigger.reset()
+    dev = _dev(plugin, make_device, dev_id=921)
+    plugin.triggerStartProcessing(FakeTrigger(1, "otaUpdateFinished"))
+    plugin._process_update_object(dev, {**UPDATE_RUNNING, "progress": 100.0})
+    assert indigo.trigger.executed == []
+    assert dev.states["updateState"] == "updating"
+
+
+def test_falling_back_to_available_fires_failed(plugin, make_device):
+    """Back to `available` means the device is still on the old image."""
+    indigo.trigger.reset()
+    dev = _dev(plugin, make_device, dev_id=922)
+    plugin.triggerStartProcessing(FakeTrigger(1, "otaUpdateFinished"))
+    plugin.triggerStartProcessing(FakeTrigger(2, "otaUpdateFailed"))
+    plugin._process_update_object(dev, UPDATE_RUNNING)
+    plugin._process_update_object(dev, UPDATE_AVAILABLE)
+    assert [t.pluginTypeId for t in indigo.trigger.executed] == ["otaUpdateFailed"]
+
+
+def test_idle_without_having_been_updating_fires_nothing(plugin, make_device):
+    """Most devices report idle constantly. Only a transition OUT of updating
+    is the end of an update."""
+    indigo.trigger.reset()
+    dev = _dev(plugin, make_device, dev_id=923)
+    plugin.triggerStartProcessing(FakeTrigger(1, "otaUpdateFinished"))
+    for _ in range(3):
+        plugin._process_update_object(dev, UPDATE_IDLE)
+    assert indigo.trigger.executed == []
+
+
+def test_a_failed_update_reply_fires_failed_and_stays_an_error(plugin, make_device,
+                                                               monkeypatch,
+                                                               helpers_mod):
+    """An update you deliberately started failing is a real failure, whatever
+    the reason — unlike a check against a sleeping sensor."""
+    indigo.trigger.reset()
+    _dev(plugin, make_device, dev_id=924)
+    logged = []
+    monkeypatch.setattr(helpers_mod, "log",
+                        lambda msg, level="INFO": logged.append((level, msg)))
+    plugin.triggerStartProcessing(FakeTrigger(1, "otaUpdateFailed"))
+    plugin._process_ota_response(
+        "update", {"status": "error", "error": "Device didn't respond to OTA request",
+                   "data": {"id": "0xota1"}}, "zigbee2mqtt")
+    assert [t.pluginTypeId for t in indigo.trigger.executed] == ["otaUpdateFailed"]
+    assert any(lv == "ERROR" for lv, _ in logged), \
+        "a failed update keeps its colour even for a 'routine' reason"
+
+
+def test_a_failed_check_is_still_quiet_and_fires_nothing(plugin, make_device,
+                                                         monkeypatch, helpers_mod):
+    indigo.trigger.reset()
+    _dev(plugin, make_device, dev_id=925)
+    logged = []
+    monkeypatch.setattr(helpers_mod, "log",
+                        lambda msg, level="INFO": logged.append((level, msg)))
+    plugin.triggerStartProcessing(FakeTrigger(1, "otaUpdateFailed"))
+    plugin._process_ota_response(
+        "check", {"status": "error", "error": "Device didn't respond to OTA request",
+                  "data": {"id": "0xota1"}}, "zigbee2mqtt")
+    assert indigo.trigger.executed == []
+    assert not any(lv == "ERROR" for lv, _ in logged)
+
+
+def test_progress_ticks_mid_update_fire_nothing(plugin, make_device):
+    """The commonest case in a real update: many `updating` payloads as
+    progress climbs. Testing only the FIRST one missed this — dropping the
+    'has it left updating' half of the guard would fire a failure on every
+    single progress tick, a trigger storm through the whole update."""
+    indigo.trigger.reset()
+    dev = _dev(plugin, make_device, dev_id=926)
+    plugin.triggerStartProcessing(FakeTrigger(1, "otaUpdateFinished"))
+    plugin.triggerStartProcessing(FakeTrigger(2, "otaUpdateFailed"))
+    for pct in (5.0, 27.5, 63.1, 91.6, 100.0):
+        plugin._process_update_object(dev, {**UPDATE_RUNNING, "progress": pct})
+    assert indigo.trigger.executed == [], \
+        "nothing has ended yet — it is still updating"
+    assert dev.states["updateProgress"] == 100.0
+    # ...and only when it leaves `updating` does it count as finished
+    plugin._process_update_object(dev, UPDATE_DONE)
+    assert [t.pluginTypeId for t in indigo.trigger.executed] == ["otaUpdateFinished"]

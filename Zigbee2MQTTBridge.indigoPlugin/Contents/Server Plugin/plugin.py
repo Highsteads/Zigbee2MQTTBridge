@@ -7,7 +7,27 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Opus 5
 # Date:        14-08-2026
-# Version:     2.6.0
+# Version:     2.7.0
+#
+# v2.7.0 (15-08-2026): you can now be TOLD an update finished, rather than
+# having to watch for it. v2.4.0 raised an event when an update became
+# available and then nothing at all when it ended — an obvious omission,
+# noticed only when CliveS asked how he would know it had worked.
+# * New otaUpdateFinished and otaUpdateFailed events.
+# * Fired on the device LEAVING `updating`, not on the bridge's reply: the
+#   device itself is the authority, and the reply can be missed while it
+#   reboots into the new image. Back to `idle` = finished; back to `available`
+#   = it did not take.
+# * PROGRESS REACHING 100 IS NOT THE END. That only means the image has
+#   transferred; the device then writes it and restarts. Announcing success
+#   there would be a lie roughly every time.
+# * An UPDATE failure is no longer demoted the way a CHECK failure is. Asking a
+#   sleeping sensor whether it has an update and getting no answer is routine;
+#   an update you deliberately started failing is not, whatever the reason.
+# * A MUTATION SURVIVED FIRST TIME and exposed a real test gap: dropping the
+#   "has it left updating" half of the guard passed everything, because no test
+#   covered two consecutive `updating` payloads — the commonest case in a real
+#   update, where it would have fired a failure on EVERY progress tick.
 #
 # v2.6.0 (15-08-2026): installing a firmware update is now two clicks.
 # * New menu item "Update Device Firmware..." with a picker listing ONLY the
