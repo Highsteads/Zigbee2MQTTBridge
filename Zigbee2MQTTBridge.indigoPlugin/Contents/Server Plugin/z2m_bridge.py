@@ -146,6 +146,11 @@ class BridgeMixin:
         # Snapshot IEEE addresses known for this prefix before the update
         old_ieee = {ieee for ieee, d in self.bridge_devices.items()
                     if d.get("_mqtt_prefix") == prefix}
+        # Seen before but not yet interviewed (no definition): creation was
+        # skipped, so they must count as NEW on the refresh that brings the
+        # definition, or they are never created at all (v2.7.2).
+        pending = {ieee for ieee, d in self.bridge_devices.items()
+                   if d.get("_mqtt_prefix") == prefix and d.get("definition") is None}
 
         old_count = len(self.bridge_devices)
         # Preserve entries from the other prefix; replace only entries for this prefix
@@ -169,6 +174,11 @@ class BridgeMixin:
             label = f" [{prefix}]" if prefix != self._topic_prefix() else ""
             log(f"Bridge device cache updated{label}: {count} device(s) total")
 
+        # A stored IEEE that disagrees with zigbee2mqtt's for the same
+        # friendly_name is corrected BEFORE rename detection reads the clash
+        # as a rename (v2.7.2).
+        self._heal_ieee_bindings(new_cache, prefix)
+
         # Detect friendly_name renames and prefix migrations for existing devices.
         # Uses ieee_map for O(1) lookup — no full Indigo device iteration needed.
         for ieee, data in new_cache.items():
@@ -186,6 +196,10 @@ class BridgeMixin:
             stored_prefix  = dev.pluginProps.get("mqtt_prefix", self._topic_prefix())
             prefix_changed = stored_prefix != prefix
             name_changed   = new_fname and old_fname and new_fname != old_fname
+
+            if name_changed and self._name_owned_elsewhere(dev, ieee, prefix,
+                                                           old_fname, new_fname):
+                continue
 
             if prefix_changed or name_changed:
                 try:
@@ -231,7 +245,9 @@ class BridgeMixin:
         if old_ieee:
             new_ieee = {ieee for ieee in new_cache
                         if new_cache[ieee].get("_mqtt_prefix") == prefix
-                        and ieee not in old_ieee}
+                        and (ieee not in old_ieee
+                             or (ieee in pending
+                                 and new_cache[ieee].get("definition") is not None))}
             if new_ieee:
                 folder_id      = self._ensure_device_folder(DEVICE_FOLDER_NAME)
                 existing_names = self._get_existing_friendly_names()
@@ -286,6 +302,100 @@ class BridgeMixin:
             except Exception as e:
                 self.exception_handler(e, log_failing_statement=True,
                                        context=f"power_source backfill for '{dev.name}'")
+
+    def _heal_ieee_bindings(self, new_cache, prefix):
+        """Make every stored ieee_address agree with zigbee2mqtt's for the
+        device's friendly_name (v2.7.2). Returns how many were corrected.
+
+        A device made by duplicating another in the Indigo client carries the
+        original's IEEE, and the dialog shows that field read-only, so the user
+        cannot put it right. Routing follows friendly_name, so the copy works —
+        until the rename detector, which keys on IEEE, reads the clash as a
+        rename and rewrites the copy to the original's name. The friendly_name
+        is what the user typed; the IEEE follows it.
+        """
+        by_name = {}
+        for ieee, d in new_cache.items():
+            if d.get("_mqtt_prefix") != prefix:
+                continue
+            fname = (d.get("friendly_name") or "").strip()
+            if fname:
+                by_name[fname] = ieee
+        if not by_name:
+            return 0
+
+        healed = 0
+        for dev in indigo.devices.iter(self.pluginId):
+            if dev.deviceTypeId == "z2mCoordinator":
+                continue
+            if self._device_prefix(dev) != prefix:
+                continue
+            props  = dev.pluginProps
+            fname  = (props.get("friendly_name") or "").strip()
+            stored = (props.get("ieee_address") or "").strip()
+            actual = by_name.get(fname)
+            if not actual or stored == actual:
+                continue
+            try:
+                with self.props_lock:
+                    new_props = dict(dev.pluginProps)
+                    new_props["ieee_address"] = actual
+                    dev.replacePluginPropsOnServer(new_props)
+                try:
+                    dev.refreshFromServer()
+                except Exception:
+                    pass
+                with self.maps_lock:
+                    if stored and self.ieee_map.get(stored) == dev.id:
+                        # Hand the old address back to whichever device still
+                        # legitimately stores it, so ITS rename detection lives on.
+                        del self.ieee_map[stored]
+                        for other in indigo.devices.iter(self.pluginId):
+                            if other.id != dev.id and \
+                                    (other.pluginProps.get("ieee_address") or "").strip() == stored:
+                                self.ieee_map[stored] = other.id
+                                break
+                    self.ieee_map[actual] = dev.id
+                owner = ((new_cache.get(stored) or {}).get("friendly_name")
+                         if stored else None)
+                if owner:
+                    carried = f"'{owner}'s address {stored}"
+                elif stored:
+                    carried = f"{stored}, which zigbee2mqtt does not list"
+                else:
+                    carried = "no address at all"
+                log(f"'{dev.name}': IEEE address set to {actual} — it carried {carried}, "
+                    f"and zigbee2mqtt has '{fname}' at {actual}")
+                healed += 1
+            except Exception as e:
+                self.exception_handler(e, log_failing_statement=True,
+                                       context=f"IEEE heal for '{dev.name}'")
+        return healed
+
+    def _name_owned_elsewhere(self, dev, ieee, prefix, old_fname, new_fname):
+        """True when what looks like a rename is really a DUPLICATE binding:
+        another Indigo device already owns `new_fname`, so moving this one onto
+        it would steal that device's routing (v2.7.2). Warns once per device.
+        """
+        with self.maps_lock:
+            other = self.friendly_name_map.get((prefix, new_fname))
+        if other is None or other == dev.id:
+            return False
+        warned = getattr(self, "_dup_binding_warned", None)
+        if warned is None:
+            warned = self._dup_binding_warned = set()
+        if dev.id not in warned:
+            warned.add(dev.id)
+            try:
+                other_name = indigo.devices[other].name
+            except Exception:
+                other_name = str(other)
+            log(f"'{dev.name}' carries the IEEE address {ieee}, which zigbee2mqtt "
+                f"reports as '{new_fname}' — already the Indigo device "
+                f"'{other_name}'. zigbee2mqtt has no device named '{old_fname}', "
+                f"so this one receives nothing: delete it, or give it a "
+                f"friendly_name zigbee2mqtt knows", level="WARNING")
+        return True
 
     def _process_bridge_state(self, payload, prefix):
         """Handle prefix/bridge/state.  Payload is either a JSON dict

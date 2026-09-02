@@ -94,6 +94,8 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+**v2.7.2** — A device made by duplicating another in the Indigo client carries the original's IEEE address, and that field is read-only in the dialog, so nobody could put it right. It worked, because routing follows the friendly name — until the rename detector, which keys on the IEEE, read the clash as a rename. Now the stored IEEE follows the friendly name zigbee2mqtt reports (and the log says so), the rename detector will not move a device onto a name another device already owns (it warns once, naming both), and a device first seen before zigbee2mqtt had interviewed it is created on the refresh that brings its definition rather than never.
+
 **v2.7.1** — Tidier completion message. The log said *"now on version {'date_code': '20260514', 'file_version': 16788992, 'software_build_id': '1.163.1'}"* — the raw reply from zigbee2mqtt, dropped straight into the sentence. It now reads *"now running 1.163.1 (build 16788992, 14 May 2026)"*. And because two separate signals both notice an update ending, it no longer says so twice.
 
 **v2.7.0** — **You can be told when a firmware update finishes.** There were events for an update becoming available but none for it ending, so you had to keep checking. There are now triggers for **Firmware Update Finished** and **Firmware Update Failed** — hook one to a notification and the lamp tells you itself.

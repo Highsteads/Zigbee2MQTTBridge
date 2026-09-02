@@ -5,9 +5,21 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Opus 5
-# Date:        14-08-2026
-# Version:     2.7.1
+# Author:      CliveS & Claude Fable 5.1
+# Date:        02-09-2026
+# Version:     2.7.2
+#
+# v2.7.2 (02-09-2026): a device made by duplicating another in the Indigo
+#   client carries the original's IEEE address, and the dialog shows that
+#   field read-only, so nobody can put it right. Routing follows friendly_name,
+#   so the copy works — until the rename detector, which keys on IEEE, reads
+#   the clash as a rename and rewrites the copy to the original's name. Three
+#   changes: (1) on every bridge/devices refresh the stored IEEE follows the
+#   friendly_name zigbee2mqtt reports, and says so in the log; (2) the rename
+#   detector refuses to move a device onto a friendly_name another Indigo
+#   device already owns, and warns once naming both; (3) a device first seen
+#   before z2m had interviewed it is created on the refresh that brings its
+#   definition, not never. Live case: Living Room Right Presence Sensor.
 #
 # v2.7.1 (15-08-2026): the completion line was scruffy and about to be printed
 # twice. Both found by CliveS reading the actual log line, not by any test.
@@ -933,6 +945,8 @@ class Plugin(
         # Active Indigo devices: ieee_address -> indigo device id
         # Used for O(1) rename detection when Z2M changes a friendly_name
         self.ieee_map = {}  # type: dict[str, int]
+        # Devices already warned about as a duplicate IEEE binding (v2.7.2).
+        self._dup_binding_warned = set()  # type: set[int]
 
         # Tracks which non-primary prefixes have produced at least one MQTT message.
         # Used for diagnostic logging — fires once per prefix per session.
