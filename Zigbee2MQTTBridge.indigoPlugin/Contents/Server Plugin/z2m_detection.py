@@ -27,12 +27,16 @@ def _detect_device_type(exposes, model=""):
     # model that exposes a writable state (e.g. SMLIGHT SLZB series).
     _KNOWN_REPEATER_MODELS = {
         "ts0207_repeater",  # Tuya USB repeater
-        "slzb-06p7",        # SMLIGHT Zigbee coordinator in repeater mode
-        "slzb-06",          # SMLIGHT SLZB-06 coordinator/repeater
-        "slzb-07",          # SMLIGHT SLZB-07
     }
+    # SMLIGHT SLZB-06/-07 hardware ships as a family of variants (P7, P10, P12,
+    # the bare board...) that all run as coordinator/repeater radios. An exact
+    # list needs a new entry for every new SKU and silently misses the next one
+    # — live-hit 02-09-2026, when the SLZB-06P10 (not on the list) was created
+    # as z2mRelay instead of z2mRepeater. Match the family by prefix instead.
+    _KNOWN_REPEATER_MODEL_PREFIXES = ("slzb-06", "slzb-07")
     model_lower = model.lower() if model else ""
-    if "repeater" in model_lower or model_lower in _KNOWN_REPEATER_MODELS:
+    if ("repeater" in model_lower or model_lower in _KNOWN_REPEATER_MODELS
+            or model_lower.startswith(_KNOWN_REPEATER_MODEL_PREFIXES)):
         return "z2mRepeater"
     if exposes:
         feature_names = {feat.get("name") for feat in _iter_features(exposes)}

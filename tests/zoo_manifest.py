@@ -273,6 +273,11 @@ CASES: list[ZooCase] = [
     ZooCase("repeater_by_model", _RELAY, "z2mRepeater", {},
             model="SLZB-06P7",
             note="known repeater model wins even with a writable state leaf"),
+    ZooCase("repeater_by_model_new_sku", _RELAY, "z2mRepeater", {},
+            model="SLZB-06P10",
+            note="v2.7.3: the SLZB-06/-07 family matches by PREFIX now, not an "
+                 "exact list — this SKU was created as z2mRelay on 02-09-2026 "
+                 "because the old list only had SLZB-06P7"),
     ZooCase("empty_exposes", [], "z2mSensor", {},
             note="empty list (not None) falls to generic — repeater needs a lq "
                  "leaf or model hint, a bare [] does not"),

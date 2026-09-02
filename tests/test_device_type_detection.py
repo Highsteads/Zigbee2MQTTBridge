@@ -106,11 +106,25 @@ def test_detect_repeater_via_model_name(plugin_mod):
 
 
 def test_detect_repeater_smlight_models(plugin_mod):
-    for m in ("SLZB-06P7", "SLZB-06", "SLZB-07"):
+    """The SLZB-06/-07 family is matched by PREFIX (v2.7.3), not an exact
+    list — SLZB-06P10 was created as z2mRelay on 02-09-2026 because it was not
+    on the old exact list. Any future SKU in either family must classify too,
+    not only the ones enumerated here."""
+    for m in ("SLZB-06P7", "SLZB-06P10", "SLZB-06P12", "SLZB-06", "SLZB-07",
+              "slzb-06p7", "SLZB-06-Whatever-Next"):
         assert plugin_mod._detect_device_type(
             [{"name": "state", "type": "binary", "access": 7}],
             model=m,
-        ) == "z2mRepeater"
+        ) == "z2mRepeater", m
+
+
+def test_detect_repeater_does_not_match_unrelated_model(plugin_mod):
+    """The prefix match must not swallow an unrelated model that happens to
+    start similarly — it has to be the SLZB family specifically."""
+    assert plugin_mod._detect_device_type(
+        [{"name": "state", "type": "binary", "access": 7}],
+        model="SLZBish Smart Plug",
+    ) == "z2mRelay"
 
 
 def test_detect_mixed_sensor_falls_back_to_generic(plugin_mod, fixtures):
