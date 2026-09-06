@@ -73,14 +73,17 @@ def test_on_connect_queues_subscribed_list_without_logging(plugin, plugin_mod, m
     assert logged == [], "no Indigo log calls allowed on the paho thread"
 
 
-def test_connected_handler_logs_subscriptions_on_main_thread(plugin, plugin_mod, monkeypatch, helpers_mod):
-    logged = []
-    monkeypatch.setattr(helpers_mod, "log", lambda msg, **k: logged.append(msg))
+def test_connected_handler_logs_subscriptions_on_main_thread(plugin, monkeypatch, logs):
+    # The subscription list is still reported on the MAIN thread, which is what
+    # this test has always been about. Where it is reported changed: the connect
+    # sequence is routine narration, so it goes to the plugin's own log and no
+    # longer onto the shared Event Log.
     monkeypatch.setattr(plugin, "_publish", lambda *a, **k: None)
 
     plugin._process_message("__connected__", {"subscribed": ["zigbee2mqtt/#"]})
 
-    assert any("MQTT subscribed to: zigbee2mqtt/#" in m for m in logged)
+    assert logs.activity_has("MQTT subscribed to: zigbee2mqtt/#")
+    assert not logs.event_has("MQTT subscribed to")
 
 
 def test_connected_handler_tolerates_legacy_empty_payload(plugin, monkeypatch):

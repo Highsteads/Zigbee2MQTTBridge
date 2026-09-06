@@ -1,6 +1,6 @@
 # Zigbee2MQTT Bridge
 
-**Version:** 2.7.3 | **Author:** CliveS & Claude
+**Version:** 2.8.0 | **Author:** CliveS & Claude
 
 An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zigbee2mqtt](https://www.zigbee2mqtt.io/) MQTT broker, auto-discovers all Zigbee device types, and creates matching Indigo devices — all organised in a **Zigbee2MQTT** device folder.
 

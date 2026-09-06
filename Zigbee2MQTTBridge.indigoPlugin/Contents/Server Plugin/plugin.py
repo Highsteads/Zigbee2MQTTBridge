@@ -7,7 +7,7 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Sonnet 5
 # Date:        02-09-2026
-# Version:     2.7.3
+# Version:     2.8.0
 #
 # v2.7.3 (02-09-2026): a new SMLIGHT SLZB-06 SKU, the SLZB-06P10, was created
 #   as z2mRelay instead of z2mRepeater — the repeater-family model list in
@@ -757,6 +757,13 @@ try:
     from plugin_utils import install_timestamp_filter
 except ImportError:
     install_timestamp_filter = None
+try:
+    from plugin_utils import as_bool
+except ImportError:
+    # Per-key try/except so a plugin_utils older than v1.3 loses only this
+    # helper rather than blanking the two above it.
+    def as_bool(value, default=False):
+        return default if value in (None, "") else bool(value)
 
 # Credentials live in z2m_secrets.py from v2.2.0 so the MQTT mixin can read them
 # without importing this file, which would be circular. Re-exported here because
@@ -832,6 +839,12 @@ def log(*args, **kwargs):
     return z2m_helpers.log(*args, **kwargs)
 
 
+def log_activity(*args, **kwargs):
+    # Same late-binding reason as log() above: z2m_helpers stays the single
+    # owner of logging and therefore the single place a test can patch.
+    return z2m_helpers.log_activity(*args, **kwargs)
+
+
 from z2m_actions import ActionsMixin
 from z2m_bridge import BridgeMixin
 from z2m_device_states import DeviceStatesMixin
@@ -878,6 +891,15 @@ class Plugin(
             self._ts_filter = None
 
         self.debug = pluginPrefs.get("showDebugInfo", False)
+
+        # Routine narration -- command echoes, status requests, the MQTT
+        # connect steps -- goes to this plugin's own log file only, unless the
+        # user asks for it back on the shared Event Log. Default OFF: those
+        # lines were 82 of the plugin's ~100 Event Log lines a day (measured
+        # 01-05 Sep 2026) and they grow with the network. See
+        # z2m_helpers.log_activity for the mechanism.
+        self.log_activity_to_event_log = as_bool(
+            pluginPrefs.get("logActivityToEventLog", False), False)
 
         # MQTT state
         self.mqtt_client    = None
@@ -1002,11 +1024,15 @@ class Plugin(
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def startup(self):
-        log(f"{PLUGIN_NAME} starting up")
+        # Indigo already logs 'Starting plugin <Name> <version> (pid N)' to the
+        # Event Log, so this line only ever doubled it -- two Event Log lines
+        # per restart for no new fact.
+        log_activity(self, f"{PLUGIN_NAME} starting up")
         self._start_mqtt()
 
     def shutdown(self):
-        log(f"{PLUGIN_NAME} shutting down")
+        # Doubles Indigo's own 'Stopping plugin' / 'Stopped plugin' pair.
+        log_activity(self, f"{PLUGIN_NAME} shutting down")
         for dev_id in list(self._state_request_timers):
             self._cancel_state_request(dev_id)
         self._stop_mqtt()
@@ -1094,6 +1120,8 @@ class Plugin(
     def closedPrefsConfigUi(self, valuesDict, userCancelled):
         if not userCancelled:
             self.debug = valuesDict.get("showDebugInfo", False)
+            self.log_activity_to_event_log = as_bool(
+                valuesDict.get("logActivityToEventLog", False), False)
             log("Preferences saved — reconnecting MQTT")
             # Atomic rebuild under one lock — a config save must not race the
             # liveness watchdog into leaking a second paho client.
@@ -1187,11 +1215,15 @@ class Plugin(
             # still recorded, just not dressed as a problem.
             if self.debug or dev.id not in self._display_state_noted:
                 self._display_state_noted.add(dev.id)
-                log(f"{dev.name}: shows {dev.displayStateId!r} in the device "
-                    f"list where the current XML would use {expected_display!r}. "
-                    f"Cosmetic only — Indigo fixes this at creation time, so it "
-                    f"would take a delete and recreate, which is rarely worth "
-                    f"breaking the device's id for.")
+                # Two of these per restart on this estate, and the reasoning
+                # above says in its own words that nothing should be done about
+                # it. A fact worth recording, but not on a shared dashboard.
+                log_activity(self,
+                             f"{dev.name}: shows {dev.displayStateId!r} in the device "
+                             f"list where the current XML would use {expected_display!r}. "
+                             f"Cosmetic only — Indigo fixes this at creation time, so it "
+                             f"would take a delete and recreate, which is rarely worth "
+                             f"breaking the device's id for.")
 
         # v1.9.12 one-time migration: lastAction became a List enumeration, so
         # Indigo now auto-generates lastAction.<value> boolean sub-states. A

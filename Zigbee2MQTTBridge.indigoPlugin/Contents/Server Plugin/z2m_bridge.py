@@ -40,6 +40,12 @@ def log(*args, **kwargs):
     return z2m_helpers.log(*args, **kwargs)
 
 
+def log_activity(*args, **kwargs):
+    # Same late-binding reason as log() above: z2m_helpers stays the single
+    # owner of logging and therefore the single place a test can patch.
+    return z2m_helpers.log_activity(*args, **kwargs)
+
+
 class BridgeMixin:
     """See the file header above."""
 
@@ -49,10 +55,17 @@ class BridgeMixin:
         """Route an MQTT message to the appropriate handler."""
         # Internal control messages
         if topic == "__connected__":
-            log(f"MQTT connected to {self._effective_broker()}:{self._effective_port()}")
+            # The connect sequence is activity, not news: it emitted six Event
+            # Log lines on every restart while saying only that the ordinary
+            # thing happened. A connect that FAILS is reported separately and
+            # still reaches the Event Log, as does an unexpected disconnect
+            # below, so the shared log now carries the trouble and not the
+            # routine.
+            log_activity(self,
+                         f"MQTT connected to {self._effective_broker()}:{self._effective_port()}")
             subscribed = payload.get("subscribed")
             if subscribed:
-                log(f"MQTT subscribed to: {', '.join(subscribed)}")
+                log_activity(self, f"MQTT subscribed to: {', '.join(subscribed)}")
             # Actively request bridge/devices from every configured prefix.
             # Retained messages alone are unreliable — the garage Z2M may not have
             # published since broker restart, or retain may be disabled.
@@ -61,12 +74,16 @@ class BridgeMixin:
             garage = self._garage_prefix()
             if garage:
                 self._publish(f"{garage}/bridge/request/devices", {})
-                log(f"Requested device list from garage bridge: {garage}/bridge/request/devices")
+                log_activity(self,
+                             f"Requested device list from garage bridge: "
+                             f"{garage}/bridge/request/devices")
             return
         if topic == "__disconnected__":
             rc = payload.get("rc", "?")
             if rc == 0:
-                log("MQTT disconnected cleanly")
+                # A clean disconnect is us shutting down or sleeping on
+                # purpose. The unexpected branch below stays a WARNING.
+                log_activity(self, "MQTT disconnected cleanly")
             else:
                 reason = payload.get("reason", "")
                 detail = f"rc={rc}" + (f", {reason}" if reason else "")
@@ -94,8 +111,9 @@ class BridgeMixin:
         # First-message diagnostic for non-primary prefixes
         if effective_prefix != primary and effective_prefix not in self._seen_prefixes:
             self._seen_prefixes.add(effective_prefix)
-            log(f"First MQTT message received from prefix '{effective_prefix}' — "
-                f"topic: {topic}")
+            log_activity(self,
+                         f"First MQTT message received from prefix "
+                         f"'{effective_prefix}' — topic: {topic}")
 
         # Bridge topics: prefix/bridge/...
         if parts[1] == "bridge":
@@ -689,7 +707,14 @@ class BridgeMixin:
             verb = {"deviceJoined": "joined the network",
                     "deviceLeft":   "left the network",
                     "deviceAnnounced": "announced itself"}[event_id]
-            log(f"Zigbee device '{name}' {verb} ({prefix})")
+            # Joining and leaving change what the network IS, and someone will
+            # want to see those. An announcement is just a device saying hello
+            # after a battery change, a power blip or a reboot -- it happens
+            # unprompted, several times a week, and changes nothing.
+            if event_id == "deviceAnnounced":
+                log_activity(self, f"Zigbee device '{name}' {verb} ({prefix})")
+            else:
+                log(f"Zigbee device '{name}' {verb} ({prefix})")
 
         self._fire_event(event_id, prefix, name)
 

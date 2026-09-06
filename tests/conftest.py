@@ -91,6 +91,68 @@ def helpers_mod():
     return z2m_helpers
 
 
+class _LogCapture:
+    """What a piece of plugin code said, split by WHERE it said it.
+
+    ``event``    - (level, message) pairs that reached the shared Indigo Event
+                   Log through z2m_helpers.log(). Every WARNING and ERROR must
+                   be here: Log_Error_Watch.py reads the Event Log and nothing
+                   else, so a fault that only lands in the plugin's own file is
+                   a fault nobody is watching.
+    ``activity`` - messages routed through z2m_helpers.log_activity(), i.e.
+                   routine narration written to the plugin's own log file.
+
+    Assert on both. A test that only checks a line is absent from ``event``
+    passes just as happily when the line was deleted outright, and the whole
+    point of the split is that nothing was lost.
+    """
+
+    def __init__(self):
+        self.event    = []
+        self.activity = []
+
+    # -- Event Log ----------------------------------------------------------
+    @property
+    def event_messages(self):
+        return [m for _, m in self.event]
+
+    def at(self, level):
+        return [m for lvl, m in self.event if lvl == level]
+
+    def event_has(self, needle, level=None):
+        rows = self.event if level is None else [r for r in self.event if r[0] == level]
+        return any(needle in m for _, m in rows)
+
+    # -- the plugin's own log -----------------------------------------------
+    def activity_has(self, needle):
+        return any(needle in m for m in self.activity)
+
+
+@pytest.fixture
+def logs(monkeypatch):
+    """Capture both logging channels at their single owner, z2m_helpers.
+
+    log_activity is WRAPPED rather than replaced, so the real routing still
+    runs underneath: with log_activity_to_event_log set, the line correctly
+    shows up in BOTH lists, and a test can prove the opt-in works.
+    """
+    import z2m_helpers
+
+    cap = _LogCapture()
+    real_activity = z2m_helpers.log_activity
+
+    def _log(message, level="INFO"):
+        cap.event.append((level, str(message)))
+
+    def _log_activity(plugin, message):
+        cap.activity.append(str(message))
+        return real_activity(plugin, message)
+
+    monkeypatch.setattr(z2m_helpers, "log", _log)
+    monkeypatch.setattr(z2m_helpers, "log_activity", _log_activity)
+    return cap
+
+
 @pytest.fixture
 def secrets_mod():
     """The module that OWNS the MQTT credentials.

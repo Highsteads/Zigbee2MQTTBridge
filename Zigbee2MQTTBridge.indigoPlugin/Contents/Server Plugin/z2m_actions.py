@@ -39,6 +39,12 @@ def log(*args, **kwargs):
     return z2m_helpers.log(*args, **kwargs)
 
 
+def log_activity(*args, **kwargs):
+    # Same late-binding reason as log() above: z2m_helpers stays the single
+    # owner of logging and therefore the single place a test can patch.
+    return z2m_helpers.log_activity(*args, **kwargs)
+
+
 class ActionsMixin:
     """See the file header above."""
 
@@ -84,7 +90,9 @@ class ActionsMixin:
             elif cmd == indigo.kDeviceAction.RequestStatus:
                 self._request_state(fname, dev.deviceTypeId, prefix,
                                     dev_props=dict(dev.pluginProps))
-                log(f'sent "{dev.name}" status request')
+                # Activity, not an action on the house: a /get simply asks
+                # zigbee2mqtt to resend what it already holds.
+                log_activity(self, f'sent "{dev.name}" status request')
             else:
                 log(f"Unhandled lock action {cmd} for {dev.name}", level="WARNING")
             return
@@ -99,7 +107,9 @@ class ActionsMixin:
                               f"toggle -> {new_state.lower()}")
         elif cmd == indigo.kDeviceAction.RequestStatus:
             self._request_state(fname, dev.deviceTypeId, prefix, dev_props=dict(dev.pluginProps))
-            log(f'sent "{dev.name}" status request')
+            # Activity, not an action on the house: a /get simply asks
+            # zigbee2mqtt to resend what it already holds.
+            log_activity(self, f'sent "{dev.name}" status request')
         else:
             log(f"Unhandled relay action {cmd} for {dev.name}", level="WARNING")
 
@@ -239,7 +249,9 @@ class ActionsMixin:
 
         if cmd == indigo.kSensorAction.RequestStatus:
             self._request_state(fname, dev.deviceTypeId, prefix, dev_props=dict(dev.pluginProps))
-            log(f'sent "{dev.name}" status request')
+            # Activity, not an action on the house: a /get simply asks
+            # zigbee2mqtt to resend what it already holds.
+            log_activity(self, f'sent "{dev.name}" status request')
         else:
             log(f"Unhandled sensor action {cmd} for {dev.name} "
                 f"(sensors are read-only)", level="WARNING")
@@ -304,7 +316,9 @@ class ActionsMixin:
                      indigo.kThermostatAction.RequestMode):
             self._request_state(fname, dev.deviceTypeId, prefix,
                                 dev_props=dict(dev.pluginProps))
-            log(f'sent "{dev.name}" status request')
+            # Activity, not an action on the house: a /get simply asks
+            # zigbee2mqtt to resend what it already holds.
+            log_activity(self, f'sent "{dev.name}" status request')
         else:
             log(f"Unhandled thermostat action {cmd} for {dev.name} "
                 f"(cooling is not supported on z2m TRVs)", level="WARNING")

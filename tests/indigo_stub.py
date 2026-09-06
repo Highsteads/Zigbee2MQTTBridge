@@ -93,15 +93,26 @@ class PluginBase:
         self.pluginPrefs       = pluginPrefs if pluginPrefs is not None else Dict()
         self.debug             = False
 
-        # logger used by plugin_utils.install_timestamp_filter; the timestamp
-        # filter test isn't a target here, so a no-op stand-in is enough.
+        # The logger plugin_utils.install_timestamp_filter attaches to, and the
+        # one z2m_helpers.log_activity() writes routine narration into. It now
+        # RECORDS what it was given, in `.records` as (level, message) pairs, so
+        # a test can assert the narration really did reach the plugin's own log
+        # rather than merely vanishing from the Event Log. A no-op stand-in
+        # could not tell those two apart, which is the whole point of the split.
         class _Logger:
+            def __init__(self):
+                self.records = []
+
             def addFilter(self, *_args, **_kwargs): pass
             def removeFilter(self, *_args, **_kwargs): pass
-            def info(self, *_a, **_k): pass
-            def debug(self, *_a, **_k): pass
-            def warning(self, *_a, **_k): pass
-            def error(self, *_a, **_k): pass
+
+            def _record(self, level, msg, *_a, **_k):
+                self.records.append((level, msg))
+
+            def info(self, msg="", *a, **k):    self._record("INFO", msg, *a, **k)
+            def debug(self, msg="", *a, **k):   self._record("DEBUG", msg, *a, **k)
+            def warning(self, msg="", *a, **k): self._record("WARNING", msg, *a, **k)
+            def error(self, msg="", *a, **k):   self._record("ERROR", msg, *a, **k)
 
         self.logger = _Logger()
 

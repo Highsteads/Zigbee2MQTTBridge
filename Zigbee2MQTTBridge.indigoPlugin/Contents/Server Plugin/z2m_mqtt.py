@@ -54,6 +54,12 @@ def log(*args, **kwargs):
     return z2m_helpers.log(*args, **kwargs)
 
 
+def log_activity(*args, **kwargs):
+    # Same late-binding reason as log() above: z2m_helpers stays the single
+    # owner of logging and therefore the single place a test can patch.
+    return z2m_helpers.log_activity(*args, **kwargs)
+
+
 class MqttMixin:
     """See the file header above."""
 
@@ -147,7 +153,9 @@ class MqttMixin:
             client.connect_async(broker, port, keepalive=60)
             client.loop_start()
             self.mqtt_client = client
-            log(f"MQTT connecting to {broker}:{port}")
+            # One of ~6 connect-sequence lines per restart. A connect that
+            # FAILS is reported separately and still reaches the Event Log.
+            log_activity(self, f"MQTT connecting to {broker}:{port}")
         except Exception as e:
             log(f"MQTT connect error: {e}", level="ERROR")
 
@@ -265,9 +273,26 @@ class MqttMixin:
         """Publish a device command and log honestly: 'sent ...' only when the
         publish was actually handed to a live client, an ERROR naming the
         device otherwise (the _publish WARNING alone doesn't say WHICH device's
-        command was lost)."""
+        command was lost).
+
+        The success half is ACTIVITY, so it goes to the plugin's own log file
+        and not the Event Log. It was the single biggest source of noise on the
+        estate's shared log -- 'sent "X" set brightness to N%', 'set color temp
+        to NK', 'on', 'off' came to 82 lines a day between them over the five
+        days to 05-09-2026.
+
+        Indigo does NOT log a state change of its own for these devices --
+        verified against the live Event Log on 06-09-2026 -- so this echo is the
+        only record that the command went out. That is why it is moved rather
+        than dropped: it lands in the plugin's own log, which is where a person
+        debugging a light that did not respond will look, and the "Log Routine
+        Activity to the Event Log" pref puts it back on the shared log for
+        anyone who wants it there.
+
+        The failure half stays an ERROR in the Event Log: a command that never
+        reached the network is exactly what someone needs to be told."""
         if self._publish(topic, payload):
-            log(f'sent "{dev.name}" {verb}')
+            log_activity(self, f'sent "{dev.name}" {verb}')
             return True
         log(f'FAILED to send "{dev.name}" {verb} — command not delivered',
             level="ERROR")

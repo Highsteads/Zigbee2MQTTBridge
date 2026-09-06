@@ -157,14 +157,15 @@ def test_on_disconnect_clears_connected_and_queues(plugin):
     assert payload["rc"] == 1
 
 
-def test_disconnect_route_warns_on_unexpected_clean_on_zero(plugin, plugin_mod, monkeypatch, helpers_mod):
-    logs = []
-    monkeypatch.setattr(helpers_mod, "log",
-                        lambda msg, level="INFO": logs.append((level, msg)))
+def test_disconnect_route_warns_on_unexpected_clean_on_zero(plugin, logs):
     plugin._process_message("__disconnected__", {"rc": 1})
     plugin._process_message("__disconnected__", {"rc": 0})
-    assert any(lvl == "WARNING" for lvl, _ in logs)      # rc=1 unexpected
-    assert any(lvl == "INFO" and "cleanly" in m for lvl, m in logs)  # rc=0 clean
+    # rc=1 is a fault and must still reach the shared Event Log.
+    assert logs.at("WARNING")
+    # rc=0 is us disconnecting on purpose: still reported, but to the plugin's
+    # own log rather than the Event Log.
+    assert logs.activity_has("cleanly")
+    assert not logs.event_has("cleanly")
 
 
 # ── Catch-all z2mSensor: partial payload must not drop a present person ───────

@@ -47,6 +47,10 @@
         <Label>Watchdog Silence Limit (s):</Label>
         <Description>Seconds of MQTT silence before the liveness watchdog probes (and, if unanswered, rebuilds) the connection. Raise this on a small/quiet Zigbee network. Minimum 60.</Description>
     </Field>
+    <Field id="logActivityToEventLog" type="checkbox" defaultValue="false">
+        <Label>Log Routine Activity to the Event Log</Label>
+        <Description>Off by default. Routine narration - command echoes such as 'sent "Hall Lamp" set brightness to 40%', status requests, device announcements and the MQTT connect steps - is written only to this plugin's own log file (Indigo's Logs folder, com.clives.indigoplugin.z2mbridge/plugin.log). Indigo does not log a state change of its own for these devices, so the echo is the only record that a command went out - that record is not lost, it just lives in this plugin's log rather than the shared one, which is where you would look anyway if a light had not responded. Tick this to send the narration to the Event Log as well; "Show Debug Info in Event Log" below does the same and adds the debug detail on top. Warnings and errors always appear in the Event Log whatever these are set to.</Description>
+    </Field>
     <Field id="showDebugInfo" type="checkbox" defaultValue="false">
         <Label>Show Debug Info in Event Log</Label>
     </Field>
