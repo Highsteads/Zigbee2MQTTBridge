@@ -143,8 +143,14 @@ class TestDialogWidth(unittest.TestCase):
         return found
 
     def test_there_are_control_labels_to_check(self):
-        """A scan that matches nothing passes every assertion after it."""
-        self.assertGreater(len(self._control_labels()), 5)
+        """A scan that matches nothing passes every assertion after it.
+
+        The bar is "found something", not a size: a small plugin can legitimately
+        have five settings, and an arbitrary threshold fails it for being small.
+        """
+        self.assertTrue(
+            self._control_labels(),
+            "no control-bearing fields found — the width checks are not checking")
 
     def test_no_control_label_is_a_paragraph(self):
         too_long = [(f, i, len(t)) for f, i, t in self._control_labels()
