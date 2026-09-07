@@ -58,7 +58,9 @@
         <ConfigUI>
             <Field id="json_payload" type="textfield" defaultValue="{}">
                 <Label>JSON payload:</Label>
-                <Description>A JSON object published to zigbee2mqtt/&lt;device&gt;/set. Use z2m's snake_case property names, e.g. {"motion_sensitivity": "high"}. NB battery devices must be awake to receive it.</Description>
+            </Field>
+            <Field id="label_json_payload_info" type="label">
+                <Label>A JSON object published to zigbee2mqtt/&lt;device&gt;/set. Use z2m's snake_case property names, e.g. {"motion_sensitivity": "high"}. NB battery devices must be awake to receive it.</Label>
             </Field>
         </ConfigUI>
         <CallbackMethod>action_publish_custom</CallbackMethod>

@@ -297,6 +297,27 @@ def test_every_warning_and_error_still_goes_through_log():
     assert errors   >= 20, f"ERROR call sites dropped to {errors}"
 
 
+def _dialog_help_for(field_id):
+    """The user-visible help for a setting, wherever it lives.
+
+    A <Description> never wraps, so any prose longer than a phrase now sits in the
+    companion `label_<id>_info` field beside the control (v2.8.1). These tests care
+    about what the user READS, not which element carries it, so look in both.
+    """
+    import xml.etree.ElementTree as ET
+
+    root = ET.parse(Path(SERVER_DIR) / "PluginConfig.xml").getroot()
+    fields = {f.get("id"): f for f in root.iter("Field")}
+    parts = []
+    field = fields.get(field_id)
+    if field is not None:
+        parts.append(field.findtext("Description") or "")
+    companion = fields.get(f"label_{field_id}_info")
+    if companion is not None:
+        parts.append(companion.findtext("Label") or "")
+    return " ".join(p for p in parts if p).strip()
+
+
 def test_the_pref_exists_in_the_config_dialog():
     """A pref the code reads and the dialog cannot set is a pref nobody has."""
     import xml.etree.ElementTree as ET
@@ -308,7 +329,8 @@ def test_the_pref_exists_in_the_config_dialog():
     assert field is not None, "no logActivityToEventLog field in PluginConfig.xml"
     assert field.get("type") == "checkbox"
     assert field.get("defaultValue") == "false", "the quiet behaviour is the default"
-    assert field.findtext("Description"), "say plainly what the checkbox does"
+    assert _dialog_help_for("logActivityToEventLog"), \
+        "say plainly what the checkbox does"
 
 
 # --- The justification for the demotion must stay factually true -------------
@@ -376,12 +398,10 @@ def test_the_checkbox_description_does_not_repeat_the_false_claim():
     """The dialog text is read by the user, so it has to be true as well."""
     import xml.etree.ElementTree as ET
 
-    root = ET.parse(Path(SERVER_DIR) / "PluginConfig.xml").getroot()
-    fields = {f.get("id"): f for f in root.iter("Field")}
-    description = (fields["logActivityToEventLog"].findtext("Description") or "").lower()
+    description = _dialog_help_for("logActivityToEventLog").lower()
 
     assert description, "the checkbox must explain itself"
     for claim in _FALSE_CLAIMS:
         assert claim not in description, (
-            f"the checkbox description claims '{claim}', which is false."
+            f"the checkbox help claims '{claim}', which is false."
         )

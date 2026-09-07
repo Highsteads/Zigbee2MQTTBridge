@@ -1,6 +1,6 @@
 # Zigbee2MQTT Bridge
 
-**Version:** 2.8.0 | **Author:** CliveS & Claude
+**Version:** 2.8.1 | **Author:** CliveS & Claude
 
 An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zigbee2mqtt](https://www.zigbee2mqtt.io/) MQTT broker, auto-discovers all Zigbee device types, and creates matching Indigo devices — all organised in a **Zigbee2MQTT** device folder.
 
@@ -96,6 +96,8 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+
+**v2.8.1** - **The settings dialogs were stretched far wider than their own window, so the help text beside each setting was cut off mid-sentence.** The short help that can be attached to a setting is drawn on a single line and never wraps, so the longest one decides how wide every row is — and one here ran to 781 characters, which stretched the dialog well past a window that cannot be widened past a fixed maximum. All five long ones have moved into ordinary description paragraphs, which do wrap. Two new checks fail the build if any help text or setting label grows long enough to do it again. No setting or behaviour changed.
 **v2.8.0** - **Command echoes moved to the plugin's own log.** About 82 lines a day of `sent "Hall Lamp" set brightness to 40%` and its kin were filling the shared Indigo event log, growing with every light and every switch. They now go to this plugin's own log, which is where you look when a light did not respond anyway, and a new tick box puts them back. The note in the code claiming Indigo already logs the resulting state change was wrong and has been corrected - checked against the live event log, Indigo logs nothing of the sort, so this echo is the only record that a command went out. Failures still reach the event log, as do devices joining or leaving the network and the bridge going offline. 816 -> 821 tests.
 
 **v2.7.3** — A new SMLIGHT SLZB-06 model (the SLZB-06P10) was created as a relay instead of a repeater, because the repeater-family model list was five exact strings and this one wasn't on it. The SLZB-06 and SLZB-07 families now match by prefix, so a future SKU in either family classifies correctly without another release.

@@ -1378,7 +1378,9 @@
         <ConfigUI>
             <Field id="mqtt_prefix" type="textfield" defaultValue="zigbee2mqtt">
                 <Label>MQTT Prefix:</Label>
-                <Description>Z2M topic prefix this coordinator represents (e.g. zigbee2mqtt, zigbee2mqtt_garage). Must match a prefix configured in Plugin Preferences.</Description>
+            </Field>
+            <Field id="label_mqtt_prefix_info" type="label">
+                <Label>Z2M topic prefix this coordinator represents (e.g. zigbee2mqtt, zigbee2mqtt_garage). Must match a prefix configured in Plugin Preferences.</Label>
             </Field>
         </ConfigUI>
         <States>

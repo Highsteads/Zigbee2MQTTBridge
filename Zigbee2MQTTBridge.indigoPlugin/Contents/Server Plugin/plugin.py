@@ -7,7 +7,7 @@
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Sonnet 5
 # Date:        02-09-2026
-# Version:     2.8.0
+# Version:     2.8.1
 #
 # v2.7.3 (02-09-2026): a new SMLIGHT SLZB-06 SKU, the SLZB-06P10, was created
 #   as z2mRelay instead of z2mRepeater — the repeater-family model list in
