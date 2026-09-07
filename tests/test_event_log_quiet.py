@@ -396,8 +396,6 @@ def test_demotion_rationale_says_the_echo_is_the_only_record(filename, target):
 
 def test_the_checkbox_description_does_not_repeat_the_false_claim():
     """The dialog text is read by the user, so it has to be true as well."""
-    import xml.etree.ElementTree as ET
-
     description = _dialog_help_for("logActivityToEventLog").lower()
 
     assert description, "the checkbox must explain itself"
