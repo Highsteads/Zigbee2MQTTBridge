@@ -5,9 +5,9 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Sonnet 5
-# Date:        02-09-2026
-# Version:     2.8.1
+# Author:      CliveS & Claude Fable 5.1
+# Date:        11-09-2026
+# Version:     2.8.2
 #
 # v2.7.3 (02-09-2026): a new SMLIGHT SLZB-06 SKU, the SLZB-06P10, was created
 #   as z2mRelay instead of z2mRepeater — the repeater-family model list in
