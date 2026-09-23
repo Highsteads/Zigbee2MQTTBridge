@@ -204,6 +204,12 @@ class FakeDevice:
         self.supportsWhiteTemperature = bool(pluginProps and pluginProps.get("has_color_temp"))
         self.errorState      = ""
         self.error_writes    = []                         # every setErrorStateOnServer call
+        self.sharedProps     = {}
+        self.shared_writes   = 0
+
+    def replaceSharedPropsOnServer(self, props):
+        self.sharedProps = dict(props)
+        self.shared_writes += 1
 
     # Native attributes exist ONLY while the matching Supports* property is set
     # — Indigo's conditional inheritance, the same rule that governs

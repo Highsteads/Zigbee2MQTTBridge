@@ -5,9 +5,17 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1
-# Date:        11-09-2026
-# Version:     2.8.2
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3)
+# Date:        23-09-2026
+# Version:     2.8.3
+#
+# v2.8.3 (23-09-2026): KEEP THE RADIO HOUSEKEEPING OUT OF SQL LOGGER. lastSeen,
+#   linkQuality and messagesPerSec change on almost every message a Zigbee device
+#   sends, so SQL Logger stored ~29,000 history rows a day across the estate that
+#   were nothing but those three. deviceStartComm now merges them into each
+#   device's `sqlLoggerIgnoreStates` shared prop -- keeping the user's own
+#   entries, never narrowing "*". Coordinators are left alone. Every real reading
+#   is logged as before.
 #
 # v2.7.3 (02-09-2026): a new SMLIGHT SLZB-06 SKU, the SLZB-06P10, was created
 #   as z2mRelay instead of z2mRepeater — the repeater-family model list in
@@ -859,6 +867,29 @@ from z2m_state_processing import StateProcessingMixin
 
 # ── Plugin ────────────────────────────────────────────────────────────────────
 
+
+# v2.8.3: per-message housekeeping states with no history worth keeping. SQL
+# Logger reads the comma-separated `sqlLoggerIgnoreStates` shared prop,
+# case-insensitively.
+SQL_LOGGER_CHURN_STATES = ("lastSeen", "linkQuality", "messagesPerSec")
+
+
+def merge_sql_logger_ignore(existing, extra=SQL_LOGGER_CHURN_STATES):
+    """Return the new sqlLoggerIgnoreStates value, or None when nothing changes.
+
+    Keeps every entry the user already listed, in their order, and appends the
+    missing churn states. "*" (ignore the whole device) is left as it is.
+    """
+    current = [t.strip() for t in str(existing or "").split(",") if t.strip()]
+    if len(current) == 1 and current[0] == "*":
+        return None
+    have = {t.lower() for t in current}
+    missing = [t for t in extra if t.lower() not in have]
+    if not missing:
+        return None
+    return ", ".join(current + missing)
+
+
 class Plugin(
     ActionsMixin,
     BridgeMixin,
@@ -1129,6 +1160,22 @@ class Plugin(
 
     # ── Device lifecycle ──────────────────────────────────────────────────────
 
+    def _keep_churn_out_of_sql_logger(self, dev):
+        """v2.8.3: see SQL_LOGGER_CHURN_STATES. Writes only when something is
+        missing, so a restart re-checks every device without rewriting it."""
+        try:
+            shared = dev.sharedProps
+            merged = merge_sql_logger_ignore(shared.get("sqlLoggerIgnoreStates", ""))
+            if merged is None:
+                return
+            shared["sqlLoggerIgnoreStates"] = merged
+            dev.replaceSharedPropsOnServer(shared)
+            if self.debug:
+                log(f"{dev.name}: SQL Logger now skips {merged}")
+        except Exception as exc:
+            log(f"{dev.name}: could not set the SQL Logger ignore list ({exc}); "
+                f"history keeps a row per message", level="WARNING")
+
     def deviceStartComm(self, dev):
         # Coordinator devices have no friendly_name — they're indexed by mqtt_prefix
         if dev.deviceTypeId == "z2mCoordinator":
@@ -1195,6 +1242,8 @@ class Plugin(
         # Ensure all custom states exist — guards against states added to Devices.xml
         # after a device was originally created (avoids "state key not defined" errors)
         self._ensure_device_states(dev)
+
+        self._keep_churn_out_of_sql_logger(dev)
 
         # displayStateId is cached on the device record at create time and is
         # read-only on existing instances — only fix for a stale value after a

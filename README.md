@@ -1,6 +1,6 @@
 # Zigbee2MQTT Bridge
 
-**Version:** 2.8.2 | **Author:** CliveS & Claude
+**Version:** 2.8.3 | **Author:** CliveS & Claude
 
 An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zigbee2mqtt](https://www.zigbee2mqtt.io/) MQTT broker, auto-discovers all Zigbee device types, and creates matching Indigo devices — all organised in a **Zigbee2MQTT** device folder.
 
@@ -96,6 +96,8 @@ survives a restart. It defaults to ON.
 
 ## Version history
 
+
+**v2.8.3** - **Zigbee devices no longer fill SQL Logger's history with radio housekeeping.** Every message a Zigbee device sends updates when it was last heard, its link quality and its message rate, and SQL Logger was saving a whole history row for those alone - about 29,000 rows a day across this house. The plugin now tells SQL Logger to skip those three. Temperatures, motion, contacts, power and every other reading are logged exactly as before, anything you already told SQL Logger to skip is kept, and existing history is untouched.
 
 **v2.8.2** - **The GitHub record inside the bundle now uses the standard spelling.** The plugin bundle carries a small record of where its source lives on GitHub. Ours spelt the two field names its own way, while the plugins Indigo Domotics and the community publish spell them `GithubUser` and `GithubRepo`. It now matches them. Nothing else changed.
 
