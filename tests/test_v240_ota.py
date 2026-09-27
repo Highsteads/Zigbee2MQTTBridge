@@ -144,6 +144,56 @@ def test_update_with_no_device_does_not_crash(plugin, make_action):
     plugin.action_update_firmware(make_action(), None)
 
 
+
+# ── the action as Indigo will actually call it ───────────────────────────────
+#
+# The tests above hand action_update_firmware a device directly. Indigo only
+# does that when the action's Actions.xml entry carries a deviceFilter — without
+# one the dialog shows no device list and the callback receives None, so every
+# run could only log "no device given" (fixed 2.9.0). These read the XML.
+
+def _server_plugin_xml(name):
+    import glob
+    import os
+    import xml.etree.ElementTree as ET
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = glob.glob(os.path.join(here, "..", "*.indigoPlugin", "Contents",
+                                  "Server Plugin", name))[0]
+    return ET.parse(path).getroot()
+
+
+def _filter_types(action):
+    raw = action.get("deviceFilter") or ""
+    return {t.strip().removeprefix("self.") for t in raw.split(",") if t.strip()}
+
+
+def test_update_firmware_action_asks_indigo_for_a_device():
+    actions = {a.get("id"): a for a in _server_plugin_xml("Actions.xml").iter("Action")}
+    assert _filter_types(actions["updateFirmware"]), (
+        "updateFirmware has no deviceFilter — Indigo would pass no device")
+
+
+def test_update_firmware_is_offered_on_every_device_with_firmware_states():
+    devices = _server_plugin_xml("Devices.xml")
+    with_firmware = {d.get("id") for d in devices.iter("Device")
+                     if any(s.get("id") == "updateState" for s in d.iter("State"))}
+    actions = {a.get("id"): a for a in _server_plugin_xml("Actions.xml").iter("Action")}
+    assert _filter_types(actions["updateFirmware"]) == with_firmware
+
+
+def test_every_action_whose_callback_takes_a_device_has_a_device_filter(plugin):
+    """The general form of the same fault: a callback that wants `dev` must be
+    on an action that makes Indigo choose one."""
+    import inspect
+    missing = []
+    for a in _server_plugin_xml("Actions.xml").iter("Action"):
+        method = getattr(plugin, a.findtext("CallbackMethod", ""), None)
+        if method and "dev" in inspect.signature(method).parameters \
+                and not a.get("deviceFilter"):
+            missing.append(a.get("id"))
+    assert missing == []
+
+
 # ── checking ──────────────────────────────────────────────────────────────────
 
 def test_check_only_asks_about_capable_devices(plugin, make_device, monkeypatch):

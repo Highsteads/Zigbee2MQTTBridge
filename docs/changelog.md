@@ -7,6 +7,14 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.9.0 — 27 September 2026
+
+The **Update Device Firmware** action never asked which device to update, so it could never do anything. It now shows a list of your Zigbee devices when you add it to a schedule or an action group, and it still refuses any device with no update waiting.
+
+The **Broker Port** in the plugin's settings was ignored unless the shared settings file existed with a blank port line, so a broker on any port other than 1883 could only be set in that file. The number you type into **Broker Port** is now used whenever the shared file does not give a port of its own, and 1883 only when neither does.
+
+The example shared settings file inside the plugin now holds just the four broker lines this plugin reads, rather than every setting for every one of my plugins.
+
 ## 2.8.3 — 23 September 2026
 
 Zigbee devices no longer fill SQL Logger's history with radio housekeeping. Every message a device sends updates when it was last heard, its link quality and its message rate, and SQL Logger was saving a history row for those alone — about 29,000 rows a day in my house. The plugin now tells SQL Logger to skip those three. Every other reading is kept as before, anything you had already told SQL Logger to skip is kept, and existing history is untouched.

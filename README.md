@@ -2,7 +2,7 @@
 
 **Bring your Zigbee lights, plugs, sensors, blinds, locks and radiator valves into Indigo, through zigbee2mqtt.**
 
-**Version:** 2.8.3 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
+**Version:** 2.9.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
 
 **[Read the full guide](https://highsteads.github.io/Zigbee2MQTTBridge/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -56,11 +56,11 @@ The [full guide](https://highsteads.github.io/Zigbee2MQTTBridge/) goes through e
 
 ## What's new
 
+**v2.9.0** — The **Update Device Firmware** action now asks which device to update, so it works in a schedule or an action group. The **Broker Port** in the plugin's settings is now used when the shared settings file has no port of its own.
+
 **v2.8.3** — Zigbee devices no longer fill SQL Logger's history with radio housekeeping. The plugin tells SQL Logger to skip each device's last-heard time, link quality and message rate, which were adding about 29,000 rows a day in my house. Every other reading is kept as before.
 
 **v2.8.2** — The plugin's note of where its code lives on GitHub uses the same spelling as other Indigo plugins. Nothing else changed.
-
-**v2.8.1** — The help beside each setting in the plugin's settings window is no longer cut off.
 
 Every version is listed in the [version history](https://highsteads.github.io/Zigbee2MQTTBridge/changelog.html).
 

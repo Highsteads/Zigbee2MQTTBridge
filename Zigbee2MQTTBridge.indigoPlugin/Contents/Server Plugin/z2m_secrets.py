@@ -30,7 +30,10 @@ except ImportError:
 try:
     from IndigoSecrets import MQTT_PORT
 except ImportError:
-    MQTT_PORT = 1883
+    # Blank, NOT 1883. A default here would outrank the Broker Port the user
+    # typed in the Configure window, because z2m_mqtt reads this first — so a
+    # missing line, or a missing file, would silently force 1883 (fixed 2.9.0).
+    MQTT_PORT = ""
 try:
     from IndigoSecrets import MQTT_USERNAME
 except ImportError:

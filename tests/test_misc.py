@@ -47,6 +47,59 @@ def test_effective_port_empty_pluginPrefs_returns_default(plugin_mod, monkeypatc
     assert p._effective_port() == 1883
 
 
+
+def _load_secrets_with(monkeypatch, indigo_secrets):
+    """Import a FRESH copy of z2m_secrets against a stand-in IndigoSecrets.
+
+    `indigo_secrets` is a module (a file without some keys) or None (no file
+    at all — None in sys.modules makes the import raise ImportError). Loaded
+    under a throwaway name so the shared z2m_secrets the plugin uses is not
+    disturbed.
+    """
+    import importlib.util
+    import sys
+    import z2m_secrets
+    monkeypatch.setitem(sys.modules, "IndigoSecrets", indigo_secrets)
+    spec = importlib.util.spec_from_file_location("z2m_secrets_fresh",
+                                                  z2m_secrets.__file__)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_configure_port_is_used_when_secrets_has_no_port_line(plugin_mod, monkeypatch,
+                                                              secrets_mod):
+    """2.9.0: an IndigoSecrets.py with no MQTT_PORT line must not force 1883
+    over the Broker Port typed in the Configure window."""
+    import types
+    stand_in = types.ModuleType("IndigoSecrets")
+    stand_in.MQTT_BROKER = "192.168.1.10"          # other keys present, no port
+    fresh = _load_secrets_with(monkeypatch, stand_in)
+    monkeypatch.setattr(secrets_mod, "MQTT_PORT", fresh.MQTT_PORT)
+    p = plugin_mod.Plugin("a", "b", "1.0", {"mqtt_port": "8883"})
+    assert p._effective_port() == 8883
+
+
+def test_configure_port_is_used_when_there_is_no_secrets_file(plugin_mod, monkeypatch,
+                                                              secrets_mod):
+    fresh = _load_secrets_with(monkeypatch, None)
+    monkeypatch.setattr(secrets_mod, "MQTT_PORT", fresh.MQTT_PORT)
+    p = plugin_mod.Plugin("a", "b", "1.0", {"mqtt_port": "8883"})
+    assert p._effective_port() == 8883
+
+
+def test_blank_secret_port_falls_through_to_configure(plugin_mod, monkeypatch, secrets_mod):
+    monkeypatch.setattr(secrets_mod, "MQTT_PORT", "  ")
+    p = plugin_mod.Plugin("a", "b", "1.0", {"mqtt_port": "8883"})
+    assert p._effective_port() == 8883
+
+
+def test_secret_port_still_wins_when_present(plugin_mod, monkeypatch, secrets_mod):
+    monkeypatch.setattr(secrets_mod, "MQTT_PORT", 1884)
+    p = plugin_mod.Plugin("a", "b", "1.0", {"mqtt_port": "8883"})
+    assert p._effective_port() == 1884
+
+
 # ── _topic_prefix / _garage_prefix / _device_prefix ──────────────────────────
 
 def test_topic_prefix_default(plugin_mod):

@@ -14,11 +14,9 @@ Open these with **Plugins → Zigbee2MQTT Bridge → Configure**. When you click
 | Setting | What it does |
 |---|---|
 | **Broker Host** | The network address of your MQTT broker, such as `192.168.1.10`, or its name on your network. The plugin cannot connect until this is filled in, here or in the shared settings file described below. |
-| **Broker Port** | The port the broker listens on, 1883 to start with, which is the usual one. See the note below before changing it. |
+| **Broker Port** | The port the broker listens on, 1883 to start with, which is the usual one. If your broker listens on another port, type it here. A port in the shared settings file described below is used ahead of this one. |
 | **Username** | The broker's username, if it has one. Leave it blank if your broker does not ask for one. |
 | **Password** | The broker's password, if it has one. |
-
-**A note on the port.** In this version the number typed into **Broker Port** is only used when the shared settings file described below exists and its `MQTT_PORT` line is blank. Otherwise the plugin uses the port in that file, or 1883 when there is no file. So if your broker listens on a port other than 1883, put the number in that file as `MQTT_PORT`.
 
 ### Topic Configuration
 
@@ -42,8 +40,8 @@ The plugin's own log file is in Indigo's **Logs** folder, in a folder named `com
 If you run several of my plugins, you can keep the broker's details in one shared file instead of typing them into this plugin. The file is called `IndigoSecrets.py` and lives in `/Library/Application Support/Perceptive Automation/`.
 
 1. Find `IndigoSecrets_example.py` inside the plugin. In the Finder, right-click the `Zigbee2MQTTBridge.indigoPlugin` you downloaded, choose **Show Package Contents**, and look in **Contents → Server Plugin**.
-2. Copy it to `/Library/Application Support/Perceptive Automation/` and rename the copy `IndigoSecrets.py`.
-3. Open it in a text editor and fill in these four lines with your own details, leaving the rest of the file as it is:
+2. Copy it to `/Library/Application Support/Perceptive Automation/` and rename the copy `IndigoSecrets.py`. If you already have an `IndigoSecrets.py` from another of my plugins, add the four lines below to it instead.
+3. Open it in a text editor and fill in the four lines with your own details:
 
 ```
 MQTT_BROKER   = "192.168.1.10"
@@ -54,7 +52,7 @@ MQTT_PASSWORD = ""
 
 Leave the username and password as `""` if your broker has none.
 
-When the file has a value, it is used, whatever the Configure window says. Any value the file leaves blank is taken from the Configure window instead. The plugin reads the file when it starts, so after changing it, restart the plugin with **Plugins → Zigbee2MQTT Bridge → Reload**.
+When the file has a value, it is used, whatever the Configure window says. Any value the file leaves blank, or leaves out, is taken from the Configure window instead, and the port is 1883 only when neither gives one. The plugin reads the file when it starts, so after changing it, restart the plugin with **Plugins → Zigbee2MQTT Bridge → Reload**.
 
 ## Each device's settings
 

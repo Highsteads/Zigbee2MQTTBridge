@@ -18,6 +18,7 @@
     </Field>
     <Field id="mqtt_port" type="textfield" defaultValue="1883">
         <Label>Broker Port:</Label>
+        <Description>Used unless IndigoSecrets.MQTT_PORT is set. Blank = 1883.</Description>
     </Field>
     <Field id="mqtt_username" type="textfield" defaultValue="">
         <Label>Username:</Label>

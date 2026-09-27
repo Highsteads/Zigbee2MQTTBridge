@@ -66,10 +66,17 @@
         <CallbackMethod>action_publish_custom</CallbackMethod>
     </Action>
 
-    <!-- Deliberately NOT filtered to a device type: any Zigbee device may
+    <!-- Offered on every type of Zigbee device, because any of them may
          support over-the-air updates. The callback refuses anything whose
-         definition says otherwise, and anything with no update pending. -->
-    <Action id="updateFirmware">
+         definition says otherwise, and anything with no update pending.
+         The deviceFilter is required, not a nicety: without one Indigo shows
+         no device list and hands the callback no device, so every run could
+         only log "no device given" (fixed 2.9.0). Coordinator and the
+         split-out reading devices are left out — they are not radios that
+         take an update, and carry no firmware states. -->
+    <Action id="updateFirmware"
+            deviceFilter="self.z2mLight,self.z2mRelay,self.z2mContactSensor,self.z2mOccupancySensor,self.z2mWaterLeakSensor,self.z2mTemperatureSensor,self.z2mSensor,self.z2mCover,self.z2mRepeater,self.z2mButton,self.z2mLock,self.z2mThermostat"
+            uiPath="DeviceActions">
         <Name>Update Device Firmware</Name>
         <CallbackMethod>action_update_firmware</CallbackMethod>
         <ConfigUI>

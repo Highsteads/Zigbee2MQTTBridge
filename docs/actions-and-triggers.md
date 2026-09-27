@@ -28,6 +28,7 @@ These are under **Device Actions** when you add an action.
 | **Set Cover Position** | For a blind, sets how far open it is, from 0 (fully closed) to 100 (fully open). |
 | **Refresh Device State** | Asks zigbee2mqtt to fetch the device's latest state. |
 | **Publish Custom Payload** | Sends a device a setting, or anything else, in the form zigbee2mqtt understands, for anything the other actions do not cover — see below. |
+| **Update Device Firmware** | Starts a firmware update on the device you choose, if one is waiting. It does nothing on a device with no update waiting — see [Firmware updates](firmware-updates.md). |
 
 ### Publish Custom Payload
 

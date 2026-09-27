@@ -70,15 +70,21 @@ class MqttMixin:
         return z2m_secrets.MQTT_BROKER or self.pluginPrefs.get("mqtt_broker", "").strip()
 
     def _effective_port(self):
-        if z2m_secrets.MQTT_PORT:
+        # IndigoSecrets first, but only when it genuinely holds a port — a
+        # missing or blank MQTT_PORT falls through to the Configure window's
+        # Broker Port, and 1883 only when neither gives a usable number.
+        secret = z2m_secrets.MQTT_PORT
+        if secret is not None and str(secret).strip():
             # IndigoSecrets may hold the port as a string ("1883") — paho.connect
             # needs an int, so coerce it here too rather than trusting the type.
             try:
-                return int(z2m_secrets.MQTT_PORT)
+                port = int(str(secret).strip())
             except (TypeError, ValueError):
-                log(f"Invalid MQTT_PORT in IndigoSecrets ({z2m_secrets.MQTT_PORT!r}) — using 1883",
-                    level="WARNING")
-                return 1883
+                port = 0
+            if 1 <= port <= 65535:
+                return port
+            log(f"Invalid MQTT_PORT in IndigoSecrets ({secret!r}) — using the "
+                f"Broker Port from the plugin config instead", level="WARNING")
         raw = self.pluginPrefs.get("mqtt_port", "1883") or 1883
         try:
             return int(raw)

@@ -5,9 +5,19 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3)
-# Date:        23-09-2026
-# Version:     2.8.3
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0)
+# Date:        27-09-2026
+# Version:     2.9.0
+#
+# v2.9.0 (27-09-2026): TWO FAULTS FOUND WHILE WRITING THE GUIDE. (1) The
+#   Update Device Firmware action had no deviceFilter, so Indigo showed no
+#   device list and passed the callback no device -- every run could only log
+#   "no device given". It is now offered on the twelve device types that carry
+#   firmware states. (2) The Broker Port in Configure was ignored whenever
+#   IndigoSecrets.py lacked an MQTT_PORT line (or did not exist), because
+#   z2m_secrets defaulted the missing key to 1883 and that outranked the
+#   dialog. Now: IndigoSecrets if present and non-blank, else Configure, else
+#   1883. The bundled IndigoSecrets_example.py is trimmed to the four MQTT keys.
 #
 # v2.8.3 (23-09-2026): KEEP THE RADIO HOUSEKEEPING OUT OF SQL LOGGER. lastSeen,
 #   linkQuality and messagesPerSec change on almost every message a Zigbee device

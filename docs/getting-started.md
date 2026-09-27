@@ -34,7 +34,7 @@ Open **Plugins → Zigbee2MQTT Bridge → Configure**.
 4. If you run a second zigbee2mqtt, as I do for the garage, type its base topic into **Garage Topic Prefix**. Otherwise leave it blank.
 5. Click **Save**.
 
-The plugin connects on port 1883, the usual one for a broker. If yours uses a different port, the [Settings](settings.md) page explains how to set it. Every setting is explained there too.
+The plugin connects on port 1883, the usual one for a broker. If yours uses a different port, type it into **Broker Port** in the same window. The [Settings](settings.md) page explains every setting.
 
 ## 3. Bring in your devices
 

@@ -39,6 +39,8 @@ Then choose **Plugins → Zigbee2MQTT Bridge → Report Firmware Status**. The E
 
 The Event Log says the update has started. Watch the device's **Update Progress %** if you like. Leave the device powered until it finishes.
 
+To start one from a schedule or an action group instead, for a quiet time of night, add the **Update Device Firmware** action under **Device Actions** and choose the device.
+
 The plugin refuses to start an update on a device that cannot take one, on a device with no update waiting, or on a device that is already updating, and says why in the Event Log.
 
 ## Knowing when it has finished

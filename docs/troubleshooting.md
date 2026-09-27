@@ -16,7 +16,7 @@ The plugin does not know where your broker is. Fill in **Broker Host** in **Plug
 The plugin cannot reach the broker at the address it has.
 
 - Check **Broker Host** is the right address, and that the broker is running.
-- If your broker uses a port other than 1883, read the note on the port on the [Settings](settings.md) page.
+- If your broker uses a port other than 1883, check **Broker Port** in **Configure**, and the `MQTT_PORT` line if you keep the broker's details in the shared settings file — see [Settings](settings.md).
 - The plugin keeps trying by itself, and connects as soon as the broker answers.
 
 If the broker turns away the username or password, the log says **MQTT connect failed** with the broker's reason instead. Check them in **Configure**, or in `IndigoSecrets.py` if you use it, because the file wins over the Configure window.
