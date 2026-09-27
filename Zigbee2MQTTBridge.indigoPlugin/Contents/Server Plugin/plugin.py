@@ -5,9 +5,18 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0)
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0)
 # Date:        27-09-2026
-# Version:     2.9.0
+# Version:     2.10.0
+#
+# v2.10.0 (27-09-2026): THE OFFLINE ERROR NOW STAYS UNTIL THE DEVICE IS BACK.
+#   Indigo's state writes clear a device's error state by default, so the red
+#   "offline" set from zigbee2mqtt's availability verdict was wiped by the next
+#   write that did not come from the device: bridge/health's per-device
+#   counters (every ten minutes), zigbee2mqtt republishing cached state, or a
+#   retained "offline" replayed on reconnect. Every device state write now
+#   passes clearErrorState=False, and only availability "online" clears it.
+#   The test stub now clears on write the way Indigo does.
 #
 # v2.9.0 (27-09-2026): TWO FAULTS FOUND WHILE WRITING THE GUIDE. (1) The
 #   Update Device Firmware action had no deviceFilter, so Indigo showed no

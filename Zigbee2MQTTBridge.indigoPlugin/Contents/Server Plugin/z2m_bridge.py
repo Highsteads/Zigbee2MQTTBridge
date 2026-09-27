@@ -314,7 +314,8 @@ class BridgeMixin:
                         and "battery" in dev.states:
                     # Existing mains device carrying a seeded 0 — label it, as
                     # the state itself cannot be removed once it exists.
-                    dev.updateStateOnServer("battery", 0, uiValue="Mains")
+                    dev.updateStateOnServer("battery", 0, uiValue="Mains",
+                                            clearErrorState=False)
                     log(f"{dev.name}: mains powered — its battery reading was a "
                         f"seeded 0 and is now labelled accordingly")
             except Exception as e:

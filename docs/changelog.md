@@ -7,6 +7,10 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.10.0 — 27 September 2026
+
+When zigbee2mqtt reports a device offline, the plugin turns it red in Indigo so you and any plugin watching for failed devices can see it. That red could vanish within ten minutes while the device was still dead, because other updates the plugin writes to the device, such as its network counters, were clearing it. The red now stays until zigbee2mqtt hears from the device again, and nothing else about what the plugin shows has changed.
+
 ## 2.9.0 — 27 September 2026
 
 The **Update Device Firmware** action never asked which device to update, so it could never do anything. It now shows a list of your Zigbee devices when you add it to a schedule or an action group, and it still refuses any device with no update waiting.

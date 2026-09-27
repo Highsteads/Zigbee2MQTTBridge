@@ -53,7 +53,7 @@ When the Mac goes to sleep, the plugin disconnects from the broker cleanly, and 
 
 ## Offline devices
 
-zigbee2mqtt decides for itself when a device has gone quiet for too long and reports it offline. When it does, the plugin sets the Indigo device's **Availability** to **Offline**, turns the device red in the device list, and writes one warning to the Event Log. Any plugin that watches for failed devices sees it too. When the device is heard from again, the red clears and the log says it is back online.
+zigbee2mqtt decides for itself when a device has gone quiet for too long and reports it offline. When it does, the plugin sets the Indigo device's **Availability** to **Offline**, turns the device red in the device list, and writes one warning to the Event Log. Any plugin that watches for failed devices sees it too. It stays red until zigbee2mqtt hears from the device again, even while the plugin carries on updating the device's other readings. Then the red clears and the log says it is back online.
 
 ## Network health
 

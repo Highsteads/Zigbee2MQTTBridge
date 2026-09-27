@@ -57,7 +57,8 @@ class StateProcessingMixin:
         try:
             dev   = indigo.devices[dev_id]
             state = payload.get("state", "offline") if isinstance(payload, dict) else str(payload)
-            dev.updateStateOnServer("availability", state, uiValue=state.capitalize())
+            dev.updateStateOnServer("availability", state, uiValue=state.capitalize(),
+                                    clearErrorState=False)
 
             is_online = (state == "online")
 
@@ -66,7 +67,8 @@ class StateProcessingMixin:
             if dev.deviceTypeId == "z2mRepeater":
                 dev.updateStateOnServer(
                     "onOffState", is_online,
-                    uiValue="Online" if is_online else "Offline"
+                    uiValue="Online" if is_online else "Offline",
+                    clearErrorState=False,
                 )
 
             # Mirror offline into Indigo's own error state (v2.1.0), which turns
@@ -76,9 +78,20 @@ class StateProcessingMixin:
             #
             # This is zigbee2mqtt's own verdict after its configured timeout,
             # not our guess, so it is a real fault and not a quiet battery
-            # device.  It is set LAST because updateStateOnServer clears the
-            # error state by default — and that default is right: a device
-            # that publishes anything is, by definition, not offline.
+            # device.
+            #
+            # v2.10.0: THIS IS THE ONLY PLACE THE ERROR IS SET OR CLEARED.
+            # Indigo's state writes clear a device's error by default, and the
+            # old comment here called that right because "a device that
+            # publishes anything is not offline".  But plenty of writes do not
+            # come from the device: bridge/health rewrites every device's
+            # counters every ten minutes, zigbee2mqtt republishes its cached
+            # state on startup, and a retained "offline" replayed on reconnect
+            # wrote `availability` (wiping the error) and then skipped the set
+            # because the local copy still read "offline".  So every routine
+            # write passes clearErrorState=False, and only zigbee2mqtt saying
+            # "online" ends the fault — which it does the moment it hears the
+            # device again.
             try:
                 if is_online:
                     if dev.errorState:
@@ -996,9 +1009,10 @@ class StateProcessingMixin:
             ui_value   = item[2] if len(item) > 2 else None
             try:
                 if ui_value is not None:
-                    dev.updateStateOnServer(key, value, uiValue=ui_value)
+                    dev.updateStateOnServer(key, value, uiValue=ui_value,
+                                            clearErrorState=False)
                 else:
-                    dev.updateStateOnServer(key, value)
+                    dev.updateStateOnServer(key, value, clearErrorState=False)
             except Exception as e:
                 # Always visible (v1.9.23): a swallowed write failure is
                 # silent data loss — but only ONCE per (device, key) so a

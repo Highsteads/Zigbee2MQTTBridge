@@ -248,7 +248,8 @@ class SecondaryDevicesMixin:
                 ("lastUpdate", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             ])
             try:
-                secondary.updateStateOnServer("sensorValue", value, uiValue=ui)
+                secondary.updateStateOnServer("sensorValue", value, uiValue=ui,
+                                              clearErrorState=False)
             except Exception as e:
                 warn_key = (secondary.id, "sensorValue")
                 if warn_key not in self._state_write_warned:

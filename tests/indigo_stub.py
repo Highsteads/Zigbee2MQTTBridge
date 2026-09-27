@@ -232,7 +232,8 @@ class FakeDevice:
         self.errorState = "" if value is None else str(value)
         self.error_writes.append(value)
 
-    def updateStateOnServer(self, key, value, uiValue=None, **_kwargs):
+    def updateStateOnServer(self, key, value, uiValue=None, clearErrorState=True,
+                            **_kwargs):
         # Optional strictness (v1.9.22, stub-drift fix): real Indigo REJECTS a
         # write to a state key that isn't declared. Tests opt in by setting
         # dev.strict_states = True after declaring static_state_keys (and any
@@ -260,10 +261,16 @@ class FakeDevice:
         self.state_writes.append((key, value, uiValue))
         if key == "onOffState":
             self.onState = bool(value)
+        # Real Indigo clears the device's error state on every state write
+        # unless told not to (v2.10.0).  A stub that left it alone hid the
+        # whole class of fault where a routine write wipes a real error.
+        if clearErrorState:
+            self.errorState = ""
 
-    def updateStatesOnServer(self, updates):
+    def updateStatesOnServer(self, updates, clearErrorState=True):
         for u in updates:
-            self.updateStateOnServer(u["key"], u["value"], u.get("uiValue"))
+            self.updateStateOnServer(u["key"], u["value"], u.get("uiValue"),
+                                     clearErrorState=clearErrorState)
 
     def replacePluginPropsOnServer(self, new_props):
         # Indigo REPLACES (not merges) — match real behaviour.

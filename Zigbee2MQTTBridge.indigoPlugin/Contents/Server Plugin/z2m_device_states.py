@@ -261,7 +261,7 @@ class DeviceStatesMixin:
             f"{[k for k, _ in to_write]}")
         for key, val in to_write:
             try:
-                dev.updateStateOnServer(key, val)
+                dev.updateStateOnServer(key, val, clearErrorState=False)
             except Exception as e:
                 log(f"{dev.name}: could not initialise state '{key}': {e}",
                     level="WARNING")
@@ -598,7 +598,8 @@ class DeviceStatesMixin:
         # Phase 3: now safe to write all pending values.
         for state_key, state_val in pending:
             try:
-                dev.updateStateOnServer(state_key, state_val)
+                dev.updateStateOnServer(state_key, state_val,
+                                        clearErrorState=False)
             except Exception as e:
                 if self.debug:
                     log(f"{dev.name}: dynamic state '{state_key}' write failed: {e}", level="WARNING")

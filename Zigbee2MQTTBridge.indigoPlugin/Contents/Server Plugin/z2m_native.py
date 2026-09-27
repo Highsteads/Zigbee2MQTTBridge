@@ -112,7 +112,8 @@ class NativeAttributesMixin:
         surfaced once per (device, key).
         """
         try:
-            dev.updateStateOnServer(key, value, uiValue=ui_value)
+            dev.updateStateOnServer(key, value, uiValue=ui_value,
+                                    clearErrorState=False)
             return True
         except Exception as e:
             if just_enabled:
@@ -236,7 +237,8 @@ class NativeAttributesMixin:
                 # once it exists, so label it instead — a bare 0 reads as a
                 # flat cell, and a number that means nothing is worse than no
                 # number at all (v2.2.0).
-                dev.updateStateOnServer("battery", 0, uiValue="Mains")
+                dev.updateStateOnServer("battery", 0, uiValue="Mains",
+                                        clearErrorState=False)
             elif battery:
                 self._mirror_native_battery(dev, battery)
             elif battery == 0 and self.debug:
