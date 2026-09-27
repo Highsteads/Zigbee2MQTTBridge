@@ -1,0 +1,42 @@
+---
+title: The plugin menu
+nav_order: 8
+---
+
+# The plugin menu
+
+These are under **Plugins → Zigbee2MQTT Bridge**. Most of them write their answer to the Indigo Event Log.
+
+## Devices
+
+| Menu item | What it does |
+|---|---|
+| **Discover & Create Devices** | Makes an Indigo device for every Zigbee device zigbee2mqtt knows about that does not have one yet, and puts them in the **Zigbee2MQTT** folder. It never makes a second copy, so it is safe to run at any time. A device zigbee2mqtt has not finished setting up is skipped, and named in the log. |
+| **Create Coordinator Devices** | Makes one **Z2M Coordinator** device for each zigbee2mqtt you connect, named such as **Z2M Bridge (zigbee2mqtt)**, if it does not have one already. |
+| **Refresh Device List from MQTT** | Asks zigbee2mqtt to send its list of devices again, so the plugin catches up without a restart. |
+| **Refresh Device Capabilities** | Looks again at what each of your existing Zigbee devices can do, and corrects what the plugin has stored — whether a bulb can change colour, say, and the Indigo type that goes with it. Your devices keep their names, and every trigger and control page pointing at them carries on working. Use it after a zigbee2mqtt update has changed how it describes a device. |
+| **Report Orphaned Devices** | Lists any Indigo device whose Zigbee device zigbee2mqtt no longer knows about — removed, or paired again under a new identity. It only reports, it never deletes anything. |
+| **Report Network Health** | Lists, for each zigbee2mqtt, how long it has been running, how hard its computer is working, and which devices have dropped off the network and joined again or taken a new network address, worst first. It needs zigbee2mqtt's health report, which arrives every ten minutes. |
+
+## Firmware
+
+| Menu item | What it does |
+|---|---|
+| **Check for Firmware Updates** | Asks zigbee2mqtt to check every device that can take updates. It only looks, it installs nothing. Battery devices answer when they next wake. |
+| **Report Firmware Status** | Lists every device that can take updates, its version, the newest version, and whether an update is waiting. |
+| **Update Device Firmware...** | Lets you pick a device with an update waiting and install it. The [Firmware updates](firmware-updates.md) page explains what to expect. |
+
+## Pairing
+
+| Menu item | What it does |
+|---|---|
+| **Enable Pairing (Permit Join, 254s)** | Lets new devices join, on every zigbee2mqtt you connect, for 254 seconds — a little over four minutes, the longest zigbee2mqtt allows. The coordinator device's **Permit Join** shows it has worked. |
+| **Disable Pairing (Permit Join Off)** | Stops new devices joining, on every zigbee2mqtt you connect, straight away. |
+
+## Log and help
+
+| Menu item | What it does |
+|---|---|
+| **Toggle Timestamps in Log (on/off)** | Every line the plugin writes to the log starts with the time to the thousandth of a second, which helps when lining events up. This turns that on or off. It is on to start with and stays as you leave it. |
+| **Test MQTT Connection** | Writes the plugin's version and details of your Mac and Indigo to the log, then checks that a broker is set, that the plugin is connected to it, that messages are arriving, and that each zigbee2mqtt says it is online. It ends with **Connection test PASSED**, or a line for each thing that failed. It is the thing to include if you ask for help on the Indigo forum. |
+| **Show Plugin Info** | Writes the plugin's version and details of your Mac and Indigo to the log. |

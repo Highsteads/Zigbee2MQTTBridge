@@ -1,210 +1,68 @@
-# Zigbee2MQTT Bridge
+# Zigbee2MQTT Bridge for Indigo
 
-**Version:** 2.8.3 | **Author:** CliveS & Claude
+**Bring your Zigbee lights, plugs, sensors, blinds, locks and radiator valves into Indigo, through zigbee2mqtt.**
 
-An [Indigo](https://www.indigodomo.com/) plugin that connects directly to a [zigbee2mqtt](https://www.zigbee2mqtt.io/) MQTT broker, auto-discovers all Zigbee device types, and creates matching Indigo devices — all organised in a **Zigbee2MQTT** device folder.
+**Version:** 2.8.3 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
 
-## Features
+**[Read the full guide](https://highsteads.github.io/Zigbee2MQTTBridge/)** — setting up, what everything means, and what to do when something goes wrong.
 
-- Connects directly to the zigbee2mqtt MQTT broker (paho-mqtt) — no extra bridge in between
-- Auto-detects the right Indigo device type from each device's zigbee2mqtt `exposes` definition
-- **Discover & Create Devices** menu item: one click creates every Indigo device, no manual setup
-- Device types created:
-  - **Z2M Light** (dimmer) — bulbs, LED strips and Hue, with brightness plus optional colour / colour-temperature
-  - **Z2M Relay** (relay) — switches, outlets and plugs, with on/off plus optional power / energy
-  - **Z2M Cover** (dimmer) — blinds and shutters, with position 0-100% mapped to Indigo brightness, plus tilt
-  - **Z2M Repeater** — Zigbee routers and coordinators in repeater mode (SLZB, SMLIGHT), with link quality and availability
-  - **Z2M Button / Scene** — button and scene controllers. The `lastAction` state is an Indigo enumeration, so you get a boolean sub-state per action (`lastAction.single`, `.double`, `.hold`, and so on) and can trigger on a specific press straight from the Triggers UI, with no string compare
-  - **Z2M Sensor family** — a generic sensor plus auto-classified Contact, Occupancy / presence, Water-leak and Temperature / Humidity types, each given the matching Indigo subType so HomeKit and friends route them correctly. Smoke detectors are handled too, with the alarm driving the sensor's on/off state
-  - **Z2M Lock** (relay, Lock subtype) — door locks with proper lock / unlock commands and the full lock state (including "not fully locked") in its own state
-  - **Z2M Thermostat / TRV** (thermostat) — radiator valves and climate devices as real Indigo thermostats: current temperature, heat setpoint (settable from the standard thermostat UI), heat / auto / off mode, running state and valve position
-  - **Z2M Coordinator** — one device per MQTT bridge, tracking the Z2M version, coordinator type, permit-join, network and device count
-- **Every payload field is imported.** Beyond the semantic states above, any other field a device reports is captured as a dynamically-declared state of the correct Indigo type (boolean / integer / real / string), so nothing is thrown away
-- **Self-healing MQTT** — an application-level liveness backstop rebuilds the connection if it falls silent, catching the half-open-socket wedge that paho's own auto-reconnect can miss. Before rebuilding it first probes the bridge, so a small quiet network is never mistaken for a dead connection. MQTT also disconnects and reconnects cleanly across Mac sleep and wake
-- Multiple zigbee2mqtt instances supported (for example a main bridge plus a separate garage coordinator), with each device routed to its own bridge even when friendly names clash
-- **Pairing from Indigo** — Enable / Disable Pairing menu items open and close permit-join on every configured bridge, and each device carries a readable "last seen" state
-- **Publish Custom Payload** action — send any JSON settings object to a device (sensitivity, LED modes, calibration and so on) without leaving Indigo
-- **Test MQTT Connection** menu item — one log dump with the full environment banner plus live broker, traffic and bridge checks, ideal for a support post. A companion Report Orphaned Devices item lists any Indigo device whose Zigbee counterpart has been removed
-- **Indigo's own battery and energy readings are filled in** — a battery device appears in Indigo's low-battery list and anywhere else a device's battery is read, and a metering plug reports into the Energy UI. Reset Energy Total works even though the counter itself lives on the Zigbee device: the plugin remembers the reading at the moment you reset and counts from there
-- **An offline device goes red.** When zigbee2mqtt reports a device offline, the Indigo device is put into an error state, so the device list and any health-monitoring plugin can see it
-- **Network health** — the plugin reads zigbee2mqtt's health report and keeps per-device counters for rejoins and network-address changes, the only record of a device dropping off and coming back. **Report Network Health** lists the worst offenders, alongside how long zigbee2mqtt has been running and how hard its host is working
-- **Trigger events** — trigger directly on a device joining, leaving, announcing itself, failing or passing its interview, rejoining, changing network address; on a firmware update becoming available, finishing or failing; or on a bridge going offline, returning, or asking to be restarted. The coordinator device records which device the last event was about, so a trigger's actions can name it
-- **Device settings that stay put.** Some sensors keep settings in their own firmware — sensitivity, detection delays, reporting intervals — and forget them after a battery change. Open a device's settings and you will find a **Device Settings** section built from what that device says it can be told. Set a value there and the plugin remembers it, notices when the device drifts off it, and puts it back. Only genuine settings appear: one-shot commands like *Restart Device* are deliberately left out
-- **Split a sensor's extra readings into their own devices.** A presence sensor that also measures temperature, humidity and light hides all of it in one device. A **Separate Devices** section lets you give any of those readings its own Indigo device, grouped with the original and appearing as a proper sensor. The original keeps its id and every trigger, script and control page pointing at it
-- **Firmware updates** — each device reports its firmware state and the version available, with menu items to check and to install. Installing is always your decision, and there are triggers for an update becoming available, finishing, or failing
-- Availability and link quality tracked per device, friendly names containing `/` handled, everything organised in a **Zigbee2MQTT** device folder
+---
 
-## Requirements
+## What it does
 
-- Indigo 2023.2 or later (developed and run on Indigo 2025.2 / Python 3.13)
-- zigbee2mqtt running and reachable over MQTT
-- MQTT credentials in `IndigoSecrets.py` OR entered in PluginConfig (fallback added in v1.9.6)
-- One bundled Python dependency, installed automatically on first run: `paho-mqtt` 2.1.0, pinned since v2.0.0
+This plugin lets [Indigo](https://www.indigodomo.com) see and control the Zigbee devices you run with [zigbee2mqtt](https://www.zigbee2mqtt.io). zigbee2mqtt is a free program that runs a Zigbee radio and turns everything your devices say into short messages, which it passes through an **MQTT broker** — a small message post office such as Mosquitto. The plugin connects to that broker, so Indigo hears about every change the moment zigbee2mqtt does, and sends your commands back the same way.
 
-## Installation
+- **Creates all your devices in one go,** picking the right kind for each and putting them in a **Zigbee2MQTT** folder, and adds new ones by itself when you pair them.
+- **Controls lights, plugs, blinds, locks and radiator valves** with Indigo's usual controls, including colour and shade of white on bulbs that have them.
+- **Brings in every reading** — temperature, humidity, motion and presence, doors and windows, water leaks, smoke, power and energy — and anything else a device reports.
+- **Fills in Indigo's own battery and energy readings,** and turns a device red when zigbee2mqtt says it has gone offline.
+- **Keeps settings on the device where you put them.** Some sensors forget their settings after a battery change, and the plugin notices and puts them back.
+- **Gives a sensor's extra readings their own devices,** so a presence sensor's temperature can be a proper Indigo temperature sensor.
+- **Handles firmware updates,** telling you when one is waiting and installing it only when you ask.
+- **Runs triggers** when a device joins or leaves, a button is pressed a particular way, a firmware update finishes, or zigbee2mqtt goes offline.
+- **Works with two zigbee2mqtt set-ups at once.** I run one for the house and one for the garage.
 
-1. Go to the [Releases](../../releases) page and download `Zigbee2MQTTBridge.indigoPlugin.zip`
+## What it works with
+
+Anything zigbee2mqtt supports. The plugin makes each one into the matching Indigo device:
+
+| In Indigo | Your device |
+|---|---|
+| **Z2M Light** | Bulbs, lamps and LED strips |
+| **Z2M Relay** | Wall switches, smart plugs and switch modules |
+| **Z2M Cover** | Blinds, curtains and shutters |
+| **Z2M Lock** | Door locks |
+| **Z2M Thermostat / TRV** | Radiator valves and other heating controls |
+| **Z2M Contact Sensor**, **Z2M Occupancy Sensor**, **Z2M Water Leak Sensor**, **Z2M Temperature Sensor**, **Z2M Sensor** | Door and window, motion and presence, water leak, temperature and humidity sensors, smoke alarms and the rest |
+| **Z2M Button / Scene** | Wireless buttons and remotes |
+| **Z2M Repeater** | Repeaters and range extenders |
+| **Z2M Coordinator** | zigbee2mqtt itself, one for each you run |
+
+You need zigbee2mqtt already set up and working, with its messages going to an MQTT broker. The plugin connects Indigo to it and does not replace it.
+
+## Installing
+
+1. Go to the [Releases page](https://github.com/Highsteads/Zigbee2MQTTBridge/releases/latest) and download `Zigbee2MQTTBridge.indigoPlugin.zip`
 2. Unzip the downloaded file — you will get `Zigbee2MQTTBridge.indigoPlugin`
 3. Double-click `Zigbee2MQTTBridge.indigoPlugin` — Indigo will install it automatically
 
-## Credentials — `IndigoSecrets.py` vs `IndigoSecrets_example.py`
+## Setting it up
 
-This plugin, like every CliveS Indigo plugin, reads sensitive values from one
-shared master file:
+1. Open **Plugins → Zigbee2MQTT Bridge → Configure**, fill in **Broker Host** with your MQTT broker's network address — the four numbers, such as `192.168.1.10` — and its **Username** and **Password** if it has them. Leave **Topic Prefix** as `zigbee2mqtt` unless you changed zigbee2mqtt's base topic, and click **Save**.
+2. Wait a few seconds for the Event Log to say **Bridge device cache updated**, then choose **Plugins → Zigbee2MQTT Bridge → Discover & Create Devices**.
+3. Your Zigbee devices appear in a **Zigbee2MQTT** folder in Indigo. Switch one from Indigo, and it should respond straight away.
 
-`/Library/Application Support/Perceptive Automation/IndigoSecrets.py`
+The [full guide](https://highsteads.github.io/Zigbee2MQTTBridge/) goes through each step, explains every setting, and covers what to do if something does not work.
 
-| File | Purpose | Real data? | Committed to GitHub? |
-|------|---------|------------|----------------------|
-| `IndigoSecrets.py` | Working file the plugin reads at runtime. Keep a backup in a password manager. | YES | **NO** — listed in `.gitignore` |
-| `IndigoSecrets_example.py` | Template only — empty placeholders. Shipped in the plugin bundle. | NO | YES |
+## What's new
 
-If you don't have `IndigoSecrets.py`, copy `IndigoSecrets_example.py` out of
-the plugin bundle into `/Library/Application Support/Perceptive Automation/`,
-rename it to `IndigoSecrets.py`, and fill in your values. Or skip the file
-altogether and type the values into the plugin's configuration dialog — where
-both are set, `IndigoSecrets.py` wins.
+**v2.8.3** — Zigbee devices no longer fill SQL Logger's history with radio housekeeping. The plugin tells SQL Logger to skip each device's last-heard time, link quality and message rate, which were adding about 29,000 rows a day in my house. Every other reading is kept as before.
 
-If neither source supplies a value the plugin needs, it logs an ERROR naming
-the key and telling you to either fill in the matching field or add the key to
-`IndigoSecrets.py`.
+**v2.8.2** — The plugin's note of where its code lives on GitHub uses the same spelling as other Indigo plugins. Nothing else changed.
 
-**Keys read by Zigbee2MQTTBridge:**
+**v2.8.1** — The help beside each setting in the plugin's settings window is no longer cut off.
 
-```python
-MQTT_BROKER   = "192.168.x.x"   # hostname or IP of your MQTT broker
-MQTT_PORT     = 1883
-MQTT_USERNAME = ""              # blank = no auth
-MQTT_PASSWORD = ""
-```
-
-All four have matching PluginConfig fields under **Plugins → Zigbee2MQTT
-Bridge → Configure** *(fallback added in v1.9.6)*.
-
-## Logging
-
-Every log line carries a millisecond timestamp `[HH:MM:SS.mmm]`, so you can
-line events up precisely against the other CliveS plugins — Device Activity
-Monitor uses the same format.
-
-To turn the prefix off, or back on, at any time:
-
-**Plugins → Zigbee2MQTT Bridge → Toggle Timestamps in Log (on/off)**
-
-The plugin stores the setting in `pluginPrefs` (`timestampEnabled`) and it
-survives a restart. It defaults to ON.
-
-## Version history
-
-
-**v2.8.3** - **Zigbee devices no longer fill SQL Logger's history with radio housekeeping.** Every message a Zigbee device sends updates when it was last heard, its link quality and its message rate, and SQL Logger was saving a whole history row for those alone - about 29,000 rows a day across this house. The plugin now tells SQL Logger to skip those three. Temperatures, motion, contacts, power and every other reading are logged exactly as before, anything you already told SQL Logger to skip is kept, and existing history is untouched.
-
-**v2.8.2** - **The GitHub record inside the bundle now uses the standard spelling.** The plugin bundle carries a small record of where its source lives on GitHub. Ours spelt the two field names its own way, while the plugins Indigo Domotics and the community publish spell them `GithubUser` and `GithubRepo`. It now matches them. Nothing else changed.
-
-**v2.8.1** - **The settings dialogs were stretched far wider than their own window, so the help text beside each setting was cut off mid-sentence.** The short help that can be attached to a setting is drawn on a single line and never wraps, so the longest one decides how wide every row is — and one here ran to 781 characters, which stretched the dialog well past a window that cannot be widened past a fixed maximum. All five long ones have moved into ordinary description paragraphs, which do wrap. Two new checks fail the build if any help text or setting label grows long enough to do it again. No setting or behaviour changed.
-**v2.8.0** - **Command echoes moved to the plugin's own log.** About 82 lines a day of `sent "Hall Lamp" set brightness to 40%` and its kin were filling the shared Indigo event log, growing with every light and every switch. They now go to this plugin's own log, which is where you look when a light did not respond anyway, and a new tick box puts them back. The note in the code claiming Indigo already logs the resulting state change was wrong and has been corrected - checked against the live event log, Indigo logs nothing of the sort, so this echo is the only record that a command went out. Failures still reach the event log, as do devices joining or leaving the network and the bridge going offline. 816 -> 821 tests.
-
-**v2.7.3** — A new SMLIGHT SLZB-06 model (the SLZB-06P10) was created as a relay instead of a repeater, because the repeater-family model list was five exact strings and this one wasn't on it. The SLZB-06 and SLZB-07 families now match by prefix, so a future SKU in either family classifies correctly without another release.
-
-**v2.7.2** — A device made by duplicating another in the Indigo client carries the original's IEEE address, and that field is read-only in the dialog, so nobody could put it right. It worked, because routing follows the friendly name — until the rename detector, which keys on the IEEE, read the clash as a rename. Now the stored IEEE follows the friendly name zigbee2mqtt reports (and the log says so), the rename detector will not move a device onto a name another device already owns (it warns once, naming both), and a device first seen before zigbee2mqtt had interviewed it is created on the refresh that brings its definition rather than never.
-
-**v2.7.1** — Tidier completion message. The log said *"now on version {'date_code': '20260514', 'file_version': 16788992, 'software_build_id': '1.163.1'}"* — the raw reply from zigbee2mqtt, dropped straight into the sentence. It now reads *"now running 1.163.1 (build 16788992, 14 May 2026)"*. And because two separate signals both notice an update ending, it no longer says so twice.
-
-**v2.7.0** — **You can be told when a firmware update finishes.** There were events for an update becoming available but none for it ending, so you had to keep checking. There are now triggers for **Firmware Update Finished** and **Firmware Update Failed** — hook one to a notification and the lamp tells you itself.
-
-Worth knowing what "finished" means: progress reaching 100% only means the file has transferred. The device then writes it and restarts, and it is coming back that counts. The trigger waits for that, so it fires when the device is genuinely running the new firmware.
-
-**v2.6.0** — **Installing a firmware update is now two clicks.** There is a new **Plugins → Zigbee2MQTT Bridge → Update Device Firmware...** menu item, listing only the devices that actually have an update waiting, with the version they are on and the version they would move to. Pick one and it starts.
-
-Previously this meant building an Action Group to press a button once, which was the wrong shape for a one-off job. The action is still there for use in a trigger or schedule, and both routes go through exactly the same safety checks.
-
-**v2.5.1** — Quieter firmware checks. Asking a houseful of battery sensors about their firmware means most of them are asleep and will not answer, which is normal rather than a fault — those replies no longer appear as errors, and a real failure still does. The log also no longer refers to a device called "?" when zigbee2mqtt's reply does not identify one.
-
-**v2.5.0** — **Split a sensor's extra readings into their own devices.** A presence sensor that also measures temperature, humidity and light puts all of it into one Indigo device, where the extra readings sit as plain states — no sensor type, nothing HomeKit can see, and nowhere obvious to put them on a control page.
-
-Open such a device's settings and you will now find a **Separate Devices** section listing what else it measures. Tick one and that reading gets its own Indigo device, grouped with the original, showing up as a proper temperature or humidity sensor.
-
-The original device is left completely alone — same device, same id, same states — so every trigger, script and control page pointing at it carries on working. And if you change your mind, unticking the box never deletes anything: the extra device is renamed and set aside, in case something is pointing at it, and you delete it yourself when you are sure.
-
-**v2.4.2** — Housekeeping. Settings you leave blank are no longer stored, so a device's properties show only the handful you actually chose. And a startup message about two devices displaying an older state in the device list is now an ordinary note rather than a warning — it is cosmetic, the only cure would be deleting and recreating the device, and a warning you can never act on just teaches you to ignore warnings.
-
-**v2.4.1** — **Fixed a settings comparison that could nag a device.** Devices describe an on/off setting in their own words — some say `"ON"` and `"OFF"`, some say true and false, and the same device can do both for different settings. The plugin compared them carelessly, so a setting that was already correct could look wrong. In practice that meant it wrote the value again when you saved the dialog, and would have kept rewriting it every time the device mentioned that setting — wasteful on a battery device.
-
-Settings that cannot be compared with confidence are now left alone rather than assumed wrong.
-
-**v2.4.0** — **Firmware updates, surfaced at last.** zigbee2mqtt already keeps track of which devices have a firmware update waiting, and the plugin was quietly discarding it. Each device now shows its firmware state, the version it is on and the version available, and there is a trigger for when one appears. Two new menu items check for updates and report what is waiting.
-
-Installing one is always your decision — nothing updates on its own. An update runs for several minutes over a radio link and interrupting it can leave a device unusable, so the action refuses unless an update is genuinely waiting and the device is not already busy with one.
-
-**v2.3.0** — **Device settings stay where you put them.** Some sensors keep their settings in their own firmware, not in Indigo — sensitivity, detection delays, reporting intervals. Nothing owned those settings, so when a device forgot them nothing noticed. Two presence sensors here were set deliberately in June, quietly reverted to factory defaults after a battery change, and stayed wrong for four weeks.
-
-Each device's settings dialog now has a **Device Settings** section, built from what that particular device says it can be told. Set a value there and the plugin remembers it, notices when the device drifts off it, says so in the log, and puts it back.
-
-Only real settings appear — ones the device can also report back, so the plugin can tell "it has drifted" from "it agrees". Things like *Restart Device* and *Start Learning* look like settings but are one-shot commands, and are deliberately left out: re-applying one every time a device reconnected would restart the sensor over and over.
-
-Leave a field blank and the plugin has no opinion about it, which is the default for everything.
-
-**v2.2.0** — **Mains-powered devices no longer show a flat battery.** zigbee2mqtt says how each device is powered and the plugin was ignoring it, so anything on mains was given a battery reading of 0% — which looks exactly like a dead cell. Those devices now carry no battery reading at all, and any that already picked one up is labelled "Mains" instead. A device whose power source zigbee2mqtt does not report keeps its battery reading, deliberately: hiding a genuinely flat one would be the worse mistake.
-
-Also a large internal tidy-up. The main plugin file had grown past 5,000 lines and is now split across a dozen focused modules. Nothing changes in use — same devices, same states, same settings — but future work lands in sensible places instead of one enormous file.
-
-**v2.1.1** — added the plugin's icon. It had never had one, so it showed as a blank tile wherever Indigo lists plugins by picture. Nothing else changed.
-
-**v2.1.0** — **Indigo now sees what it was always able to show.** Battery-powered Zigbee devices reported their charge into a plugin state and nowhere else, so Indigo's own low-battery list, and every other plugin that reads a device's battery, saw nothing at all — only Z-Wave devices had it. They now carry the real Indigo battery level. Metering plugs reach the Energy UI for the first time, and Reset Energy Total works properly: the kilowatt-hour counter lives on the Zigbee device and cannot be reset from Indigo, so the plugin stores the reading taken at the moment you reset and counts from there. When zigbee2mqtt says a device is offline, that device now goes red in Indigo and shows as being in error, which is what health-monitoring plugins look at — until now an offline sensor looked perfectly well.
-
-Two new things arrive with it. The plugin reads zigbee2mqtt's **health report**, published every ten minutes and previously ignored, which is the only place that records a device rejoining the network or hopping to a different route — the answer to "why did that sensor go quiet". Each device gains its own counters, each bridge gains the zigbee2mqtt process and host figures, and a new **Report Network Health** menu item lists the troublemakers worst first. And the plugin gains **trigger events** for the first time: a device joining, leaving, announcing itself or failing its interview, a device rejoining or changing network address, and a bridge going offline, coming back or asking to be restarted. Previously any of these needed a script watching the log.
-
-- **2.0.3** (08-08-2026) — added the missing support link. Every Indigo plugin is meant to carry a web address inside its bundle — it is what the "About" item in the Plugins menu opens. This one had the entry but left it blank, so that menu item went nowhere. It now points at this repository. Nothing else changed.
-- **2.0.1–2.0.2** (21-07-2026) — housekeeping pair. Named log levels now map to the real logging levels — warnings and errors raised through the shared helper had been appearing as plain info lines, so amber and red entries people relied on for diagnosis never showed. Shared-utility refresh: calling the log timestamp filter twice no longer double-stamps every line, and the module imports cleanly outside Indigo.
-- **2.0.0** (16-07-2026) — the MQTT library moves to paho-mqtt 2.1.0. No behaviour change day to day, but it is a clean break with the old 1.x library, hence the major version. If an upgrade ever misbehaves after this one, delete the plugin's Packages folder and its pip success marker, then restart the plugin so the bundle reinstalls its libraries from scratch.
-- **1.10.0** (16-07-2026) — new device types and quality-of-life features from a full review pass. Door locks get their own device type with proper lock and unlock commands (they were previously treated as plain switches), and radiator valves / climate devices become real Indigo thermostats with a settable heat setpoint, mode control and valve position. A new Publish Custom Payload action sends any JSON settings object to a device, pairing can be opened and closed straight from the plugin menu, every device gains a readable "last seen" state, and a Test MQTT Connection menu item produces a single log dump made for support posts. An unreachable broker or wrong password is now reported clearly once, rather than silently or on every retry.
-- **1.9.21–1.9.23** (16-07-2026) — a fresh full review with fixes in three sweeps. The important ones: a wall switch that also sends scene actions is now created as a switchable relay rather than a button (before, its load could not be controlled from Indigo at all), and smoke alarms now actually reach Indigo — previously a smoke detector's alarm produced no state change anywhere. Sensors bolted onto other device types (a door sensor's thermometer, a plug's voltage) are no longer dropped, radiator valves no longer appear as window blinds, and identical friendly names on two bridges no longer cross their wires. Colour bulbs report full saturation correctly, brightness readback matches what you set, and a command that could not be delivered now says so instead of claiming success. Dozens of smaller robustness and logging refinements ride along, and the test suite grew from 474 to just under 600.
-- **1.9.20** (27-06-2026) — third deep-review batch, clearing the last of the review's lower-priority items. All internal robustness. The device-lookup tables are now lock-protected so a device starting or stopping can never collide with a background rename, a dimmer that reports zero brightness now reads as off (some bulbs briefly say "on at zero" mid-fade), the auto-detect-a-button safety net ignores a bare button number that carries no real action, colour readings round to a clean 100 per cent at full saturation rather than 99, and a stray device field that happens to share a name with a built-in state is left alone rather than written with the wrong type. The worker loop was also restructured so one bad message can never stall the rest. The test suite grew to 474.
-- **1.9.19** (26-06-2026) — second deep-review batch, mostly robustness corners. Rebuilding the MQTT connection is now done as one atomic step, so a settings save can never collide with the self-heal watchdog and leave a stray connection running in the background. A mixed motion-and-presence sensor that falls back to the generic sensor type no longer reports a room empty when only one of its detectors updates. The button "last action" now covers the full vocabulary of multi-function remotes, and anything unusual lands tidily on "Other" rather than vanishing. Tunable-white bulbs also pick up their colour-temperature capability the moment they are created rather than only after a manual capability refresh, and Refresh Device State is now offered on every sensor type. The test suite grew to 448.
-- **1.9.18** (26-06-2026) — important fix for presence sensors. A motion or presence sensor that also reports region or presence events (such as the Aqara FP1) could be quietly rebuilt as a button the first time one of those events arrived, which changed the underlying device and broke anything pointing at it. That can no longer happen — a sensor reporting presence or occupancy is never reclassified as a button. Also reconnects more gracefully after the Mac wakes from sleep, and a few internal guards were tightened so the background worker keeps running through an unexpected hiccup.
-- **1.9.17** (13-06-2026) — device-type detection fix: a device that reports both presence and an action list (again, the Aqara FP1) is now recognised as a presence sensor rather than a button when it is first discovered. Added a "device zoo" test layer that runs real captured device descriptions through the classifier to catch this class of mistake early.
-- **1.9.16** (10-06-2026) — housekeeping from a full repo audit, nothing visible changes day to day. Installs are much lighter: the unmaintained `colormath` library (which dragged the large `numpy` package onto every machine) has been dropped — the one colour conversion it performed is now done in a few lines of plain Python, with proper gamma correction so reported lamp colours stay true. The repo also gained automatic testing on every change (GitHub Actions runs the full 269-test suite plus a lint pass), a couple of silent edge cases now log a warning instead of vanishing (a malformed bridge message used to be discarded without trace), and an internal threading rule that one callback was quietly bending is now followed to the letter.
-- **1.9.15** (06-06-2026) — review fixes: corrected the universal-action handler name so Send Status Request works on every path, stopped combo devices (a dimmer or switch that also sends scene actions) being mistakenly rebuilt as buttons, and a malformed payload field is now skipped on its own rather than dropping the whole update.
-- **1.9.14** (29-05-2026) — self-healing MQTT: an application-level liveness backstop rebuilds the connection after a silent half-open socket that paho's own auto-reconnect can miss.
-- **1.9.13** (28-05-2026) — dynamic state-type inference: each captured payload field is declared with the correct Indigo type (boolean / integer / real / string) rather than always string.
-- **1.9.12** (28-05-2026) — `lastAction` on button devices became an Indigo enumeration, so each action gets a boolean sub-state for one-click triggers.
-- **1.9.11** (27-05-2026) — clean MQTT disconnect and reconnect across Mac sleep and wake.
-- **1.9.8–1.9.10** (25-05-2026) — `actionControlSensor` so Send Status Request works on sensor devices, `didDeviceCommPropertyChange` to stop unnecessary device-comm cycling, and a pytest test suite.
-- **1.9.0–1.9.7** (22–23-05-2026) — coordinator devices, the Refresh Device Capabilities menu, Indigo subType mapping for HomeKit, PluginConfig credential fallback, and millisecond log timestamps.
-
-## Usage
-
-1. Enable the plugin in Indigo (Plugins → Manage Plugins)
-2. Set the **Topic Prefix** in plugin preferences (default: `zigbee2mqtt`)
-3. Wait for `MQTT connected` and `Bridge device cache updated: N devices` in the event log
-4. **Plugins → Zigbee2MQTT Bridge → Discover & Create Devices** — creates every device
-5. (Optional) **Create Coordinator Devices** — adds one coordinator device per MQTT bridge
-6. All your Zigbee devices appear in Indigo under the **Zigbee2MQTT** folder
-
-Re-run **Discover & Create Devices** any time you add new Zigbee devices, and
-**Refresh Device Capabilities** after a device's zigbee2mqtt definition changes (it
-re-detects capabilities and corrects the Indigo subType without delete-and-recreate).
-
-## Plugin menu
-
-**Plugins → Zigbee2MQTT Bridge →**
-
-| Menu item | What it does |
-|-----------|--------------|
-| **Discover & Create Devices** | Create an Indigo device for every zigbee2mqtt device that does not have one yet, all in the **Zigbee2MQTT** folder. |
-| **Create Coordinator Devices** | Add one coordinator device per configured bridge, named `Z2M Bridge (<prefix>)`. |
-| **Refresh Device List from MQTT** | Ask each bridge to republish its device list, so the plugin's cache catches up without a restart. |
-| **Refresh Device Capabilities** | Re-read what each existing device can do from the live `exposes` definition and correct its capability flags and Indigo subType, with no delete and recreate. |
-| **Report Orphaned Devices** | List Indigo devices whose Zigbee counterpart has gone from the bridge. Reports only — it never deletes anything. |
-| **Report Network Health** | List what zigbee2mqtt's health report says about each bridge and its devices — how long zigbee2mqtt has been up, how hard the host is working, and which devices have rejoined the network or changed address, worst first. |
-| **Check for Firmware Updates** | Ask each bridge to check its devices against the firmware index. Read-only — it installs nothing. Battery devices answer when they next wake, so replies trickle in over several minutes. |
-| **Report Firmware Status** | List every device that supports over-the-air updates, the version it is on, and whether one is waiting. |
-| **Update Device Firmware...** | Pick a device from a list of those with an update waiting, and install it. Takes several minutes with the device unresponsive throughout. |
-| **Enable Pairing (Permit Join, 254s)** | Open every configured bridge for pairing for 254 seconds, zigbee2mqtt's longest window. The coordinator device's permit-join state confirms it took. |
-| **Disable Pairing (Permit Join Off)** | Close every bridge to pairing at once. |
-| **Toggle Timestamps in Log (on/off)** | Turn the millisecond log prefix on or off. |
-| **Test MQTT Connection** | Dump the full banner and then check the broker, the traffic and the bridge in one go — made for a support post. |
-| **Show Plugin Info** | Log the full plugin and environment banner. |
+Every version is listed in the [version history](https://highsteads.github.io/Zigbee2MQTTBridge/changelog.html).
 
 ## Authors & licence
 
