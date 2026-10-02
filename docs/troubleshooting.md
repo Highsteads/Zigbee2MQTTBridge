@@ -26,7 +26,8 @@ If the broker turns away the username or password, the log says **MQTT connect f
 The plugin has not yet had zigbee2mqtt's list of devices.
 
 - Wait a few seconds after the plugin starts, then try again.
-- Choose **Plugins → Zigbee2MQTT Bridge → Refresh Device List from MQTT** to ask for it.
+- Choose **Plugins → Zigbee2MQTT Bridge → Refresh Device List from MQTT** to ask for it. zigbee2mqtt leaves its list with the MQTT broker when it starts, and this asks the broker for it again.
+- If the log then says **No device list has arrived from zigbee2mqtt**, the broker has lost the list, usually because it restarted. Restart zigbee2mqtt and it sends the list again.
 - Check **Topic Prefix** in **Configure** matches zigbee2mqtt's base topic exactly. If they differ, the plugin connects to the broker but hears nothing from zigbee2mqtt.
 
 ## A device was skipped as "not yet interviewed"

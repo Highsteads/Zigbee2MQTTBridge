@@ -198,7 +198,9 @@ def test_watchdog_probes_before_rebuilding(plugin, monkeypatch):
     monkeypatch.setattr(plugin, "_rebuild_mqtt", lambda: rebuilds.append(1))
 
     plugin._mqtt_liveness_check()
-    assert probes and probes[0].endswith("/bridge/request/devices")
+    # health_check is a request zigbee2mqtt supports; bridge/request/devices,
+    # the probe until 2.11.0, is not (test_v2110_fixes.py).
+    assert probes and probes[0].endswith("/bridge/request/health_check")
     assert rebuilds == [], "first silent tick must probe, not rebuild"
     assert plugin._probe_sent_ts > 0
 

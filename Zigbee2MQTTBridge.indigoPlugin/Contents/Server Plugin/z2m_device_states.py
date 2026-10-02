@@ -26,6 +26,7 @@ from z2m_constants import (
     _BUTTON_ACTION_VALUES, _RESERVED_STATE_NAMES, _handled_keys_for,
 )
 from z2m_helpers import _format_last_seen
+from z2m_secondary import is_secondary
 
 
 # `log` is a LATE-BOUND delegate, deliberately not `from z2m_helpers import log`.
@@ -688,13 +689,19 @@ class DeviceStatesMixin:
             if self.debug:
                 log(f"Stopped coordinator: {dev.name}")
             return
+        if is_secondary(dev):
+            # It never registered anything, and the keys it carries are its
+            # PARENT's: popping them here removed the parent's route (2.11.0).
+            return
         fname = dev.pluginProps.get("friendly_name", "")
         ieee = dev.pluginProps.get("ieee_address", "")
         self._cancel_state_request(dev.id)
         with self.maps_lock:
             self.friendly_name_map.pop((self._device_prefix(dev), fname), None)
             self.ieee_map.pop(ieee, None)
-            self._motion_states.pop(dev.id, None)
+            # _motion_states is deliberately KEPT: the device's last known
+            # motion sources are still true across a comm restart, and
+            # dropping them let a partial report clear motion (2.11.0).
         if self.debug:
             log(f"Stopped device: {dev.name}")
 

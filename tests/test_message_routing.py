@@ -112,16 +112,16 @@ def test_routes_device_state_with_slash_in_friendly_name(plugin, monkeypatch):
 
 def test_connected_synthetic_topic_no_route(plugin, monkeypatch):
     """The __connected__ synthetic topic must not route as a device — it's
-    handled inline (logs + sends bridge/request/devices). No device handler
-    should be invoked."""
+    handled inline. No device handler should be invoked, and it publishes
+    nothing: zigbee2mqtt has no device-list request (2.11.0). It waits for
+    the retained list the subscription brings instead."""
     calls = _capture_routes(plugin, monkeypatch)
-    # Patch publish too so connect doesn't actually send
     sent = []
     monkeypatch.setattr(plugin, "_publish", lambda t, p: sent.append((t, p)))
-    plugin._process_message("__connected__", {})
+    plugin._process_message("__connected__", {"subscribed": ["zigbee2mqtt/#"]})
     assert calls == []   # no device routes
-    # It SHOULD request bridge/devices though
-    assert any(t.endswith("/bridge/request/devices") for t, _ in sent)
+    assert sent == []
+    assert "zigbee2mqtt" in plugin._device_list_wait
 
 
 # ── Empty / malformed topics ─────────────────────────────────────────────────

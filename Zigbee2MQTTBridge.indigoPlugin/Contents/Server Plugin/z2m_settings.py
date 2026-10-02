@@ -41,6 +41,10 @@ ACCESS_GET       = 4
 # plugin's own props or with a device's own captured fields.
 SETTING_PREFIX = "z2mset_"
 
+# Joins a composite child's path into its stored name: color_options +
+# execute_if_off -> color_options__execute_if_off (2.11.0).
+PATH_JOIN = "__"
+
 
 class SettingsMixin:
     """Managed device settings — see the file header above."""
@@ -48,7 +52,7 @@ class SettingsMixin:
     # ── Discovery ────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _iter_settable_exposes(exposes):
+    def _iter_settable_exposes(exposes, path=(), parent_label=""):
         """Yield every expose that is a genuine, manageable SETTING.
 
         The rule is access & SET *and* access & PUBLISHED. Both halves matter:
@@ -67,8 +71,20 @@ class SettingsMixin:
         """
         for feature in exposes or []:
             if feature.get("features"):
-                # composite / light / switch / climate wrappers
-                yield from SettingsMixin._iter_settable_exposes(feature["features"])
+                # A light / switch / climate WRAPPER only groups its features:
+                # they are top-level properties and are sent as they are. A
+                # COMPOSITE with a property of its own is a parent: its
+                # features travel inside it ({"color_options":
+                # {"execute_if_off": true}}). Flattening both the same way sent
+                # a composite's children bare, which the device ignores, and
+                # missed their drift (2.11.0).
+                inner_path, inner_label = path, parent_label
+                if feature.get("type") == "composite" and feature.get("property"):
+                    inner_path = path + (feature["property"],)
+                    inner_label = (feature.get("label")
+                                   or feature["property"].replace("_", " ").title())
+                yield from SettingsMixin._iter_settable_exposes(
+                    feature["features"], inner_path, inner_label)
                 continue
             access = feature.get("access", 0) or 0
             if not (access & ACCESS_SET and access & ACCESS_PUBLISHED):
@@ -77,6 +93,9 @@ class SettingsMixin:
                 continue
             if feature.get("type") not in ("binary", "numeric", "enum", "text"):
                 continue
+            if path:
+                feature = dict(feature, _path=path + (feature["property"],),
+                               _parent_label=parent_label)
             yield feature
 
     def _managed_settings_for(self, dev):
@@ -94,6 +113,58 @@ class SettingsMixin:
     @staticmethod
     def _setting_key(prop):
         return SETTING_PREFIX + prop
+
+    @staticmethod
+    def _spec_path(spec):
+        """Where the setting lives in a payload: its parents, then itself."""
+        return tuple(spec.get("_path") or (spec["property"],))
+
+    @staticmethod
+    def _spec_name(spec):
+        """The name the intent is stored under. A top-level setting keeps
+        its own property, as before 2.11.0, so nothing already stored moves; a
+        composite's child joins its path with a double underscore."""
+        return PATH_JOIN.join(SettingsMixin._spec_path(spec))
+
+    @staticmethod
+    def _value_at(container, path):
+        """(found, value) for a path through nested dicts."""
+        value = container
+        for step in path:
+            if not isinstance(value, dict) or step not in value:
+                return False, None
+            value = value[step]
+        return True, value
+
+    @staticmethod
+    def _nest(specs, values):
+        """Build the /set payload from {spec name: value}."""
+        out = {}
+        for name, value in values.items():
+            path = SettingsMixin._spec_path(specs[name])
+            node = out
+            for step in path[:-1]:
+                node = node.setdefault(step, {})
+            node[path[-1]] = value
+        return out
+
+    def _reported_setting(self, dev, spec):
+        """What the device last reported for this setting, or None.
+
+        A composite arrives as one state holding the whole object, which the
+        raw-field capture stores as JSON text, so it is read back from that.
+        """
+        path = self._spec_path(spec)
+        top = dev.states.get(self._sanitise_state_key(path[0]))
+        if len(path) == 1:
+            return top
+        if isinstance(top, str):
+            try:
+                top = json.loads(top)
+            except ValueError:
+                return None
+        found, value = self._value_at(top, path[1:])
+        return value if found else None
 
     @staticmethod
     def _intended_settings(props):
@@ -245,7 +316,7 @@ class SettingsMixin:
         if not intended:
             return
 
-        specs = {s["property"]: s for s in self._managed_settings_for(dev)}
+        specs = {self._spec_name(s): s for s in self._managed_settings_for(dev)}
         if not specs:
             return
 
@@ -254,9 +325,9 @@ class SettingsMixin:
             spec = specs.get(prop)
             if spec is None:
                 continue          # no longer offered by this device's definition
-            if prop not in payload:
+            found, reported = self._value_at(payload, self._spec_path(spec))
+            if not found:
                 continue          # this payload says nothing about it
-            reported = payload.get(prop)
             if reported is None:
                 # Present in the payload but null — zigbee2mqtt publishes these
                 # after a restart. That is "the device has not told us", NOT
@@ -280,8 +351,9 @@ class SettingsMixin:
         for prop, (want, found) in sorted(drifted.items()):
             log(f"{dev.name}: '{prop}' is {found!r} but was set to {want!r} — "
                 f"re-applying", level="WARNING")
-        self._publish_settings(dev, {p: v for p, (v, _) in drifted.items()},
-                               reason="drift")
+        self._publish_settings(
+            dev, self._nest(specs, {p: v for p, (v, _) in drifted.items()}),
+            reason="drift")
 
     def _publish_settings(self, dev, values, reason=""):
         """Publish a settings payload to the device's /set topic."""
@@ -342,15 +414,16 @@ class SettingsMixin:
             'defaults). Leave a field blank to stop managing it.</Label>',
             '    </Field>',
         ]
-        states = dev.states
         for spec in specs:
             prop = spec["property"]
-            field_id = self._setting_key(prop)
+            field_id = self._setting_key(self._spec_name(spec))
             label = spec.get("label") or prop.replace("_", " ").title()
+            if spec.get("_parent_label"):
+                label = f"{spec['_parent_label']}: {label}"
             desc = (spec.get("description") or "").strip()
             # What the device currently reports, so the dialog opens showing
             # reality rather than an empty box the user must guess at.
-            current = states.get(self._sanitise_state_key(prop))
+            current = self._reported_setting(dev, spec)
             hint = f" Currently reporting: {current}." if current not in (None, "") else ""
             kind = spec.get("type")
 
@@ -417,7 +490,7 @@ class SettingsMixin:
         except Exception:
             return
         try:
-            specs = {s["property"]: s for s in self._managed_settings_for(dev)}
+            specs = {self._spec_name(s): s for s in self._managed_settings_for(dev)}
             if not specs:
                 return
             to_send = {}
@@ -430,12 +503,13 @@ class SettingsMixin:
                     log(f"{dev.name}: '{prop}' value {raw!r} is not valid for this "
                         f"setting — not applied", level="WARNING")
                     continue
-                reported = dev.states.get(self._sanitise_state_key(prop))
+                reported = self._reported_setting(dev, spec)
                 if self._values_agree(spec, want, reported):
                     continue      # already correct, no need to disturb the device
                 to_send[prop] = want
             if to_send:
-                self._publish_settings(dev, to_send, reason="saved from the device dialog")
+                self._publish_settings(dev, self._nest(specs, to_send),
+                                       reason="saved from the device dialog")
         except Exception as e:
             self.exception_handler(e, log_failing_statement=True,
                                    context=f"applying settings for '{dev.name}'")

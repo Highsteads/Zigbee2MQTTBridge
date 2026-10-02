@@ -29,7 +29,7 @@ except ImportError:
     mqtt = None
 
 from z2m_constants import (
-    MQTT_SILENCE_LIMIT, MQTT_WATCHDOG_EVERY, RECONNECT_DELAY,
+    DEVICE_LIST_WAIT, MQTT_SILENCE_LIMIT, MQTT_WATCHDOG_EVERY, RECONNECT_DELAY,
 )
 import z2m_secrets
 
@@ -216,10 +216,16 @@ class MqttMixin:
         # v1.9.22: silence alone can't distinguish a wedged socket from a
         # legitimately QUIET network (keepalive PINGRESPs don't fire on_message
         # — a sparse install with a few battery sensors would rebuild every
-        # cycle forever). Two-stage check: first PROBE — request the device
-        # list, whose response arrives on the existing prefix/# subscription
-        # and stamps last_rx_ts. Only if a probe is still unanswered by the
-        # NEXT watchdog tick is the socket declared wedged and rebuilt.
+        # cycle forever). Two-stage check: first PROBE, then rebuild only if
+        # nothing has arrived by the NEXT watchdog tick.
+        #
+        # The probe is published under prefix/#, which we subscribe to, so the
+        # broker hands it straight back: that echo alone proves the socket,
+        # which is what this check is for. zigbee2mqtt answering on
+        # bridge/response/health_check is a second message on top. Until
+        # 2.11.0 the probe was bridge/request/devices, which zigbee2mqtt does
+        # not support and silently ignores — it only ever worked through the
+        # echo.
         if self._probe_sent_ts and self.last_rx_ts < self._probe_sent_ts:
             log(f"MQTT silent for {silent:.0f}s (limit {limit}s) and liveness "
                 f"probe unanswered — rebuilding connection (paho loop assumed "
@@ -228,17 +234,71 @@ class MqttMixin:
             self._rebuild_mqtt()
             return
         prefix = self._topic_prefix()
-        if self._publish(f"{prefix}/bridge/request/devices", {}):
+        if self._publish(f"{prefix}/bridge/request/health_check", {}):
             self._probe_sent_ts = now
             if self.debug:
                 log(f"MQTT silent for {silent:.0f}s — sent liveness probe "
-                    f"(bridge/request/devices), will rebuild if unanswered")
+                    f"(bridge/request/health_check), will rebuild if unanswered")
         else:
             # Client says it isn't even connected — no point probing.
             log(f"MQTT silent for {silent:.0f}s (limit {limit}s) and client "
                 f"reports not connected — rebuilding", level="WARNING")
             self._probe_sent_ts = 0.0
             self._rebuild_mqtt()
+
+    def _replay_retained(self):
+        """Ask the broker to send every retained message under our prefixes again.
+
+        zigbee2mqtt has no request that returns the device list. It publishes
+        bridge/devices RETAINED and answers nothing on bridge/request/devices:
+        its 2.13.0 request table has no such key and ignores unknown ones. The
+        plugin sent that request on connect and from the Refresh menu until
+        2.11.0 and never had a reply.
+
+        Subscribing again to a filter we already hold replaces the
+        subscription, and MQTT then resends its retained messages. Measured on
+        this broker 02-10-2026: an identical re-subscribe to the garage prefix
+        delivered bridge/devices a second time, retain flag set. The cost is
+        the same replay every reconnect already causes.
+
+        Returns the prefixes replayed; empty when not connected.
+        """
+        with self.mqtt_lock:
+            client = self.mqtt_client
+            if client is None or not self.mqtt_connected:
+                return []
+            done = []
+            for prefix in self._subscribed_prefixes or ():
+                try:
+                    rc = client.subscribe(f"{prefix}/#", qos=1)[0]
+                except Exception as e:
+                    log(f"Could not re-subscribe to {prefix}/#: {e}",
+                        level="WARNING")
+                    continue
+                if rc == 0:
+                    done.append(prefix)
+            return done
+
+    def _await_device_list(self, prefixes):
+        """Note that a device list should now arrive for each prefix."""
+        now = time.time()
+        for prefix in prefixes:
+            self._device_list_wait[prefix] = now
+
+    def _check_device_list_wait(self):
+        """Say so, once, when an expected device list never came."""
+        if not self._device_list_wait:
+            return
+        now = time.time()
+        for prefix, asked in list(self._device_list_wait.items()):
+            if now - asked < DEVICE_LIST_WAIT:
+                continue
+            self._device_list_wait.pop(prefix, None)
+            log(f"No device list has arrived from zigbee2mqtt on '{prefix}'. "
+                f"zigbee2mqtt publishes it when it starts and leaves it on the "
+                f"broker; if the broker has restarted since, restarting "
+                f"zigbee2mqtt makes it publish the list again.",
+                level="WARNING")
 
     def _silence_limit(self):
         """Watchdog silence limit in seconds — configurable for sparse/quiet

@@ -99,7 +99,9 @@ def test_device_stop_clears_all_maps(plugin, make_device):
     plugin.deviceStopComm(dev)
     assert ("zigbee2mqtt", "Gone") not in plugin.friendly_name_map
     assert "0xgone" not in plugin.ieee_map
-    assert dev.id not in plugin._motion_states
+    # The motion sources are KEPT (2.11.0): they are still true across a comm
+    # restart, and wiping them let a partial report clear motion.
+    assert plugin._motion_states[dev.id] == {"presence": True}
 
 
 # ── #13 dynamic field colliding with a static state is NOT captured ──────────

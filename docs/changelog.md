@@ -7,6 +7,21 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.11.0 — 2 October 2026
+
+Nine faults found by a second, independent review, all fixed. None of them was causing trouble in my house, but each would have caught somebody out.
+
+- **Separate devices now work.** Splitting a reading out into a device of its own stopped the original device updating, because the new device took over the messages meant for the original. The original now keeps them and passes the reading on, as it was always meant to, and switching the new device off or deleting it no longer cuts the original off.
+- **A smoke alarm that also measures temperature is now made as an alarm.** It used to come in as a temperature sensor, whose on and off never moved, so a trigger watching for it to turn on would never fire. One already made that way by an older version writes an error to the log every time it reports smoke, telling you how to make it again as an alarm.
+- **Refresh Device List from MQTT now works.** It used to ask zigbee2mqtt for something zigbee2mqtt does not offer, so nothing came back. It now asks the MQTT broker to send the list zigbee2mqtt left there, and says so in the log if none arrives.
+- **Device Settings that belong to a group are sent the way the device expects.** A bulb's colour options, for example, live inside a group, and the plugin was sending them on their own, which the device ignores. They now show the group's name in front and go to the device inside their group.
+- **A failed firmware update fires the Firmware Update Failed trigger once,** not twice with the second naming a device called "unknown".
+- **A firmware check now says whether an update is waiting,** not just that it finished.
+- **A device renamed in zigbee2mqtt can no longer undo Refresh Device Capabilities** if the two happen at the same moment.
+- **Motion cannot clear by mistake after a restart.** A sensor with both a motion detector and a presence radar could show the room empty when one of them reported on its own, while the other still saw someone there.
+- **Topic Prefix can now have several levels,** such as `house/zigbee2mqtt`, which zigbee2mqtt allows. The plugin used to accept one and then ignore every message under it. It now refuses a prefix with `+` or `#` in it, and two prefixes where one sits inside the other.
+- **The first device on a brand new Zigbee network is made by itself,** even when it joined while the plugin was not connected.
+
 ## 2.10.0 — 27 September 2026
 
 When zigbee2mqtt reports a device offline, the plugin turns it red in Indigo so you and any plugin watching for failed devices can see it. That red could vanish within ten minutes while the device was still dead, because other updates the plugin writes to the device, such as its network counters, were clearing it. The red now stays until zigbee2mqtt hears from the device again, and nothing else about what the plugin shows has changed.

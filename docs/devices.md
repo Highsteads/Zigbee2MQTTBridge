@@ -122,6 +122,8 @@ For any sensor that does not fit one of the kinds above, such as smoke alarms an
 
 The device list shows the most important of these: smoke first, then a water leak, then motion, then a door or window.
 
+Every smoke alarm comes in as a **Z2M Sensor**, even one that also measures temperature and humidity, because this is the kind whose on and off follows the alarm. Versions before 2.11.0 made such an alarm a **Z2M Temperature Sensor**, whose on and off never moves. If you have one, the log shows an error each time it reports smoke. Its **Smoke** reading still works, so a trigger on that still fires. To make it a proper alarm, delete it and run **Discover & Create Devices**, but it gets a new device number, so anything pointing at it must be pointed at the new one.
+
 ## Z2M Button / Scene
 
 For wireless buttons, remotes and scene switches. They send a press rather than holding a state, so the device shows the last thing that happened.

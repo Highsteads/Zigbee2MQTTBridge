@@ -23,6 +23,7 @@ except ImportError:
 from datetime import datetime
 
 from z2m_constants import DEVICE_FOLDER_NAME
+from z2m_secondary import is_secondary
 
 
 # `log` is a LATE-BOUND delegate, deliberately not `from z2m_helpers import log`.
@@ -66,17 +67,13 @@ class BridgeMixin:
             subscribed = payload.get("subscribed")
             if subscribed:
                 log_activity(self, f"MQTT subscribed to: {', '.join(subscribed)}")
-            # Actively request bridge/devices from every configured prefix.
-            # Retained messages alone are unreliable — the garage Z2M may not have
-            # published since broker restart, or retain may be disabled.
-            prefix = self._topic_prefix()
-            self._publish(f"{prefix}/bridge/request/devices", {})
-            garage = self._garage_prefix()
-            if garage:
-                self._publish(f"{garage}/bridge/request/devices", {})
-                log_activity(self,
-                             f"Requested device list from garage bridge: "
-                             f"{garage}/bridge/request/devices")
+            # Subscribing has just made the broker send the retained device
+            # list. Until 2.11.0 this also published bridge/request/devices
+            # as a fallback, but zigbee2mqtt has no such request and ignores
+            # it, so it never helped. Watch for the list instead, and say so
+            # if it does not come.
+            prefixes = [s[:-2] for s in (subscribed or []) if s.endswith("/#")]
+            self._await_device_list(prefixes)
             return
         if topic == "__disconnected__":
             rc = payload.get("rc", "?")
@@ -94,18 +91,23 @@ class BridgeMixin:
             log(payload.get("msg", "MQTT error"), level="ERROR")
             return
 
-        parts  = topic.split("/")
-        if not parts or len(parts) < 2:
-            return
-
-        # Determine which prefix this message belongs to
+        # Determine which prefix this message belongs to. Match the WHOLE
+        # configured prefix: zigbee2mqtt allows a base topic of several levels
+        # ("house/zigbee2mqtt"), and comparing only the first level dropped
+        # every message under one (2.11.0). parts[0] is then the full prefix,
+        # so everything below can keep indexing parts as before.
         primary = self._topic_prefix()
         garage  = self._garage_prefix()
-        if parts[0] == primary:
-            effective_prefix = primary
-        elif garage and parts[0] == garage:
-            effective_prefix = garage
-        else:
+        effective_prefix = None
+        for candidate in sorted({p for p in (primary, garage) if p},
+                                key=len, reverse=True):
+            if topic.startswith(candidate + "/"):
+                effective_prefix = candidate
+                break
+        if effective_prefix is None:
+            return
+        parts = [effective_prefix] + topic[len(effective_prefix) + 1:].split("/")
+        if len(parts) < 2 or not parts[1]:
             return
 
         # First-message diagnostic for non-primary prefixes
@@ -160,10 +162,13 @@ class BridgeMixin:
             return
         if prefix is None:
             prefix = self._topic_prefix()
+        self._device_list_wait.pop(prefix, None)
 
         # Snapshot IEEE addresses known for this prefix before the update
         old_ieee = {ieee for ieee, d in self.bridge_devices.items()
                     if d.get("_mqtt_prefix") == prefix}
+        had_baseline = prefix in self._device_baseline
+        self._device_baseline.add(prefix)
         # Seen before but not yet interviewed (no definition): creation was
         # skipped, so they must count as NEW on the refresh that brings the
         # definition, or they are never created at all (v2.7.2).
@@ -221,12 +226,19 @@ class BridgeMixin:
 
             if prefix_changed or name_changed:
                 try:
-                    new_props = dict(dev.pluginProps)
-                    if prefix_changed:
-                        new_props["mqtt_prefix"] = prefix
-                    if name_changed:
-                        new_props["friendly_name"] = new_fname
-                    dev.replacePluginPropsOnServer(new_props)
+                    # Read fresh and write under the props lock, changing only
+                    # the identity keys. Copying the props from the snapshot
+                    # taken above and writing them back unlocked could undo a
+                    # capability refresh the menu thread saved in between
+                    # (2.11.0) — the same read-modify-write every other props
+                    # writer already does under this lock.
+                    with self.props_lock:
+                        new_props = dict(indigo.devices[dev.id].pluginProps)
+                        if prefix_changed:
+                            new_props["mqtt_prefix"] = prefix
+                        if name_changed:
+                            new_props["friendly_name"] = new_fname
+                        dev.replacePluginPropsOnServer(new_props)
                     # Repoint the prefix-qualified map on EITHER change — a
                     # prefix migration moves the key even when the name is
                     # unchanged (v1.9.22).
@@ -259,8 +271,12 @@ class BridgeMixin:
                     log(f"Error updating device '{old_fname}': {e}", level="ERROR")
 
         # Auto-create devices that are brand new to this prefix.
-        # Guard: old_ieee must be non-empty so we skip the initial startup load.
-        if old_ieee:
+        # Guard: skip the first list for a prefix, which is the startup load.
+        # Until 2.11.0 the guard was "old_ieee is non-empty", which read a
+        # network holding only its coordinator as no baseline at all: a first
+        # device that joined while we were disconnected arrived complete,
+        # was cached, skipped, and then never counted as new again.
+        if had_baseline:
             new_ieee = {ieee for ieee in new_cache
                         if new_cache[ieee].get("_mqtt_prefix") == prefix
                         and (ieee not in old_ieee
@@ -292,7 +308,7 @@ class BridgeMixin:
         would look like a considered 'unknown' rather than an absent field.
         """
         for dev in indigo.devices.iter(self.pluginId):
-            if dev.deviceTypeId == "z2mCoordinator":
+            if dev.deviceTypeId == "z2mCoordinator" or is_secondary(dev):
                 continue
             props = dev.ownerProps
             if props.get("power_source"):
@@ -345,7 +361,7 @@ class BridgeMixin:
 
         healed = 0
         for dev in indigo.devices.iter(self.pluginId):
-            if dev.deviceTypeId == "z2mCoordinator":
+            if dev.deviceTypeId == "z2mCoordinator" or is_secondary(dev):
                 continue
             if self._device_prefix(dev) != prefix:
                 continue
@@ -370,7 +386,7 @@ class BridgeMixin:
                         # legitimately stores it, so ITS rename detection lives on.
                         del self.ieee_map[stored]
                         for other in indigo.devices.iter(self.pluginId):
-                            if other.id != dev.id and \
+                            if other.id != dev.id and not is_secondary(other) and \
                                     (other.pluginProps.get("ieee_address") or "").strip() == stored:
                                 self.ieee_map[stored] = other.id
                                 break

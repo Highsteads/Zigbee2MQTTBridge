@@ -233,10 +233,12 @@ def test_bridge_devices_autocreates_new_ieee(plugin, monkeypatch):
     from indigo_stub import DeviceShim
     monkeypatch.setattr(indigo, "device", DeviceShim(indigo.devices), raising=False)
 
-    # Baseline for the prefix must be non-empty (startup flood guard).
+    # A first list has already been seen for the prefix (startup flood guard;
+    # since 2.11.0 the baseline is recorded, not inferred from a non-empty cache).
     plugin.bridge_devices = {"0x1": {"ieee_address": "0x1",
                                      "friendly_name": "Existing",
                                      "_mqtt_prefix": "zigbee2mqtt"}}
+    plugin._device_baseline.add("zigbee2mqtt")
     relay_exposes = [{"type": "switch",
                       "features": [{"name": "state", "type": "binary",
                                     "access": 7}]}]

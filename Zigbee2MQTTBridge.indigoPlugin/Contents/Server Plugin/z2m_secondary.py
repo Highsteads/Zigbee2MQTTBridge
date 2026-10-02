@@ -46,6 +46,17 @@ SECONDARY_TYPES = {
 # The secondary device type ids, for "is this itself a secondary?" checks.
 SECONDARY_TYPE_IDS = {t for t, _l, _d, _s in SECONDARY_TYPES.values()}
 
+
+def is_secondary(dev):
+    """True for a secondary device.
+
+    A secondary CARRIES its parent's friendly_name, ieee_address and
+    mqtt_prefix, copied at creation, but it is not a radio. Anything that
+    indexes, addresses or counts radios must skip it: registering it under
+    those identities took the parent's MQTT routing over (2.11.0).
+    """
+    return getattr(dev, "deviceTypeId", None) in SECONDARY_TYPE_IDS
+
 # Marker left on a secondary that has been switched off. It is renamed rather
 # than deleted — see _remove_secondary.
 UNGROUPED_MARKER = "[UNUSED"

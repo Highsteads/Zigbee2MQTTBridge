@@ -14,9 +14,11 @@
 # Date:        14-08-2026
 # Version:     1.0
 
+import re
 import time
 
 import z2m_helpers
+from z2m_secondary import is_secondary
 
 try:
     import indigo  # noqa: F401  — injected by the plugin host at runtime
@@ -117,8 +119,8 @@ class OtaMixin:
                 log(f"{dev.name}: firmware update did not complete — the device "
                     f"is still on version {now_version if now_version is not None else 'unknown'}",
                     level="WARNING")
-                self._fire_event("otaUpdateFailed", self._device_prefix(dev),
-                                 dev.name)
+                self._announce_update_failed(self._device_prefix(dev), dev.name,
+                                             dev_id=dev.id)
 
     # ── Asking zigbee2mqtt to look ───────────────────────────────────────────
 
@@ -137,7 +139,9 @@ class OtaMixin:
         """
         checked = skipped = 0
         for dev in indigo.devices.iter(self.pluginId):
-            if dev.deviceTypeId == "z2mCoordinator":
+            # A secondary carries its parent's address: counting it would ask
+            # the same radio twice and list it twice (2.11.0).
+            if dev.deviceTypeId == "z2mCoordinator" or is_secondary(dev):
                 continue
             ieee = (dev.ownerProps.get("ieee_address") or "").strip()
             if not ieee:
@@ -163,7 +167,9 @@ class OtaMixin:
         """Menu: what the plugin currently knows about each device's firmware."""
         rows = []
         for dev in indigo.devices.iter(self.pluginId):
-            if dev.deviceTypeId == "z2mCoordinator":
+            # A secondary carries its parent's address: counting it would ask
+            # the same radio twice and list it twice (2.11.0).
+            if dev.deviceTypeId == "z2mCoordinator" or is_secondary(dev):
                 continue
             if not self._ota_supported(dev):
                 continue
@@ -263,8 +269,11 @@ class OtaMixin:
                 f"— run Check for Firmware Updates first", level="WARNING")
             return
         prefix = self._device_prefix(dev)
+        # The transaction comes back on the reply, including an error reply,
+        # whose data is otherwise empty — it is how the failure is tied back
+        # to this device (2.11.0).
         if self._publish(f"{prefix}/bridge/request/device/ota_update/update",
-                         {"id": ieee}):
+                         {"id": ieee, "transaction": ieee}):
             log(f"{dev.name}: firmware update started. It can take several "
                 f"minutes and the device will be unresponsive meanwhile — do "
                 f"not power it off. Watch its Update Progress state.")
@@ -327,6 +336,24 @@ class OtaMixin:
         log(f"{name}: firmware update finished{on_version}")
         return True
 
+    def _announce_update_failed(self, prefix, name, dev_id=None):
+        """Fire otaUpdateFailed ONCE per failed update.
+
+        zigbee2mqtt reports a failed transfer twice: the device's update state
+        goes back to `available`, then the error reply to the request arrives.
+        Both routes fired the event until 2.11.0, so every trigger on it ran
+        twice, the second time for a device called "unknown". Keyed on the
+        device id where known, the same way _announce_update_finished is.
+        """
+        key = dev_id if dev_id is not None else name
+        now = time.time()
+        last = self._ota_failed_at.get(key, 0)
+        self._ota_failed_at[key] = now
+        if now - last < 300:
+            return False
+        self._fire_event("otaUpdateFailed", prefix, name)
+        return True
+
     # ── Replies from zigbee2mqtt ─────────────────────────────────────────────
 
     # Ordinary outcomes of asking a Zigbee mesh about firmware, NOT faults.
@@ -350,11 +377,12 @@ class OtaMixin:
         status = str(payload.get("status") or "").lower()
         data = payload.get("data") or {}
 
-        # On an ERROR reply zigbee2mqtt sends `data: {}` — there is no id to
-        # look up, which is why this used to announce a device called "?".
-        # The error text names the device itself, so say nothing rather than
-        # inventing a name for it.
-        who = data.get("id")
+        # On an ERROR reply zigbee2mqtt sends `data: {}`, so there is no id.
+        # It does hand back the transaction we sent (the ieee, for updates
+        # started here), and its error text names the device by its
+        # zigbee2mqtt name in quotes — try those in turn (2.11.0). Where none
+        # of them identifies it, say nothing rather than invent a name.
+        who = data.get("id") or (payload.get("transaction") if status == "error" else None)
         name = ""
         dev_id = None
         if who:
@@ -366,6 +394,16 @@ class OtaMixin:
                     name = indigo.devices[dev_id].name
                 except KeyError:
                     pass
+        if dev_id is None and status == "error":
+            named = re.search(r"'([^']+)'", str(payload.get("error") or ""))
+            if named:
+                with self.maps_lock:
+                    dev_id = self.friendly_name_map.get((prefix, named.group(1)))
+                if dev_id is not None:
+                    try:
+                        name = indigo.devices[dev_id].name
+                    except KeyError:
+                        dev_id = None
 
         if status == "error":
             reason = payload.get("error") or "no reason given"
@@ -379,10 +417,13 @@ class OtaMixin:
             log(f"{prefix_text}firmware {action} did not complete — {reason}",
                 level="INFO" if expected else "ERROR")
             if action == "update":
-                self._fire_event("otaUpdateFailed", prefix, name or "unknown")
+                self._announce_update_failed(prefix, name or "unknown", dev_id=dev_id)
             return
         if action == "check":
-            updated = data.get("updateAvailable")
+            # zigbee2mqtt 2.x spells it update_available; the camelCase form
+            # read here until 2.11.0 never arrives, so every check said only
+            # "completed".
+            updated = data.get("update_available", data.get("updateAvailable"))
             if updated is None:
                 log(f"{name}: firmware check completed")
             else:

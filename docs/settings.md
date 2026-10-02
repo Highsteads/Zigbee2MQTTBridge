@@ -22,8 +22,8 @@ Open these with **Plugins → Zigbee2MQTT Bridge → Configure**. When you click
 
 | Setting | What it does |
 |---|---|
-| **Topic Prefix** | zigbee2mqtt's base topic — the word it starts every message with. It is `zigbee2mqtt` to start with, which matches zigbee2mqtt's own starting setting. It must match exactly, or the plugin hears nothing. It cannot be left blank. |
-| **Garage Topic Prefix** | If you run a second zigbee2mqtt, its base topic, such as `zigbee2mqtt_garage`. I use this for a second Zigbee radio in the garage. Leave it blank if you run only one. Devices on both come into the same plugin, and two devices with the same name on the two are kept apart. |
+| **Topic Prefix** | zigbee2mqtt's base topic — the word it starts every message with. It is `zigbee2mqtt` to start with, which matches zigbee2mqtt's own starting setting. It must match exactly, or the plugin hears nothing. It cannot be left blank. It can have several parts separated by `/`, such as `house/zigbee2mqtt`, but not `+` or `#`. |
+| **Garage Topic Prefix** | If you run a second zigbee2mqtt, its base topic, such as `zigbee2mqtt_garage`. I use this for a second Zigbee radio in the garage. Leave it blank if you run only one. Devices on both come into the same plugin, and two devices with the same name on the two are kept apart. The two prefixes must be different, and one cannot start with the other, such as `zigbee2mqtt` and `zigbee2mqtt/garage`. |
 
 ### Advanced
 
@@ -72,6 +72,7 @@ Some devices have a **Device Settings** section at the bottom. It lists the sett
 - Choose a value, or type one for a number, and click **Save**. The plugin sends it to the device, unless the device already has it.
 - From then on, if the device ever reports something different — after a battery change, say — the plugin writes a warning to the Event Log and sends your value again.
 - Leave a setting on **-- not managed --**, or blank, and the plugin leaves it alone. That is how every setting starts.
+- A setting that belongs to a group shows the group's name first, such as **Color options: Execute if off**.
 
 A battery device only listens while it is awake. If it is asleep when you click **Save**, the plugin sends your setting again the next time the device reports and differs.
 

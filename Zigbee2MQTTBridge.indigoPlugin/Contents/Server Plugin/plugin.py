@@ -5,9 +5,44 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0)
-# Date:        27-09-2026
-# Version:     2.10.0
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0)
+# Date:        02-10-2026
+# Version:     2.11.0
+#
+# v2.11.0 (02-10-2026): NINE FAULTS FROM AN INDEPENDENT REVIEW, each pinned by a
+#   test that fails on 2.10.0 (tests/test_v2110_fixes.py, 30 tests; an 18-way
+#   mutation sweep of the fixes was all caught).
+#   * Secondary devices carry their parent's friendly_name/ieee/prefix, and
+#     deviceStartComm registered them under it, taking the parent's routing:
+#     the parent froze and stopping the secondary removed the route.
+#     is_secondary() now keeps them out of the maps, deviceStopComm, the IEEE
+#     heal, the power-source backfill and the firmware check/report loops.
+#   * A smoke alarm with temperature/humidity classified as
+#     z2mTemperatureSensor, whose onOffState never moves. Smoke now wins
+#     (z2mSensor); an old misclassified device logs an ERROR on smoke=true.
+#   * bridge/request/devices does not exist in zigbee2mqtt (2.13.0 request
+#     table) and is silently ignored. Connect no longer sends it, Refresh
+#     re-subscribes (an identical re-subscribe replays retained messages —
+#     measured on this broker), a missing list is reported after 30 s, and the
+#     watchdog probe is bridge/request/health_check.
+#   * Managed settings inside a genuine composite (color, color_options...)
+#     were sent bare and their drift never seen. They keep their path now,
+#     stored as z2mset_<parent>__<child>; top-level names are unchanged.
+#   * A failed OTA fired otaUpdateFailed twice (state back to available, then
+#     the error reply, whose data is empty). One fire per 300 s per device;
+#     the reply finds its device from the transaction we now send or the
+#     quoted name in its error text. Check replies read update_available.
+#   * Rename/prefix migration did an unlocked props read-modify-write that
+#     could undo a concurrent capability refresh. Now under props_lock.
+#   * The motion-source store was wiped on comm stop and empty after a
+#     restart, so a partial report cleared motion. Kept across comm restarts
+#     and rebuilt from the occupancy/presence/pir states (never "motion").
+#   * A multi-level base topic was accepted and every message dropped (only
+#     the first level was compared). The whole prefix is matched now, and
+#     validation refuses wildcards, empty levels and nested prefixes.
+#   * A coordinator-only first list read as "no baseline", so a first device
+#     arriving complete was never auto-created. Baselines are tracked per
+#     prefix.
 #
 # v2.10.0 (27-09-2026): THE OFFLINE ERROR NOW STAYS UNTIL THE DEVICE IS BACK.
 #   Indigo's state writes clear a device's error state by default, so the red
@@ -879,7 +914,7 @@ from z2m_menus import MenusMixin
 from z2m_mqtt import MqttMixin
 from z2m_native import NativeAttributesMixin
 from z2m_ota import OtaMixin
-from z2m_secondary import SecondaryDevicesMixin
+from z2m_secondary import SecondaryDevicesMixin, is_secondary
 from z2m_settings import SettingsMixin
 from z2m_state_processing import StateProcessingMixin
 
@@ -970,10 +1005,21 @@ class Plugin(
         # MQTT liveness backstop — stamp of last inbound message + last watchdog check.
         self.last_rx_ts       = time.time()
         self._last_mqtt_check = 0.0
-        # Outstanding liveness probe: ts of the bridge/request/devices probe the
-        # watchdog sent to distinguish a wedged socket from a QUIET network.
-        # 0.0 = no probe outstanding.
+        # Outstanding liveness probe: ts of the bridge/request/health_check
+        # probe the watchdog sent to distinguish a wedged socket from a QUIET
+        # network. 0.0 = no probe outstanding.
         self._probe_sent_ts   = 0.0
+
+        # prefix -> when we last asked the broker to resend the device list
+        # and are still waiting for it (2.11.0). Cleared when bridge/devices
+        # arrives; reported once if it never does.
+        self._device_list_wait = {}
+        # Prefixes whose first device list has been seen. Auto-create compares
+        # each later list against it; an EMPTY first list is still a baseline
+        # (2.11.0).
+        self._device_baseline = set()
+        # dev id (or name) -> when otaUpdateFailed last fired for it (2.11.0).
+        self._ota_failed_at = {}
 
         # Per-device state-request timers (deviceStartComm's settle delay),
         # tracked so stop/shutdown can cancel them (v1.9.22 — an untracked
@@ -1134,6 +1180,10 @@ class Plugin(
             self._mqtt_liveness_check()
         except Exception as e:
             log(f"liveness check error: {e}", level="ERROR")
+        try:
+            self._check_device_list_wait()
+        except Exception as e:
+            log(f"device-list check error: {e}", level="ERROR")
 
     # NB: no stopConcurrentThread override — the base implementation sets
     # stopThread AND writes the wake pipe so self.sleep() returns instantly.
@@ -1145,8 +1195,25 @@ class Plugin(
     def validatePrefsConfigUi(self, valuesDict):
         errors = indigo.Dict()
         prefix = valuesDict.get("mqtt_topic_prefix", "").strip()
+        garage = valuesDict.get("mqtt_garage_topic_prefix", "").strip()
         if not prefix:
             errors["mqtt_topic_prefix"] = "Topic prefix is required."
+        # A prefix is a literal topic, so no wildcards and no empty levels.
+        # Several levels are fine (2.11.0). One prefix inside the other would
+        # subscribe the broker to the same messages twice, so refuse that.
+        for key, value in (("mqtt_topic_prefix", prefix),
+                           ("mqtt_garage_topic_prefix", garage)):
+            if value and ("+" in value or "#" in value):
+                errors[key] = "A topic prefix cannot contain + or #."
+            elif value and "" in value.split("/"):
+                errors[key] = ("A topic prefix cannot start or end with / "
+                               "or contain //.")
+        if prefix and garage and "mqtt_garage_topic_prefix" not in errors and (
+                prefix == garage or garage.startswith(prefix + "/")
+                or prefix.startswith(garage + "/")):
+            errors["mqtt_garage_topic_prefix"] = ("The two topic prefixes must "
+                                                  "be different, and neither "
+                                                  "can sit inside the other.")
         # Numeric fields: catch bad values AT THE DIALOG instead of silently
         # falling back at runtime (v1.9.23).
         port_raw = str(valuesDict.get("mqtt_port", "")).strip()
@@ -1226,6 +1293,16 @@ class Plugin(
                 dev.updateStateOnServer("deviceCount", value=count)
             if self.debug:
                 log(f"Started coordinator: {dev.name} (prefix={prefix})")
+            return
+
+        # A secondary carries its parent's friendly_name and ieee_address but
+        # is not a radio. Registering it under them took the parent's routing
+        # over: the parent froze and the secondary got reports it had no
+        # handler for. Its readings arrive through _route_to_secondaries
+        # (2.11.0).
+        if is_secondary(dev):
+            if self.debug:
+                log(f"Started secondary device: {dev.name}")
             return
 
         props = dev.pluginProps

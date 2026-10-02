@@ -136,6 +136,14 @@ def _detect_device_type(exposes, model=""):
     has_humidity   = "humidity"    in feature_names
     has_pressure   = "pressure"    in feature_names
     has_illuminance = any(n in feature_names for n in ("illuminance", "illuminance_lux"))
+    has_smoke      = "smoke"      in feature_names
+
+    # A smoke alarm is the generic sensor, whatever else it measures: only that
+    # type raises its native on/off state for smoke. A Tuya 228WZH reports
+    # temperature and humidity too, and used to fall through to the
+    # environmental type below, whose on/off state never moves (2.11.0).
+    if has_smoke:
+        return "z2mSensor"
 
     # Pure contact sensor: has contact, no occupancy/presence/water_leak
     if has_contact and not has_occupancy and not has_presence and not has_water_leak:

@@ -166,6 +166,19 @@ class StateProcessingMixin:
         elif type_id == "z2mThermostat":
             self._process_thermostat_state(dev, payload)
 
+        # Only the generic sensor turns smoke into its native on/off state. A
+        # smoke alarm created as anything else (before 2.11.0, one that also
+        # measured temperature became a temperature sensor) still records the
+        # raw `smoke` state, but its on/off state never moves — so say so,
+        # every time, because this is the one reading that must not go quiet.
+        if type_id != "z2mSensor" and _payload_bool(payload.get("smoke")) is True:
+            log(f"{dev.name} reports smoke. It was created as a "
+                f"{type_id} device, so its on/off state cannot show the "
+                f"alarm; a trigger on its 'smoke' state still fires. "
+                f"Deleting it and running Discover & Create Devices makes it "
+                f"a proper alarm device, but gives it a new device id.",
+                level="ERROR")
+
         # After type-specific handling, capture any remaining payload fields as
         # dynamic states so all Z2M data is imported (not just the semantically-
         # mapped subset).  See _capture_raw_fields docstring.
@@ -346,6 +359,30 @@ class StateProcessingMixin:
 
         self._apply_updates(dev, updates)
 
+    # Motion sources whose last value the device keeps as a state of its own.
+    # "motion" is NOT one: on these types the "motion" state is the combined
+    # answer, and reading it back as a source would let it vote for itself.
+    _MOTION_SOURCE_STATES = ("occupancy", "presence", "pir")
+
+    def _motion_store(self, dev):
+        """The last known value of each motion source for this device.
+
+        Kept in memory so a report carrying only one source ORs against the
+        others. When it is empty — after a plugin restart — it is rebuilt from
+        the source states the device still shows. Before 2.11.0 it started
+        empty, and a comm restart also wiped it, so a lone "occupancy": false
+        cleared motion while the stored presence still said someone was there.
+        """
+        store = self._motion_states.get(dev.id)
+        if store is None:
+            store = {}
+            for key in self._MOTION_SOURCE_STATES:
+                val = dev.states.get(key)
+                if isinstance(val, bool):
+                    store[key] = val
+            self._motion_states[dev.id] = store
+        return store
+
     def _process_occupancy_sensor_state(self, dev, payload):
         """Update z2mOccupancySensor device states from MQTT payload.
 
@@ -359,7 +396,7 @@ class StateProcessingMixin:
         # partial payloads (only one key changing) don't lose the other sensors' state.
         MOTION_KEYS = ("motion", "occupancy", "presence", "pir")
 
-        store = self._motion_states.setdefault(dev.id, {})
+        store = self._motion_store(dev)
         motion_updated = False
         for key in MOTION_KEYS:
             if key in payload:
@@ -563,7 +600,7 @@ class StateProcessingMixin:
         # clearing them. Without the store a mixed PIR+mmWave device that lands on
         # this catch-all type drops a still-present person whenever one component
         # key updates on its own. Only clears when ALL known keys are False.
-        store = self._motion_states.setdefault(dev.id, {})
+        store = self._motion_store(dev)
         motion_updated = False
         for key in ("motion", "occupancy", "presence", "pir"):
             if key in payload:

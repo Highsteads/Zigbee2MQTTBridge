@@ -137,7 +137,7 @@ def test_update_starts_when_one_is_genuinely_waiting(plugin, make_device,
     sent = _sent(monkeypatch, plugin)
     plugin.action_update_firmware(make_action(), dev)
     assert sent == [("zigbee2mqtt/bridge/request/device/ota_update/update",
-                     {"id": "0xota1"})]
+                     {"id": "0xota1", "transaction": "0xota1"})]
 
 
 def test_update_with_no_device_does_not_crash(plugin, make_action):
@@ -290,7 +290,7 @@ def test_a_successful_check_reply_is_reported(plugin, make_device, monkeypatch,
     monkeypatch.setattr(helpers_mod, "log",
                         lambda msg, level="INFO": logged.append((level, msg)))
     plugin._process_ota_response(
-        "check", {"status": "ok", "data": {"id": "0xota1", "updateAvailable": True}},
+        "check", {"status": "ok", "data": {"id": "0xota1", "update_available": True}},
         "zigbee2mqtt")
     assert any("update is available" in m for _, m in logged)
 
@@ -343,7 +343,7 @@ def test_the_menu_starts_the_update_for_the_chosen_device(plugin, make_device,
     sent = _sent(monkeypatch, plugin)
     plugin.menu_update_firmware({"targetDevice": str(dev.id)}, None)
     assert sent == [("zigbee2mqtt/bridge/request/device/ota_update/update",
-                     {"id": "0xota1"})]
+                     {"id": "0xota1", "transaction": "0xota1"})]
 
 
 def test_the_menu_refuses_the_empty_placeholder(plugin, monkeypatch):

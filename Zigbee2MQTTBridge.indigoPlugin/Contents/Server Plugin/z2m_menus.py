@@ -193,14 +193,20 @@ class MenusMixin:
         log(f"Create Coordinator Devices complete: {created} created, {existed} already existed")
 
     def refresh_bridge_devices(self, valuesDict=None, typeId=None):
-        """Menu item: republish a get request for bridge/devices."""
-        prefix = self._topic_prefix()
-        self._publish(f"{prefix}/bridge/request/devices", {})
-        garage = self._garage_prefix()
-        if garage:
-            self._publish(f"{garage}/bridge/request/devices", {})
-        log("Requested device list refresh from MQTT bridge"
-            + (f" (+ garage: {garage})" if garage else ""))
+        """Menu item: have the broker resend the retained device list.
+
+        zigbee2mqtt has no request for the list (see _replay_retained), so
+        this re-subscribes, which makes the broker send it again. A list that
+        never comes is reported by _check_device_list_wait.
+        """
+        prefixes = self._replay_retained()
+        if not prefixes:
+            log("Cannot refresh the device list: the plugin is not connected "
+                "to the MQTT broker.", level="WARNING")
+            return
+        self._await_device_list(prefixes)
+        log(f"Asked the MQTT broker to send the device list again for "
+            f"{' and '.join(prefixes)}.")
 
     _CAP_DETECTORS = {
         "z2mLight":             _detect_light_capabilities,

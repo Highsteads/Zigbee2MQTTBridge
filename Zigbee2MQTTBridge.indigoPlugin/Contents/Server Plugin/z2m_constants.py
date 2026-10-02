@@ -22,6 +22,7 @@ RECONNECT_DELAY      = 30   # seconds between MQTT reconnect attempts
 # Application-level liveness backstop (paho's own auto-reconnect can wedge silently):
 MQTT_SILENCE_LIMIT   = 300  # no inbound MQTT message for this long => rebuild the client
 MQTT_WATCHDOG_EVERY  = 30   # seconds between liveness checks in runConcurrentThread
+DEVICE_LIST_WAIT     = 30   # seconds to wait for a retained bridge/devices before saying it is missing
 STATE_REQUEST_DELAY  = 2    # seconds after deviceStartComm before requesting state
 DEVICE_FOLDER_NAME   = "Zigbee2MQTT"
 
