@@ -42,6 +42,7 @@ zigbee2mqtt has not heard from it for longer than it allows, and has marked it o
 - Check it has power, and is not too far from the nearest mains-powered Zigbee device, which passes messages on.
 - A device that drops off and comes back often shows up in **Plugins → Zigbee2MQTT Bridge → Report Network Health**.
 - If several go offline together, run **Check for Missing Routers...**. A router switched off at the wall leaves the devices that relied on it cut off until they find another way.
+- **Report Network Map...** shows which router each device talks through and how good the link is. A device on a weak link (below 50 out of 255) drops out more often; moving it, or putting a plug-in repeater between it and its router, usually cures it.
 
 The red clears by itself when the device is heard from again. The coordinator device's **Offline Devices** shows how many are offline at once.
 

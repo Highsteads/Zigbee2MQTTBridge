@@ -210,6 +210,20 @@
         <CallbackMethod>action_check_routers</CallbackMethod>
     </Action>
 
+    <Action id="networkMap">
+        <Name>Report Zigbee Network Map</Name>
+        <ConfigUI>
+            <Field id="bridge" type="menu" defaultValue="all">
+                <Label>zigbee2mqtt:</Label>
+                <List class="self" filter="all" method="list_bridge_prefixes" dynamicReload="true"/>
+            </Field>
+            <Field id="label_map_info" type="label" fontSize="small">
+                <Label>Writes a report to the log of which devices have no route or a weak one. A large network takes a few minutes and keeps every router busy meanwhile, so run it now and then.</Label>
+            </Field>
+        </ConfigUI>
+        <CallbackMethod>action_network_map</CallbackMethod>
+    </Action>
+
     <Action id="restartBridge">
         <Name>Restart zigbee2mqtt</Name>
         <ConfigUI>

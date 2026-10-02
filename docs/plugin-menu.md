@@ -17,6 +17,7 @@ These are under **Plugins → Zigbee2MQTT Bridge**. Most of them write their ans
 | **Refresh Device Capabilities** | Looks again at what each of your existing Zigbee devices can do, and corrects what the plugin has stored — whether a bulb can change colour, say, and the Indigo type that goes with it. Your devices keep their names, and every trigger and control page pointing at them carries on working. Use it after a zigbee2mqtt update has changed how it describes a device. |
 | **Report Orphaned Devices** | Lists any Indigo device whose Zigbee device zigbee2mqtt no longer knows about — removed, or paired again under a new identity. It only reports, it never deletes anything. |
 | **Report Network Health** | Lists, for each zigbee2mqtt, how long it has been running, how hard its computer is working, and which devices have dropped off the network and joined again or taken a new network address, worst first. It needs zigbee2mqtt's health report, which arrives every ten minutes. |
+| **Report Network Map...** | Has zigbee2mqtt ask every router which devices it can hear, then writes a report to the log: devices with no route or a weak one first, then each router with how many devices rely on it, then every device and the router it talks through, weakest first. A light that devices rely on is pointed out, because switching it off at the wall cuts them off. zigbee2mqtt asks the routers a second apart, so a large network takes a few minutes — mine took just over two. Run it now and then, not every hour. |
 
 ## Firmware
 

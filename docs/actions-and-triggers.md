@@ -38,11 +38,12 @@ These are under **Device Actions** when you add an action.
 | **Fade Light to Brightness** | Changes a light to the brightness you set, gradually, over the number of seconds you set. 0% fades it off. The bulb does the fading itself; one that cannot fade simply changes at once. |
 | **Set Up Zigbee Device Again** | Asks zigbee2mqtt to run the device's setup again, as it does when a device first pairs. It is the usual cure for a device that has stopped reporting. A battery device must be awake: press its button or set off its sensor first. |
 
-These three are under the plugin's own name, not **Device Actions**, because they act on zigbee2mqtt itself:
+These are under the plugin's own name, not **Device Actions**, because they act on zigbee2mqtt itself:
 
 | Action | What it does |
 |---|---|
 | **Back Up zigbee2mqtt** | Saves zigbee2mqtt's settings and list of devices to the backup folder set in the plugin's **Configure** window, for one zigbee2mqtt or all of them. Run it from a schedule once a week, say. See [Settings](settings.md). |
+| **Report Zigbee Network Map** | Writes the network map report to the log — see [The plugin menu](plugin-menu.md). |
 | **Check zigbee2mqtt for Missing Routers** | Asks zigbee2mqtt whether any router it knows about has stopped answering, and writes the answer to the log and the coordinator device. |
 | **Restart zigbee2mqtt** | Restarts the zigbee2mqtt you choose. Every device on it stops answering for about half a minute. With the **Zigbee2MQTT Bridge Needs a Restart** trigger, it can restart zigbee2mqtt in the night after you change one of its settings. |
 

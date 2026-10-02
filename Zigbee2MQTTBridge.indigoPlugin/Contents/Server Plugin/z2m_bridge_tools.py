@@ -48,7 +48,10 @@ def log_activity(*args, **kwargs):
 # How long to wait for zigbee2mqtt to answer before saying so. A backup of the
 # house bridge took 21 s when measured (02-10-2026); give it room.
 REPLY_WAIT = {"backup": 180, "coordinator_check": 180, "restart": 60,
-              "device/configure": 120}
+              "device/configure": 120,
+              # The house network map took 130 s on 02-10-2026 (17 routers,
+              # a second apart); allow for a much larger network.
+              "networkmap": 900}
 
 BACKUP_KEEP_DEFAULT = 10
 BACKUP_NAME = "zigbee2mqtt-backup-{prefix}-{stamp}.zip"
@@ -130,6 +133,9 @@ class BridgeToolsMixin:
             self._save_backup(prefix, data, ok, error)
         elif kind == "coordinator_check":
             self._report_routers(prefix, data, ok, error)
+        elif kind == "networkmap":
+            self._report_network_map(prefix, data, ok, error,
+                                     seconds=time.time() - request["sent"])
         elif kind == "restart":
             if ok:
                 log(f"zigbee2mqtt on '{prefix}' is restarting. Its devices come "
@@ -160,6 +166,7 @@ class BridgeToolsMixin:
                     "coordinator_check": "the check for missing routers",
                     "restart": "the restart",
                     "device/configure": f"setting up {request.get('name', 'the device')} again",
+                    "networkmap": "the network map",
                     }.get(kind, kind)
             log(f"zigbee2mqtt on '{request['prefix']}' did not answer {what}. "
                 f"Check it is running, then try again.", level="WARNING")

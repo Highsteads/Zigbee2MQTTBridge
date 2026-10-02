@@ -7,6 +7,10 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.17.0 — 2 October 2026
+
+**Report Network Map.** A new menu item and action that have zigbee2mqtt ask every router which devices it can hear, then write a plain report to the log. It starts with what needs attention — a device with no route, a device on a weak link and the router it uses, a router that did not answer — then lists each router with how many devices rely on it, and every device with the router it talks through, weakest first. A light that devices rely on is pointed out, because switching it off at the wall cuts them off. On my house network it took just over two minutes and found a motion sensor hanging on to a light in the garage by a thread.
+
 ## 2.16.0 — 2 October 2026
 
 - **Firmware updates for battery devices.** **Update Device Firmware** now asks when to install: **Now**, or **The next time the device asks**. The second waits until the device wakes and asks for new firmware by itself, so a sleeping sensor no longer misses the update. If an attempt fails, zigbee2mqtt tries again next time, and the Failed trigger waits until the update is really over.

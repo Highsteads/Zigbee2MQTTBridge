@@ -512,7 +512,7 @@ class ActionsMixin:
             errors["seconds"] = f"Seconds must be a number from 0 to {FADE_MAX_SECONDS}."
         if typeId in ("recallScene", "storeScene", "removeScene"):
             self._validate_scene_action(valuesDict, typeId, errors)
-        if typeId in ("backupBridge", "checkRouters", "restartBridge"):
+        if typeId in ("backupBridge", "checkRouters", "restartBridge", "networkMap"):
             choice = str(valuesDict.get("bridge") or "")
             if choice in ("", "none") or (choice == "all" and typeId == "restartBridge"):
                 errors["bridge"] = "Choose a zigbee2mqtt."

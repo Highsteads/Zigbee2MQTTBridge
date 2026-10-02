@@ -5,9 +5,22 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0)
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0)
 # Date:        02-10-2026
-# Version:     2.16.0
+# Version:     2.17.0
+#
+# v2.17.0 (02-10-2026): REPORT NETWORK MAP. New module z2m_network_map.py
+#   (NetworkMapMixin + pure summarise_network_map). Menu + plugin action send
+#   bridge/request/networkmap {"type":"raw","routes":true} through the
+#   transaction-tracked bridge request (REPLY_WAIT 900 s: the house took
+#   130 s live). Links read as zigbee2mqtt builds them: TARGET = the router
+#   asked, SOURCE = its neighbour, lqi = how well the target hears it,
+#   relationship 1 = child. Each end device's parent is its best child link;
+#   the report logs (WARNING) devices with no route, links under 50/255 and
+#   routers that did not answer, then routers busiest first (with what the
+#   coordinator hears, and a note when a relied-on router is a light), then
+#   every device weakest first. tests/test_v2170_network_map.py 13; 12
+#   mutations caught after tightening the fixture.
 #
 # v2.16.0 (02-10-2026): SCHEDULED FIRMWARE UPDATES (the last item of the
 #   October comparison), from zigbee2mqtt 2.14.2 otaUpdate.ts.
@@ -1002,6 +1015,7 @@ from z2m_bridge import BridgeMixin
 from z2m_bridge_tools import BridgeToolsMixin
 from z2m_groups import GroupsMixin, is_group
 from z2m_scenes import ScenesMixin
+from z2m_network_map import NetworkMapMixin
 from z2m_device_states import DeviceStatesMixin
 from z2m_menus import MenusMixin
 from z2m_mqtt import MqttMixin
@@ -1046,6 +1060,7 @@ class Plugin(
     MenusMixin,
     MqttMixin,
     NativeAttributesMixin,
+    NetworkMapMixin,
     OtaMixin,
     ScenesMixin,
     SecondaryDevicesMixin,

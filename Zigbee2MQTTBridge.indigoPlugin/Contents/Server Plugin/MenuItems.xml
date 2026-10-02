@@ -27,6 +27,19 @@
         <Name>Report Network Health</Name>
         <CallbackMethod>report_network_health</CallbackMethod>
     </MenuItem>
+    <MenuItem id="networkMapMenu">
+        <Name>Report Network Map...</Name>
+        <CallbackMethod>menu_network_map</CallbackMethod>
+        <ConfigUI>
+            <Field id="bridge" type="menu" defaultValue="all">
+                <Label>zigbee2mqtt:</Label>
+                <List class="self" filter="all" method="list_bridge_prefixes" dynamicReload="true"/>
+            </Field>
+            <Field id="label_map_info" type="label">
+                <Label>zigbee2mqtt asks every router who it can hear, and the log then says which devices have no route or a weak one, and which routers the most devices rely on. It asks the routers a second apart, so a large network takes a few minutes — run it now and then, not on a schedule every hour.</Label>
+            </Field>
+        </ConfigUI>
+    </MenuItem>
     <MenuItem id="sepFirmware" isSeparator="true"/>
     <MenuItem id="checkFirmwareUpdates">
         <Name>Check for Firmware Updates</Name>
