@@ -61,11 +61,15 @@ class ActionsMixin:
         regardless of device class.  Forward dimmer-class devices (z2mLight, z2mCover) to
         actionControlDimmer so their SetBrightness / SetColorLevels / etc. are handled.
         """
-        if dev.deviceTypeId in ("z2mLight", "z2mCover"):
+        if dev.deviceTypeId in ("z2mLight", "z2mCover", "z2mGroupLight"):
             self.actionControlDimmer(action, dev)
             return
 
         cmd    = action.deviceAction
+        if (dev.deviceTypeId == "z2mGroupRelay"
+                and cmd == indigo.kDeviceAction.RequestStatus):
+            self._seed_group_state(dev, announce=True)
+            return
         if dev.deviceTypeId == CHANNEL_TYPE_ID:
             self._channel_action(cmd, dev)
             return
@@ -153,8 +157,14 @@ class ActionsMixin:
                              f"state_{endpoint}")
 
     def actionControlDimmer(self, action, dev):
-        """Handle dimmer-class device actions (z2mLight and z2mCover)."""
+        """Handle dimmer-class device actions (z2mLight, z2mCover and, from
+        v2.14.0, z2mGroupLight — a group takes the same /set as a bulb)."""
         cmd    = action.deviceAction
+        if (dev.deviceTypeId == "z2mGroupLight"
+                and cmd == indigo.kDimmerRelayAction.RequestStatus):
+            # A group has no state of its own to ask zigbee2mqtt for.
+            self._seed_group_state(dev, announce=True)
+            return
         fname  = dev.pluginProps.get("friendly_name", "")
         prefix = self._device_prefix(dev)
         is_cover = (dev.deviceTypeId == "z2mCover")

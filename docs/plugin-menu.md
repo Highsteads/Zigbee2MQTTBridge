@@ -11,7 +11,7 @@ These are under **Plugins → Zigbee2MQTT Bridge**. Most of them write their ans
 
 | Menu item | What it does |
 |---|---|
-| **Discover & Create Devices** | Makes an Indigo device for every Zigbee device zigbee2mqtt knows about that does not have one yet, and puts them in the **Zigbee2MQTT** folder. It never makes a second copy, so it is safe to run at any time. A device zigbee2mqtt has not finished setting up is skipped, and named in the log. |
+| **Discover & Create Devices** | Makes an Indigo device for every Zigbee device zigbee2mqtt knows about that does not have one yet, and puts them in the **Zigbee2MQTT** folder, along with a device for each zigbee2mqtt group of lights or switches. It never makes a second copy, so it is safe to run at any time. A device zigbee2mqtt has not finished setting up is skipped, and named in the log. |
 | **Create Coordinator Devices** | Makes one **Z2M Coordinator** device for each zigbee2mqtt you connect, named such as **Z2M Bridge (zigbee2mqtt)**, if it does not have one already. |
 | **Refresh Device List from MQTT** | Asks the MQTT broker to send zigbee2mqtt's list of devices again, so the plugin catches up without a restart. If no list arrives within half a minute, the log says so. |
 | **Refresh Device Capabilities** | Looks again at what each of your existing Zigbee devices can do, and corrects what the plugin has stored — whether a bulb can change colour, say, and the Indigo type that goes with it. Your devices keep their names, and every trigger and control page pointing at them carries on working. Use it after a zigbee2mqtt update has changed how it describes a device. |

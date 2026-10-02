@@ -31,6 +31,7 @@ except ImportError:
     log_startup_banner = None
 
 from z2m_constants import DEVICE_FOLDER_NAME
+from z2m_groups import is_group
 from z2m_detection import (
     _build_capabilities_display, _detect_contact_sensor_capabilities,
     _detect_device_type, _detect_light_capabilities,
@@ -141,8 +142,19 @@ class MenusMixin:
             if result == "exists" and self.debug:
                 log(f"  skip (exists): {device_data.get('friendly_name', '?')}")
 
+        # zigbee2mqtt groups become devices too (v2.14.0).
+        groups = self.create_group_devices(folder_id)
+
         parts = [f"{counts['created']} created",
                  f"{counts['exists']} already existed"]
+        if groups["created"] or groups["exists"]:
+            parts.append(f"{groups['created']} group(s) created, "
+                         f"{groups['exists']} already existed")
+        if groups["skipped"]:
+            parts.append(f"{groups['skipped']} group(s) with no lights or "
+                         f"switches skipped")
+        if groups["error"]:
+            parts.append(f"{groups['error']} group error(s)")
         if counts["coordinator"]:
             parts.append(f"{counts['coordinator']} coordinator(s) skipped")
         if counts["no_definition"]:
@@ -458,6 +470,18 @@ class MenusMixin:
             ieee  = (dev.pluginProps.get("ieee_address") or "").strip()
             fname = (dev.pluginProps.get("friendly_name") or "").strip()
             key   = (self._device_prefix(dev), fname)
+            if is_group(dev):
+                # A group is known by its id, not an IEEE (v2.14.0). Until
+                # that bridge's group list has arrived it cannot be judged.
+                groups = self.bridge_groups.get(self._device_prefix(dev))
+                try:
+                    gid = int(dev.pluginProps.get("group_id"))
+                except (TypeError, ValueError):
+                    gid = None
+                if groups is None or gid in groups:
+                    continue
+                orphans.append((dev.name, f"group {gid}", fname or "-"))
+                continue
             if ieee and ieee in known_ieee:
                 continue
             if ieee and ieee in self._coordinator_ieees:

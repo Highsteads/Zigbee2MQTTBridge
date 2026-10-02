@@ -98,7 +98,8 @@ class BridgeToolsMixin:
         """Every Zigbee device of ours that is a radio (no coordinators, no
         split-out devices), for picking one in a menu."""
         rows = [(str(d.id), d.name) for d in indigo.devices.iter(self.pluginId)
-                if d.deviceTypeId != "z2mCoordinator" and not is_secondary(d)]
+                if d.deviceTypeId not in ("z2mCoordinator", "z2mGroupLight", "z2mGroupRelay")
+                and not is_secondary(d)]
         return sorted(rows, key=lambda r: r[1].lower()) or [("none", "-- no devices --")]
 
     # ── Requests and their replies ───────────────────────────────────────────
@@ -450,7 +451,13 @@ class BridgeToolsMixin:
     # ── Offline devices per bridge ───────────────────────────────────────────
 
     def _note_availability(self, dev, prefix, online):
-        """Keep each bridge's set of offline devices, and say when it changes."""
+        """Keep each bridge's set of offline devices, and say when it changes.
+
+        A group is not a device: zigbee2mqtt calls it offline only when every
+        member is, and those members are already counted.
+        """
+        if dev.deviceTypeId in ("z2mGroupLight", "z2mGroupRelay"):
+            return
         offline = self._offline_by_prefix.setdefault(prefix, set())
         before = len(offline)
         if online:

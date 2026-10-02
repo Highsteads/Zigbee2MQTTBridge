@@ -3,7 +3,7 @@
 <Actions>
 
     <!-- Set color temperature (lights only) -->
-    <Action id="setColorTemperature" deviceFilter="self.z2mLight" uiPath="DeviceActions">
+    <Action id="setColorTemperature" deviceFilter="self.z2mLight,self.z2mGroupLight" uiPath="DeviceActions">
         <Name>Set Color Temperature</Name>
         <ConfigUI>
             <Field id="kelvin" type="textfield" defaultValue="2700">
@@ -15,7 +15,7 @@
     </Action>
 
     <!-- Set brightness / position -->
-    <Action id="setBrightness" deviceFilter="self.z2mLight,self.z2mCover" uiPath="DeviceActions">
+    <Action id="setBrightness" deviceFilter="self.z2mLight,self.z2mCover,self.z2mGroupLight" uiPath="DeviceActions">
         <Name>Set Brightness / Position</Name>
         <ConfigUI>
             <Field id="brightness" type="textfield" defaultValue="100">
@@ -52,7 +52,7 @@
          hatch for z2m device options the typed actions don't cover
          (sensitivity, LED indicator modes, calibration, child lock...). -->
     <Action id="publishCustom"
-            deviceFilter="self.z2mLight,self.z2mRelay,self.z2mContactSensor,self.z2mOccupancySensor,self.z2mWaterLeakSensor,self.z2mTemperatureSensor,self.z2mSensor,self.z2mCover,self.z2mButton,self.z2mLock,self.z2mThermostat"
+            deviceFilter="self.z2mLight,self.z2mGroupLight,self.z2mGroupRelay,self.z2mRelay,self.z2mContactSensor,self.z2mOccupancySensor,self.z2mWaterLeakSensor,self.z2mTemperatureSensor,self.z2mSensor,self.z2mCover,self.z2mButton,self.z2mLock,self.z2mThermostat"
             uiPath="DeviceActions">
         <Name>Publish Custom Payload</Name>
         <ConfigUI>
@@ -92,7 +92,7 @@
         <CallbackMethod>action_stop_cover</CallbackMethod>
     </Action>
 
-    <Action id="fadeLight" deviceFilter="self.z2mLight" uiPath="DeviceActions">
+    <Action id="fadeLight" deviceFilter="self.z2mLight,self.z2mGroupLight" uiPath="DeviceActions">
         <Name>Fade Light to Brightness</Name>
         <ConfigUI>
             <Field id="brightness" type="textfield" defaultValue="100">

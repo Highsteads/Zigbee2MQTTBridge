@@ -123,6 +123,8 @@ class BridgeMixin:
                 bt = parts[2]
                 if bt == "devices":
                     self._process_bridge_devices(payload, effective_prefix)
+                elif bt == "groups":
+                    self._process_bridge_groups(payload, effective_prefix)
                 elif bt == "state":
                     self._process_bridge_state(payload, effective_prefix)
                 elif bt == "info":
@@ -296,6 +298,10 @@ class BridgeMixin:
         # that point — devices start before MQTT connects — so this is the first
         # moment the answer actually exists.
         self._backfill_power_source(prefix)
+
+        # Group devices take their names and colour abilities from their
+        # members, which this list has just updated (v2.14.0).
+        self._refresh_group_devices(prefix)
 
         # Update the coordinator's deviceCount + lastUpdate (if one exists for this prefix)
         self._update_coordinator(prefix, deviceCount=sum(

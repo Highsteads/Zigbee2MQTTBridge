@@ -66,7 +66,9 @@ _ALWAYS_CONSUMED_KEYS = {
 # neither semantically handled NOR dynamically captured: silent total data loss.
 _HANDLED_KEYS_BY_TYPE = {
     "z2mLight":             {"state", "brightness", "color_temp", "color_mode", "color"},
+    "z2mGroupLight":        {"state", "brightness", "color_temp", "color_mode", "color"},
     "z2mRelay":             {"state", "power", "energy"},
+    "z2mGroupRelay":        {"state"},
     "z2mCover":             {"state", "position", "tilt"},
     "z2mButton":            {"action", "battery"},
     "z2mRepeater":          set(),

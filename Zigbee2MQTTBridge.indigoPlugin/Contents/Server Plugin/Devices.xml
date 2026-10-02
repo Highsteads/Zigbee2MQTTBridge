@@ -1740,4 +1740,93 @@
         </States>
     </Device>
 
+    <!-- ================================================================
+         Z2M Group Light / Z2M Group Switch  (v2.14.0)
+         A zigbee2mqtt group: every member switches with one Zigbee
+         broadcast. Commands go to <prefix>/<group>/set and the state comes
+         from <prefix>/<group>, which zigbee2mqtt publishes as members change.
+         ================================================================ -->
+    <Device type="dimmer" id="z2mGroupLight" subType="indigo.kDimmerDeviceSubType.Dimmer">
+        <Name>Z2M Group Light</Name>
+        <ConfigUI>
+            <Field id="friendly_name" type="textfield" readonly="true" defaultValue="">
+                <Label>Group Name:</Label>
+                <Description>The group's name in zigbee2mqtt. Rename the group there and this follows.</Description>
+            </Field>
+            <Field id="group_id" type="textfield" readonly="true" defaultValue="">
+                <Label>Group Id:</Label>
+            </Field>
+            <Field id="has_brightness"  type="checkbox" hidden="true" defaultValue="true"/>
+            <Field id="has_color_temp"  type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="has_color"       type="checkbox" hidden="true" defaultValue="false"/>
+        </ConfigUI>
+        <States>
+            <State id="colorMode">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Color Mode Changed</TriggerLabel>
+                <ControlPageLabel>Color Mode</ControlPageLabel>
+            </State>
+            <State id="colorTemp">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Color Temp Changed</TriggerLabel>
+                <ControlPageLabel>Color Temp K</ControlPageLabel>
+            </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="memberCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Member Count Changed</TriggerLabel>
+                <ControlPageLabel>Members</ControlPageLabel>
+            </State>
+            <State id="members">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Members Changed</TriggerLabel>
+                <ControlPageLabel>Member Names</ControlPageLabel>
+            </State>
+            <State id="lastUpdate">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Update Changed</TriggerLabel>
+                <ControlPageLabel>Last Update</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <Device type="relay" id="z2mGroupRelay" subType="indigo.kRelayDeviceSubType.Switch">
+        <Name>Z2M Group Switch</Name>
+        <ConfigUI>
+            <Field id="friendly_name" type="textfield" readonly="true" defaultValue="">
+                <Label>Group Name:</Label>
+                <Description>The group's name in zigbee2mqtt. Rename the group there and this follows.</Description>
+            </Field>
+            <Field id="group_id" type="textfield" readonly="true" defaultValue="">
+                <Label>Group Id:</Label>
+            </Field>
+        </ConfigUI>
+        <States>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="memberCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Member Count Changed</TriggerLabel>
+                <ControlPageLabel>Members</ControlPageLabel>
+            </State>
+            <State id="members">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Members Changed</TriggerLabel>
+                <ControlPageLabel>Member Names</ControlPageLabel>
+            </State>
+            <State id="lastUpdate">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Update Changed</TriggerLabel>
+                <ControlPageLabel>Last Update</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
 </Devices>

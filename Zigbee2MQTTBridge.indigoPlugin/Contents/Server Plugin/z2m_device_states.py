@@ -68,6 +68,18 @@ class DeviceStatesMixin:
             ("availability", ""),
             ("linkQuality",  0),
         ],
+        "z2mGroupLight": [
+            ("colorMode",    ""),
+            ("colorTemp",    0),
+            ("availability", ""),
+            ("memberCount",  0),
+            ("members",      ""),
+        ],
+        "z2mGroupRelay": [
+            ("availability", ""),
+            ("memberCount",  0),
+            ("members",      ""),
+        ],
         "z2mRelay": [
             ("power",        0.0),
             ("energy",       0.0),

@@ -2,7 +2,7 @@
 
 **Bring your Zigbee lights, plugs, sensors, blinds, locks and radiator valves into Indigo, through zigbee2mqtt.**
 
-**Version:** 2.13.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
+**Version:** 2.14.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
 
 **[Read the full guide](https://highsteads.github.io/Zigbee2MQTTBridge/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -31,6 +31,7 @@ Anything zigbee2mqtt supports. The plugin makes each one into the matching Indig
 |---|---|
 | **Z2M Light** | Bulbs, lamps and LED strips |
 | **Z2M Relay** | Wall switches, smart plugs and switch modules |
+| **Z2M Group Light**, **Z2M Group Switch** | A zigbee2mqtt group, so its members switch together |
 | **Z2M Cover** | Blinds, curtains and shutters |
 | **Z2M Lock** | Door locks |
 | **Z2M Thermostat / TRV** | Radiator valves and other heating controls |
@@ -57,11 +58,11 @@ The [full guide](https://highsteads.github.io/Zigbee2MQTTBridge/) goes through e
 
 ## What's new
 
+**v2.14.0** — zigbee2mqtt groups are now Indigo devices. A group of lights switches together with one message, and works anywhere a light or switch does, HomeKit included.
+
 **v2.13.0** — A **Zigbee Button Pressed** trigger that runs on every press, an offline-device count on each coordinator, **Back Up zigbee2mqtt** to the Mac, **Restart zigbee2mqtt**, **Check for Missing Routers** and **Set Up a Device Again**, and **Stop Blind** and **Fade Light** actions.
 
 **v2.12.0** — Switches with two or more channels now work, with a device for each extra channel if you want one. Device Settings take a device's named choices, such as a Hue bulb's **previous** colour after a power cut.
-
-**v2.11.0** — Nine faults found by an independent review, all fixed. Separate devices no longer stop the original updating, a smoke alarm that also measures temperature is made as an alarm, **Refresh Device List from MQTT** works, and grouped device settings reach the device. The [version history](https://highsteads.github.io/Zigbee2MQTTBridge/changelog.html) lists all nine.
 
 Every version is listed in the [version history](https://highsteads.github.io/Zigbee2MQTTBridge/changelog.html).
 

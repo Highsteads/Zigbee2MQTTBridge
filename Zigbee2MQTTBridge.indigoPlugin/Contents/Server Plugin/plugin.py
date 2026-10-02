@@ -5,9 +5,29 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0)
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0)
 # Date:        02-10-2026
-# Version:     2.13.0
+# Version:     2.14.0
+#
+# v2.14.0 (02-10-2026): ZIGBEE2MQTT GROUPS AS DEVICES (item 6 of the October
+#   comparison). New module z2m_groups.py (GroupsMixin) and types
+#   z2mGroupLight (dimmer) / z2mGroupRelay (relay, Switch subtype).
+#   * bridge/groups (retained) is cached per prefix in self.bridge_groups. A
+#     group is a light group if any member is a light (colour / white from
+#     ANY member), a switch group if any member is a relay, otherwise none;
+#     default_bind_group is never a device.
+#   * Auto-create mirrors devices: the first list per prefix is the baseline;
+#     afterwards a group is created when it gains its first members (z2m's
+#     frontend makes it empty first). Discover & Create makes them too.
+#   * Routed through friendly_name_map like a device, so the existing light
+#     and relay handlers do state and commands (<prefix>/<group>/set). Never
+#     sent /get: a group has no state of its own; at start (and on Request
+#     Status) onOffState is worked out from members, any on = on, z2m's rule.
+#   * Renames, members (memberCount/members) and colour abilities refresh on
+#     every bridge/groups AND bridge/devices (the group list can come first).
+#   * Kept out of the offline count, the radio picker, and judged by group id
+#     in Report Orphaned Devices.
+#   tests/test_v2140_groups.py 16; 17 mutations all caught.
 #
 # v2.13.0 (02-10-2026): FIVE FEATURES FROM THE OCTOBER COMPARISON (HA, Homey,
 #   homebridge-z2m, ioBroker). New module z2m_bridge_tools.py (BridgeToolsMixin).
@@ -948,6 +968,7 @@ def log_activity(*args, **kwargs):
 from z2m_actions import ActionsMixin
 from z2m_bridge import BridgeMixin
 from z2m_bridge_tools import BridgeToolsMixin
+from z2m_groups import GroupsMixin, is_group
 from z2m_device_states import DeviceStatesMixin
 from z2m_menus import MenusMixin
 from z2m_mqtt import MqttMixin
@@ -988,6 +1009,7 @@ class Plugin(
     BridgeMixin,
     BridgeToolsMixin,
     DeviceStatesMixin,
+    GroupsMixin,
     MenusMixin,
     MqttMixin,
     NativeAttributesMixin,
@@ -1067,6 +1089,8 @@ class Plugin(
         self._bridge_requests    = {}
         self._offline_by_prefix  = {}
         self._current_retained   = False
+        # prefix -> {group id: bridge/groups entry} (v2.14.0).
+        self.bridge_groups       = {}
 
         # Per-device state-request timers (deviceStartComm's settle delay),
         # tracked so stop/shutdown can cancel them (v1.9.22 — an untracked
@@ -1378,6 +1402,12 @@ class Plugin(
                 log(f"Started secondary device: {dev.name}")
             return
 
+        # A zigbee2mqtt group (v2.14.0): routed by its name like a device, but
+        # no radio of its own — no IEEE, no /get, no health counters.
+        if is_group(dev):
+            self._start_group(dev)
+            return
+
         props = dev.pluginProps
         fname = props.get("friendly_name", "").strip()
         if not fname:
@@ -1644,12 +1674,14 @@ class Plugin(
         target = None
         type_id = dev.deviceTypeId
 
-        if type_id == "z2mLight":
+        if type_id in ("z2mLight", "z2mGroupLight"):
             has_col = dev.pluginProps.get("has_color", False)
             target = (indigo.kDimmerDeviceSubType.ColorDimmer if has_col
                       else indigo.kDimmerDeviceSubType.Dimmer)
         elif type_id == "z2mRelay":
             target = indigo.kRelayDeviceSubType.Outlet
+        elif type_id == "z2mGroupRelay":
+            target = indigo.kRelayDeviceSubType.Switch
         elif type_id == "z2mContactSensor":
             target = indigo.kSensorDeviceSubType.DoorWindow
         elif type_id == "z2mOccupancySensor":

@@ -11,6 +11,7 @@ Lights, plugs, blinds, locks and radiator valves answer Indigo's standard contro
 
 - **Lights** — Turn On, Turn Off, Toggle, Set Brightness, Brighten By and Dim By, and on bulbs that have them, colour and white temperature.
 - **Plugs and switches** — Turn On, Turn Off and Toggle.
+- **Groups** — the same as a light or a switch, for every member at once.
 - **Blinds** — Turn On opens, Turn Off closes, and Set Brightness sets how far open, from 0 (closed) to 100 (open).
 - **Locks** — lock and unlock.
 - **Radiator valves** — set the heat setpoint, raise or lower it, and change the mode to heat, automatic or off.

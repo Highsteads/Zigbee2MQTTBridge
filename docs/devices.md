@@ -142,6 +142,23 @@ The [Actions and triggers](actions-and-triggers.md) page shows how to run someth
 
 For Zigbee repeaters and range extenders, and for coordinator boxes such as the SMLIGHT SLZB-06 and SLZB-07 when they act as repeaters. A repeater only passes messages on, so the device list shows **Online** or **Offline** rather than on and off, and it takes no commands.
 
+## Z2M Group Light and Z2M Group Switch
+
+A group made in zigbee2mqtt's web page becomes one Indigo device. Switching it sends one Zigbee message to every member at once, so the lights in it change together rather than one after another, and on a control page, in a schedule or in HomeKit it is just one more light or switch.
+
+- A group with at least one light in it is a **Z2M Group Light**, with brightness, and colour or shade of white if any member can do them. A member that cannot simply ignores that part.
+- A group of switches and plugs is a **Z2M Group Switch**.
+- A group of sensors or blinds is left alone, and so is zigbee2mqtt's own **default_bind_group**.
+
+The plugin makes the device by itself as soon as you add the first member to a new group, or you can run **Discover & Create Devices**. Rename the group in zigbee2mqtt and the Indigo device follows, unless you have given it a name of your own.
+
+| Shown as | What it means |
+|---|---|
+| **Members**, **Member Names** | How many devices are in the group, and which. |
+| **Availability** | **online** while any member is. |
+
+zigbee2mqtt shows a group as on when any member is on, and off only when they all are. A group has no state of its own to ask for, so **Send Status Request** works it out from the members instead.
+
 ## Z2M Coordinator
 
 One for each zigbee2mqtt you run, made with **Plugins → Zigbee2MQTT Bridge → Create Coordinator Devices**. The device list shows zigbee2mqtt's status, such as **online**.

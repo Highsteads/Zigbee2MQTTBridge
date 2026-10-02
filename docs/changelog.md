@@ -7,6 +7,10 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.14.0 — 2 October 2026
+
+**zigbee2mqtt groups are now Indigo devices.** Make a group in zigbee2mqtt's web page, add your lights or plugs to it, and the plugin makes a **Z2M Group Light** or **Z2M Group Switch** for it. Switching the group sends one message to every member at once, so the lights change together instead of one after another, and the group works anywhere a light or switch does — control pages, schedules, triggers and HomeKit. **Discover & Create Devices** makes them too. A group follows a rename in zigbee2mqtt, shows its members, and gains colour controls when a member that has colour joins.
+
 ## 2.13.0 — 2 October 2026
 
 Five things other home automation systems do with zigbee2mqtt that this plugin did not.

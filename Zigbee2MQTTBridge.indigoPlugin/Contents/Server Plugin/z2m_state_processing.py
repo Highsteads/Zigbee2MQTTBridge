@@ -143,9 +143,9 @@ class StateProcessingMixin:
             return
 
         type_id = dev.deviceTypeId
-        if type_id == "z2mLight":
+        if type_id in ("z2mLight", "z2mGroupLight"):
             self._process_light_state(dev, payload)
-        elif type_id == "z2mRelay":
+        elif type_id in ("z2mRelay", "z2mGroupRelay"):
             self._process_relay_state(dev, payload)
         elif type_id == "z2mContactSensor":
             self._process_contact_sensor_state(dev, payload)
