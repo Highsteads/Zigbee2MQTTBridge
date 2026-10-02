@@ -475,4 +475,4 @@ class MqttMixin:
             # Older Z2M publishes bare strings like `online` on bridge/state.
             # Pass the raw decoded string through so handlers can deal with it.
             payload = raw
-        self.msg_queue.put((msg.topic, payload))
+        self.msg_queue.put((msg.topic, payload, bool(getattr(msg, "retain", False))))

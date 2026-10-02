@@ -41,6 +41,24 @@
         <Description>Optional second Z2M instance topic prefix (e.g. "zigbee2mqtt_garage"). Leave blank to disable.</Description>
     </Field>
 
+    <Field id="backupSep" type="separator"/>
+    <Field id="backupLabel" type="label">
+        <Label>--- zigbee2mqtt Backups ---</Label>
+    </Field>
+    <Field id="backupFolder" type="textfield" defaultValue="">
+        <Label>Backup Folder:</Label>
+    </Field>
+    <Field id="label_backupFolder_info" type="label">
+        <Label>Where Back Up zigbee2mqtt saves its files. Leave blank for a "Zigbee2MQTT Backups" folder beside your Indigo folder in /Library/Application Support/Perceptive Automation. A backup holds your Zigbee network key, so do not choose a shared folder or anything under Web Assets.</Label>
+    </Field>
+    <Field id="backupKeep" type="textfield" defaultValue="10">
+        <Label>Backups to Keep:</Label>
+    </Field>
+    <Field id="label_backupKeep_info" type="label">
+        <Label>For each zigbee2mqtt, the newest this many are kept and older ones deleted. Only files this plugin made are ever deleted.</Label>
+    </Field>
+
+    <Field id="advancedSep" type="separator"/>
     <Field id="advancedLabel" type="label">
         <Label>--- Advanced ---</Label>
     </Field>

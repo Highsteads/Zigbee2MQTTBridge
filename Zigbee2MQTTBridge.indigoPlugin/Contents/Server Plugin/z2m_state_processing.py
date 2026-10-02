@@ -105,6 +105,8 @@ class StateProcessingMixin:
                 self.exception_handler(e, log_failing_statement=True,
                                        context=f"error state for '{dev.name}'")
 
+            self._note_availability(dev, prefix, is_online)
+
             if self.debug:
                 log(f"{dev.name}: availability = {state}")
         except Exception as e:
@@ -171,6 +173,15 @@ class StateProcessingMixin:
         # measured temperature became a temperature sensor) still records the
         # raw `smoke` state, but its on/off state never moves — so say so,
         # every time, because this is the one reading that must not go quiet.
+        # Every press runs its Button Pressed triggers (v2.13.0), whatever
+        # kind of device sent it — scene switches and relays send them too.
+        if action_val not in (None, "") and isinstance(action_val, str):
+            try:
+                self._fire_button_event(dev, action_val)
+            except Exception as e:
+                self.exception_handler(e, log_failing_statement=True,
+                                       context=f"{dev.name} Button Pressed triggers")
+
         if type_id != "z2mSensor" and _payload_bool(payload.get("smoke")) is True:
             log(f"{dev.name} reports smoke. It was created as a "
                 f"{type_id} device, so its on/off state cannot show the "

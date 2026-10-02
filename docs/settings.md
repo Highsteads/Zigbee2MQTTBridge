@@ -25,6 +25,13 @@ Open these with **Plugins → Zigbee2MQTT Bridge → Configure**. When you click
 | **Topic Prefix** | zigbee2mqtt's base topic — the word it starts every message with. It is `zigbee2mqtt` to start with, which matches zigbee2mqtt's own starting setting. It must match exactly, or the plugin hears nothing. It cannot be left blank. It can have several parts separated by `/`, such as `house/zigbee2mqtt`, but not `+` or `#`. |
 | **Garage Topic Prefix** | If you run a second zigbee2mqtt, its base topic, such as `zigbee2mqtt_garage`. I use this for a second Zigbee radio in the garage. Leave it blank if you run only one. Devices on both come into the same plugin, and two devices with the same name on the two are kept apart. The two prefixes must be different, and one cannot start with the other, such as `zigbee2mqtt` and `zigbee2mqtt/garage`. |
 
+### zigbee2mqtt Backups
+
+| Setting | What it does |
+|---|---|
+| **Backup Folder** | Where **Back Up zigbee2mqtt** saves its files. Leave it blank for a folder called **Zigbee2MQTT Backups** in `/Library/Application Support/Perceptive Automation`, beside your Indigo folder, so Time Machine keeps a copy and an Indigo upgrade leaves it alone. A backup holds your Zigbee network's key, so do not choose a shared folder, and it refuses anything under **Web Assets**, which anyone on your network can download from. |
+| **Backups to Keep** | For each zigbee2mqtt, how many backups to keep. It is 10 to start with. The oldest is deleted when a new one is saved, and only files this plugin made are ever deleted. |
+
 ### Advanced
 
 | Setting | What it does |

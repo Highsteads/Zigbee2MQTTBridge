@@ -112,16 +112,17 @@ def test_on_message_valid_json_enqueued_and_stamped(plugin):
     plugin.msg_queue = queue.Queue()
     plugin.last_rx_ts = 0.0
     plugin._on_mqtt_message(None, None, _FakeMsg("zigbee2mqtt/Lamp", b'{"state":"ON"}'))
-    topic, payload = plugin.msg_queue.get_nowait()
+    topic, payload, retained = plugin.msg_queue.get_nowait()
     assert topic == "zigbee2mqtt/Lamp"
     assert payload == {"state": "ON"}
+    assert retained is False
     assert time.time() - plugin.last_rx_ts < 5, "every inbound message stamps last_rx_ts"
 
 
 def test_on_message_bare_string_fallback(plugin):
     plugin.msg_queue = queue.Queue()
     plugin._on_mqtt_message(None, None, _FakeMsg("zigbee2mqtt/bridge/state", b"online"))
-    topic, payload = plugin.msg_queue.get_nowait()
+    topic, payload, _retained = plugin.msg_queue.get_nowait()
     assert topic == "zigbee2mqtt/bridge/state"
     assert payload == "online"               # raw string passed through, not JSON
 

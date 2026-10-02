@@ -5,9 +5,30 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0)
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0)
 # Date:        02-10-2026
-# Version:     2.12.0
+# Version:     2.13.0
+#
+# v2.13.0 (02-10-2026): FIVE FEATURES FROM THE OCTOBER COMPARISON (HA, Homey,
+#   homebridge-z2m, ioBroker). New module z2m_bridge_tools.py (BridgeToolsMixin).
+#   * buttonPressed event (device + press or "any"), fired from
+#     _process_device_state on EVERY action payload, any device type. The
+#     broker's retain flag now rides the queue as a third item and sets
+#     _current_retained, so a retained replay is never a press.
+#   * Coordinator offlineDevices/offlineDeviceNames + offlineCountChanged
+#     event, from _process_availability (silent on retained replays) and
+#     deviceStopComm.
+#   * Back Up zigbee2mqtt (menu + plugin action): bridge/request/backup ->
+#     base64 zip (house bridge 34 KB, 21 s live), validated, written 0600 via
+#     temp + replace, newest N kept per prefix (only our file names touched).
+#     Default folder beside the versioned Indigo folder; Web Assets refused.
+#   * Restart zigbee2mqtt (one bridge only, never "all"), Check for Missing
+#     Routers (coordinator_check -> missingRouters states), Set Up a Device
+#     Again (device/configure). Requests carry an indigo-* transaction and only
+#     replies carrying one of ours are acted on: z2m's frontend uses the same
+#     reply topics. A reply that never comes is reported once.
+#   * Stop Blind ({"state":"STOP"}) and Fade Light (brightness + transition).
+#   tests/test_v2130_features.py 30 (29 fail on 2.12.0); 21 mutations caught.
 #
 # v2.12.0 (02-10-2026): the two improvements the 02-10-2026 review suggested.
 #   * MULTI-CHANNEL SWITCHES. zigbee-herdsman-converters suffixes each
@@ -926,6 +947,7 @@ def log_activity(*args, **kwargs):
 
 from z2m_actions import ActionsMixin
 from z2m_bridge import BridgeMixin
+from z2m_bridge_tools import BridgeToolsMixin
 from z2m_device_states import DeviceStatesMixin
 from z2m_menus import MenusMixin
 from z2m_mqtt import MqttMixin
@@ -964,6 +986,7 @@ def merge_sql_logger_ignore(existing, extra=SQL_LOGGER_CHURN_STATES):
 class Plugin(
     ActionsMixin,
     BridgeMixin,
+    BridgeToolsMixin,
     DeviceStatesMixin,
     MenusMixin,
     MqttMixin,
@@ -1037,6 +1060,13 @@ class Plugin(
         self._device_baseline = set()
         # dev id (or name) -> when otaUpdateFailed last fired for it (2.11.0).
         self._ota_failed_at = {}
+        # v2.13.0 bridge tools: our outstanding bridge/request transactions,
+        # each bridge's offline devices, and whether the message being handled
+        # is a retained replay (which is never a button press or a change).
+        self._request_seq        = 0
+        self._bridge_requests    = {}
+        self._offline_by_prefix  = {}
+        self._current_retained   = False
 
         # Per-device state-request timers (deviceStartComm's settle delay),
         # tracked so stop/shutdown can cancel them (v1.9.22 — an untracked
@@ -1186,13 +1216,19 @@ class Plugin(
         exists to prevent). Extracted from runConcurrentThread as a test seam."""
         while not self.msg_queue.empty():
             try:
-                topic, payload = self.msg_queue.get_nowait()
+                item = self.msg_queue.get_nowait()
             except queue.Empty:
                 break
+            topic, payload = item[0], item[1]
+            # A retained message is the broker replaying the last one it kept,
+            # not something that just happened (v2.13.0).
+            self._current_retained = bool(item[2]) if len(item) > 2 else False
             try:
                 self._process_message(topic, payload)
             except Exception as e:
                 log(f"error processing message {topic!r}: {e}", level="ERROR")
+            finally:
+                self._current_retained = False
         try:
             self._mqtt_liveness_check()
         except Exception as e:
@@ -1201,6 +1237,10 @@ class Plugin(
             self._check_device_list_wait()
         except Exception as e:
             log(f"device-list check error: {e}", level="ERROR")
+        try:
+            self._check_bridge_requests()
+        except Exception as e:
+            log(f"bridge request check error: {e}", level="ERROR")
 
     # NB: no stopConcurrentThread override — the base implementation sets
     # stopThread AND writes the wake pipe so self.sleep() returns instantly.
@@ -1241,6 +1281,21 @@ class Plugin(
                     raise ValueError
             except (TypeError, ValueError):
                 errors["mqtt_port"] = "Port must be a number between 1 and 65535."
+        # Backups (v2.13.0). The file holds the Zigbee network key, so it must
+        # never land where the web server hands files to anyone.
+        folder = str(valuesDict.get("backupFolder", "") or "").strip()
+        if folder and not _os.path.isabs(_os.path.expanduser(folder)):
+            errors["backupFolder"] = "Give the full path of a folder, starting with /."
+        elif "web assets" in folder.lower():
+            errors["backupFolder"] = ("Not under Web Assets — anything there can be "
+                                      "downloaded by anyone who can reach Indigo.")
+        keep_raw = str(valuesDict.get("backupKeep", "")).strip()
+        if keep_raw:
+            try:
+                if not 1 <= int(keep_raw) <= 100:
+                    raise ValueError
+            except (TypeError, ValueError):
+                errors["backupKeep"] = "Keep a number of backups from 1 to 100."
         limit_raw = str(valuesDict.get("mqtt_silence_limit", "")).strip()
         if limit_raw:
             try:
@@ -1292,8 +1347,9 @@ class Plugin(
             # v2.1.0 added the health and lastEvent states — register them
             # before anything tries to write one.
             dev = self._refresh_state_list_if_missing(
-                dev, self._V210_COORDINATOR_STATES)
+                dev, self._V210_COORDINATOR_STATES + self._V213_COORDINATOR_STATES)
             self._ensure_device_states(dev)
+            self._publish_offline_count(prefix)
             # If we already have a cached bridge/info or bridge/state for this
             # prefix (retained MQTT may have arrived before this device existed),
             # push them now so the device populates immediately.

@@ -2,7 +2,7 @@
 
 **Bring your Zigbee lights, plugs, sensors, blinds, locks and radiator valves into Indigo, through zigbee2mqtt.**
 
-**Version:** 2.12.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
+**Version:** 2.13.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
 
 **[Read the full guide](https://highsteads.github.io/Zigbee2MQTTBridge/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -20,6 +20,7 @@ This plugin lets [Indigo](https://www.indigodomo.com) see and control the Zigbee
 - **Gives a sensor's extra readings their own devices,** so a presence sensor's temperature can be a proper Indigo temperature sensor.
 - **Handles firmware updates,** telling you when one is waiting and installing it only when you ask.
 - **Runs triggers** when a device joins or leaves, a button is pressed a particular way, a firmware update finishes, or zigbee2mqtt goes offline.
+- **Looks after zigbee2mqtt itself** — backs it up to the Mac, restarts it, and checks it for routers that have stopped answering.
 - **Works with two zigbee2mqtt set-ups at once.** I run one for the house and one for the garage.
 
 ## What it works with
@@ -56,11 +57,11 @@ The [full guide](https://highsteads.github.io/Zigbee2MQTTBridge/) goes through e
 
 ## What's new
 
+**v2.13.0** — A **Zigbee Button Pressed** trigger that runs on every press, an offline-device count on each coordinator, **Back Up zigbee2mqtt** to the Mac, **Restart zigbee2mqtt**, **Check for Missing Routers** and **Set Up a Device Again**, and **Stop Blind** and **Fade Light** actions.
+
 **v2.12.0** — Switches with two or more channels now work, with a device for each extra channel if you want one. Device Settings take a device's named choices, such as a Hue bulb's **previous** colour after a power cut.
 
 **v2.11.0** — Nine faults found by an independent review, all fixed. Separate devices no longer stop the original updating, a smoke alarm that also measures temperature is made as an alarm, **Refresh Device List from MQTT** works, and grouped device settings reach the device. The [version history](https://highsteads.github.io/Zigbee2MQTTBridge/changelog.html) lists all nine.
-
-**v2.10.0** — A device zigbee2mqtt reports offline now stays red in Indigo until zigbee2mqtt hears from it again. Before, the red could vanish within ten minutes while the device was still dead.
 
 Every version is listed in the [version history](https://highsteads.github.io/Zigbee2MQTTBridge/changelog.html).
 

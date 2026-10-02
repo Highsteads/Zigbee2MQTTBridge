@@ -693,6 +693,7 @@ class DeviceStatesMixin:
             # It never registered anything, and the keys it carries are its
             # PARENT's: popping them here removed the parent's route (2.11.0).
             return
+        self._forget_offline(dev)
         fname = dev.pluginProps.get("friendly_name", "")
         ieee = dev.pluginProps.get("ieee_address", "")
         self._cancel_state_request(dev.id)

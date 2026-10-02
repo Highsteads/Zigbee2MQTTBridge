@@ -41,8 +41,13 @@ zigbee2mqtt has not heard from it for longer than it allows, and has marked it o
 - For a battery device, check the battery.
 - Check it has power, and is not too far from the nearest mains-powered Zigbee device, which passes messages on.
 - A device that drops off and comes back often shows up in **Plugins → Zigbee2MQTT Bridge → Report Network Health**.
+- If several go offline together, run **Check for Missing Routers...**. A router switched off at the wall leaves the devices that relied on it cut off until they find another way.
 
-The red clears by itself when the device is heard from again.
+The red clears by itself when the device is heard from again. The coordinator device's **Offline Devices** shows how many are offline at once.
+
+## A device has stopped reporting, but is not offline
+
+Choose **Plugins → Zigbee2MQTT Bridge → Set Up a Device Again...**. It asks zigbee2mqtt to run the device's setup again, which often brings back the readings after a firmware update or a change of Zigbee radio. A battery device must be awake: press its button or set off its sensor first. The log says whether it worked.
 
 ## A light or plug does not respond
 
@@ -58,7 +63,7 @@ If it is still wrong, you can delete the Indigo device and run **Discover & Crea
 
 ## A button trigger does not run on a second press
 
-A trigger on **Button Action** runs when the kind of press changes, so the second of two identical presses does not run it. Trigger on **Press Count** changing instead, which goes up with every press. The [Actions and triggers](actions-and-triggers.md) page shows how.
+A **Device State Changed** trigger on **Button Action** runs when the kind of press changes, so the second of two identical presses does not run it. Use the **Zigbee Button Pressed** trigger instead, which runs on every press. The [Actions and triggers](actions-and-triggers.md) page shows how.
 
 ## A setting sent to a battery device does not take
 

@@ -1506,6 +1506,33 @@
                 <TriggerLabel>Last Bridge Event Time Changed</TriggerLabel>
                 <ControlPageLabel>Last Event Time</ControlPageLabel>
             </State>
+
+            <!-- v2.13.0: the whole network at a glance. -->
+            <State id="offlineDevices">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Offline Devices Changed</TriggerLabel>
+                <ControlPageLabel>Offline Devices</ControlPageLabel>
+            </State>
+            <State id="offlineDeviceNames">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Offline Device Names Changed</TriggerLabel>
+                <ControlPageLabel>Offline Device Names</ControlPageLabel>
+            </State>
+            <State id="missingRouters">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Missing Routers Changed</TriggerLabel>
+                <ControlPageLabel>Missing Routers</ControlPageLabel>
+            </State>
+            <State id="missingRouterNames">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Missing Router Names Changed</TriggerLabel>
+                <ControlPageLabel>Missing Router Names</ControlPageLabel>
+            </State>
+            <State id="lastBackup">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Backup Changed</TriggerLabel>
+                <ControlPageLabel>Last Backup</ControlPageLabel>
+            </State>
         </States>
         <UiDisplayStateId>status</UiDisplayStateId>
     </Device>

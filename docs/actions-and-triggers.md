@@ -29,6 +29,17 @@ These are under **Device Actions** when you add an action.
 | **Refresh Device State** | Asks zigbee2mqtt to fetch the device's latest state. |
 | **Publish Custom Payload** | Sends a device a setting, or anything else, in the form zigbee2mqtt understands, for anything the other actions do not cover — see below. |
 | **Update Device Firmware** | Starts a firmware update on the device you choose, if one is waiting. It does nothing on a device with no update waiting — see [Firmware updates](firmware-updates.md). |
+| **Stop Blind** | Stops a blind where it is, part way up or down. |
+| **Fade Light to Brightness** | Changes a light to the brightness you set, gradually, over the number of seconds you set. 0% fades it off. The bulb does the fading itself; one that cannot fade simply changes at once. |
+| **Set Up Zigbee Device Again** | Asks zigbee2mqtt to run the device's setup again, as it does when a device first pairs. It is the usual cure for a device that has stopped reporting. A battery device must be awake: press its button or set off its sensor first. |
+
+These three are under the plugin's own name, not **Device Actions**, because they act on zigbee2mqtt itself:
+
+| Action | What it does |
+|---|---|
+| **Back Up zigbee2mqtt** | Saves zigbee2mqtt's settings and list of devices to the backup folder set in the plugin's **Configure** window, for one zigbee2mqtt or all of them. Run it from a schedule once a week, say. See [Settings](settings.md). |
+| **Check zigbee2mqtt for Missing Routers** | Asks zigbee2mqtt whether any router it knows about has stopped answering, and writes the answer to the log and the coordinator device. |
+| **Restart zigbee2mqtt** | Restarts the zigbee2mqtt you choose. Every device on it stops answering for about half a minute. With the **Zigbee2MQTT Bridge Needs a Restart** trigger, it can restart zigbee2mqtt in the night after you change one of its settings. |
 
 ### Publish Custom Payload
 
@@ -46,17 +57,16 @@ A battery device only listens while it is awake, so a setting sent to a sleeping
 
 ## Running something on a button press
 
-A **Z2M Button / Scene** device can run a trigger on a particular kind of press.
+1. Create a new trigger and set its type to **Zigbee2MQTT Bridge Event**, then **Zigbee Button Pressed**.
+2. Choose the device, and the press — **single**, **double**, **hold** and so on, or **Any press**. The presses listed are the ones zigbee2mqtt says that device can send.
 
-1. Create a new trigger and set its type to **Device State Changed**.
-2. Choose the button device.
-3. From its list of states, choose the press you want under **Button Action** — **Single**, **Double**, **Hold** and so on — and have it run when that becomes true.
+It runs on every press, even the same press twice in a row. It works for wireless buttons and for wall switches that send presses as well as switching a light.
 
-A trigger like this runs when the kind of press changes. If you press the same way twice in a row, **Last Action** does not change, so the trigger runs only for the first. To catch every press, trigger on **Press Count** changing, which goes up with each one, and check **Last Action** in the trigger's conditions.
+Before version 2.13.0 the way to do this was a **Device State Changed** trigger on the button's **Button Action** or **Press Count**. Those triggers still work, but a trigger on **Button Action** runs only when the kind of press changes, so pressing the same way twice runs it once.
 
 ## The plugin's triggers
 
-These are under **Zigbee2MQTT Bridge** when you create a new trigger. None of them needs setting up — each runs for any device on any zigbee2mqtt you connect.
+These are under **Zigbee2MQTT Bridge** when you create a new trigger. Apart from **Zigbee Button Pressed**, none of them needs setting up — each runs for any device on any zigbee2mqtt you connect.
 
 | Trigger | When it runs |
 |---|---|
@@ -73,6 +83,8 @@ These are under **Zigbee2MQTT Bridge** when you create a new trigger. None of th
 | **Zigbee2MQTT Bridge Went Offline** | zigbee2mqtt itself stops. |
 | **Zigbee2MQTT Bridge Came Online** | zigbee2mqtt comes back after going offline. |
 | **Zigbee2MQTT Bridge Needs a Restart** | zigbee2mqtt says it needs restarting for a setting to take effect. |
+| **Number of Offline Zigbee Devices Changed** | A device has gone offline, or come back. The coordinator device's **Offline Devices** says how many are offline now, and **Offline Device Names** which ones. |
+| **Zigbee Button Pressed** | A button press — see above. Unlike the others, this one asks which device and which press. |
 
 The two health-report triggers can run up to ten minutes after the event, because zigbee2mqtt sends its health report every ten minutes.
 

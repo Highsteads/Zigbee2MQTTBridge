@@ -53,6 +53,57 @@
         </ConfigUI>
     </MenuItem>
 
+    <MenuItem id="sepBridgeTools" isSeparator="true"/>
+    <MenuItem id="backupBridgeMenu">
+        <Name>Back Up zigbee2mqtt...</Name>
+        <CallbackMethod>menu_backup</CallbackMethod>
+        <ConfigUI>
+            <Field id="bridge" type="menu" defaultValue="all">
+                <Label>zigbee2mqtt:</Label>
+                <List class="self" filter="all" method="list_bridge_prefixes" dynamicReload="true"/>
+            </Field>
+            <Field id="label_backup_info" type="label">
+                <Label>Saves zigbee2mqtt's settings and device list to the backup folder chosen in the plugin's Configure window, keeping the newest few. The file holds your Zigbee network key, so keep it private.</Label>
+            </Field>
+        </ConfigUI>
+    </MenuItem>
+    <MenuItem id="checkRoutersMenu">
+        <Name>Check for Missing Routers...</Name>
+        <CallbackMethod>menu_check_routers</CallbackMethod>
+        <ConfigUI>
+            <Field id="bridge" type="menu" defaultValue="all">
+                <Label>zigbee2mqtt:</Label>
+                <List class="self" filter="all" method="list_bridge_prefixes" dynamicReload="true"/>
+            </Field>
+        </ConfigUI>
+    </MenuItem>
+    <MenuItem id="reconfigureDeviceMenu">
+        <Name>Set Up a Device Again...</Name>
+        <CallbackMethod>menu_reconfigure_device</CallbackMethod>
+        <ConfigUI>
+            <Field id="targetDevice" type="menu">
+                <Label>Device:</Label>
+                <List class="self" method="list_radio_devices" dynamicReload="true"/>
+            </Field>
+            <Field id="label_reconfigure_info" type="label">
+                <Label>Asks zigbee2mqtt to run the device's setup again — what it does when a device first pairs. It is the usual cure for a device that has stopped reporting. A battery device must be awake: press its button or set off its sensor first.</Label>
+            </Field>
+        </ConfigUI>
+    </MenuItem>
+    <MenuItem id="restartBridgeMenu">
+        <Name>Restart zigbee2mqtt...</Name>
+        <CallbackMethod>menu_restart_bridge</CallbackMethod>
+        <ConfigUI>
+            <Field id="bridge" type="menu">
+                <Label>zigbee2mqtt:</Label>
+                <List class="self" method="list_bridge_prefixes" dynamicReload="true"/>
+            </Field>
+            <Field id="label_restart_info" type="label" fontColor="orange">
+                <Label>Every device on this zigbee2mqtt stops answering for about half a minute while it restarts.</Label>
+            </Field>
+        </ConfigUI>
+    </MenuItem>
+
     <MenuItem id="sepJoin" isSeparator="true"/>
     <MenuItem id="permitJoinEnable">
         <Name>Enable Pairing (Permit Join, 254s)</Name>

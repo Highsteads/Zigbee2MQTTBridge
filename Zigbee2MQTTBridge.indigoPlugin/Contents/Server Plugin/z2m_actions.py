@@ -24,6 +24,9 @@ import json
 from z2m_helpers import _brightness_100_to_255, _kelvin_to_mireds
 from z2m_secondary import CHANNEL_TYPE_ID
 
+# A fade longer than an hour is a mistake, not a fade (v2.13.0).
+FADE_MAX_SECONDS = 3600
+
 
 # `log` is a LATE-BOUND delegate, deliberately not `from z2m_helpers import log`.
 # A direct import binds the function object once at import time, so patching it
@@ -401,6 +404,51 @@ class ActionsMixin:
             if self.debug:
                 log(f"{dev.name}: set brightness {level}%")
 
+    def action_stop_cover(self, action, dev=None, callerWaitingForResult=None):
+        """Action: stop a blind wherever it is (v2.13.0)."""
+        if dev is None:
+            dev = indigo.devices[action.deviceId]
+        fname  = dev.pluginProps.get("friendly_name", "")
+        prefix = self._device_prefix(dev)
+        self._publish_cmd(f"{prefix}/{fname}/set", {"state": "STOP"}, dev, "stop")
+
+    @staticmethod
+    def _fade_values(props):
+        """(brightness 0-100, seconds) from an action's props, or None."""
+        try:
+            level = float(str(props.get("brightness", "")).strip())
+            seconds = float(str(props.get("seconds", "")).strip())
+        except (TypeError, ValueError):
+            return None
+        if not (0 <= level <= 100) or not (0 <= seconds <= FADE_MAX_SECONDS):
+            return None
+        return int(round(level)), (int(seconds) if seconds == int(seconds) else seconds)
+
+    def action_fade_light(self, action, dev=None, callerWaitingForResult=None):
+        """Action: change a light's brightness gradually (v2.13.0).
+
+        zigbee2mqtt passes `transition` (seconds) to the bulb, which does the
+        fading itself, so there is no stepping from here. 0% fades it off.
+        """
+        if dev is None:
+            dev = indigo.devices[action.deviceId]
+        values = self._fade_values(action.props)
+        if values is None:
+            log(f"{dev.name}: Fade Light needs a brightness from 0 to 100 and "
+                f"seconds from 0 to {FADE_MAX_SECONDS} — nothing sent",
+                level="ERROR")
+            return
+        level, seconds = values
+        if level == 0:
+            payload = {"state": "OFF", "transition": seconds}
+        else:
+            payload = {"state": "ON", "brightness": _brightness_100_to_255(level),
+                       "transition": seconds}
+        fname  = dev.pluginProps.get("friendly_name", "")
+        prefix = self._device_prefix(dev)
+        self._publish_cmd(f"{prefix}/{fname}/set", payload, dev,
+                          f"fade to {level}% over {seconds}s")
+
     def action_set_cover_position(self, action, dev=None, callerWaitingForResult=None):
         """Action: set cover position 0-100."""
         if dev is None:
@@ -449,6 +497,13 @@ class ActionsMixin:
         """Validate action dialogs at save time (v1.10.0 — the custom-publish
         JSON gets checked here instead of failing at run time)."""
         errors = indigo.Dict()
+        if typeId == "fadeLight" and self._fade_values(valuesDict) is None:
+            errors["brightness"] = "Brightness must be a number from 0 to 100."
+            errors["seconds"] = f"Seconds must be a number from 0 to {FADE_MAX_SECONDS}."
+        if typeId in ("backupBridge", "checkRouters", "restartBridge"):
+            choice = str(valuesDict.get("bridge") or "")
+            if choice in ("", "none") or (choice == "all" and typeId == "restartBridge"):
+                errors["bridge"] = "Choose a zigbee2mqtt."
         if typeId == "publishCustom":
             raw = (valuesDict.get("json_payload") or "").strip()
             try:

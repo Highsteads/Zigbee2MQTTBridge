@@ -7,6 +7,16 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.13.0 — 2 October 2026
+
+Five things other home automation systems do with zigbee2mqtt that this plugin did not.
+
+- **A Zigbee Button Pressed trigger.** Choose the device and the press, or any press, and it runs on every press, the same press twice in a row included. Before, a trigger on the button's state ran only when the kind of press changed.
+- **The whole network at a glance.** Each coordinator device now shows how many devices are offline and which, and a **Number of Offline Zigbee Devices Changed** trigger runs when that changes.
+- **Back Up zigbee2mqtt.** A menu item and an action save zigbee2mqtt's settings and device list to a folder on the Mac, keeping the newest ten. It is everything you need to set zigbee2mqtt up again on new hardware. The file holds your Zigbee network's key, so it is saved where only your Mac account can read it.
+- **Looking after zigbee2mqtt from Indigo.** **Restart zigbee2mqtt**, **Check for Missing Routers** (a mains-powered device that has stopped answering) and **Set Up a Device Again** (the usual cure for a device that has stopped reporting), each as a menu item and an action.
+- **Stop Blind** and **Fade Light to Brightness** actions. The fade is done by the bulb itself, over the seconds you choose.
+
 ## 2.12.0 — 2 October 2026
 
 - **Switches with more than one channel now work.** A two-gang wall switch, such as a Tuya TS0002, used to come in as one device that never showed on or off, and whose On and Off went to whichever channel zigbee2mqtt chose. The device now follows and switches its first channel, and each other channel can have a device of its own from the **Separate Devices** section of its settings window.

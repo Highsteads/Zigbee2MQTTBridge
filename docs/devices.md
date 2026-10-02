@@ -161,6 +161,9 @@ One for each zigbee2mqtt you run, made with **Plugins → Zigbee2MQTT Bridge →
 | **MQTT Queued**, **MQTT Published**, **MQTT Received** | How many messages zigbee2mqtt has waiting, has sent and has received. |
 | **Health Reported** | When zigbee2mqtt last sent its health report, which it does every ten minutes. |
 | **Last Event**, **Last Event Device**, **Last Event Time** | The last network event on this zigbee2mqtt — a device joining or leaving, say — which device it was about, and when. |
+| **Offline Devices**, **Offline Device Names** | How many of your devices on this zigbee2mqtt are offline right now, and which. One place to watch the whole network from, on a control page or in a trigger. |
+| **Missing Routers**, **Missing Router Names** | What **Check for Missing Routers** last found. |
+| **Last Backup** | When **Back Up zigbee2mqtt** last saved a backup of this zigbee2mqtt. |
 
 ## Separate devices for extra readings
 

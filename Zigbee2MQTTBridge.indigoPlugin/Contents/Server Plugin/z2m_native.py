@@ -196,6 +196,8 @@ class NativeAttributesMixin:
                            "updateState", "updateAvailable")
     _V210_COORDINATOR_STATES = ("healthOsMemoryPercent", "healthLastUpdate",
                                 "lastEvent")
+    # v2.13.0: offline count, missing routers, last backup.
+    _V213_COORDINATOR_STATES = ("offlineDevices", "missingRouters", "lastBackup")
 
     def _refresh_state_list_if_missing(self, dev, required_keys):
         """Re-register the device's state list when a declared state is absent.

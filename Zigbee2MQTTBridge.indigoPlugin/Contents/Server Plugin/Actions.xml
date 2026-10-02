@@ -86,4 +86,79 @@
         </ConfigUI>
     </Action>
 
+    <!-- v2.13.0 -->
+    <Action id="stopCover" deviceFilter="self.z2mCover" uiPath="DeviceActions">
+        <Name>Stop Blind</Name>
+        <CallbackMethod>action_stop_cover</CallbackMethod>
+    </Action>
+
+    <Action id="fadeLight" deviceFilter="self.z2mLight" uiPath="DeviceActions">
+        <Name>Fade Light to Brightness</Name>
+        <ConfigUI>
+            <Field id="brightness" type="textfield" defaultValue="100">
+                <Label>Brightness (0-100%):</Label>
+            </Field>
+            <Field id="seconds" type="textfield" defaultValue="5">
+                <Label>Over (seconds):</Label>
+            </Field>
+            <Field id="label_fade_info" type="label" fontSize="small">
+                <Label>The bulb changes gradually over the time given. 0% fades it off. Most Zigbee bulbs can fade; one that cannot simply changes at once.</Label>
+            </Field>
+        </ConfigUI>
+        <CallbackMethod>action_fade_light</CallbackMethod>
+    </Action>
+
+    <Action id="reconfigureDevice"
+            deviceFilter="self.z2mLight,self.z2mRelay,self.z2mContactSensor,self.z2mOccupancySensor,self.z2mWaterLeakSensor,self.z2mTemperatureSensor,self.z2mSensor,self.z2mCover,self.z2mRepeater,self.z2mButton,self.z2mLock,self.z2mThermostat"
+            uiPath="DeviceActions">
+        <Name>Set Up Zigbee Device Again</Name>
+        <CallbackMethod>action_reconfigure_device</CallbackMethod>
+        <ConfigUI>
+            <Field id="label_reconfigure_info" type="label" fontSize="small">
+                <Label>Asks zigbee2mqtt to run the device's setup again — what it does when a device first pairs. It is the usual cure for a device that has stopped reporting. A battery device must be awake.</Label>
+            </Field>
+        </ConfigUI>
+    </Action>
+
+    <Action id="sepBridgeTools"/>
+
+    <Action id="backupBridge">
+        <Name>Back Up zigbee2mqtt</Name>
+        <ConfigUI>
+            <Field id="bridge" type="menu" defaultValue="all">
+                <Label>zigbee2mqtt:</Label>
+                <List class="self" filter="all" method="list_bridge_prefixes" dynamicReload="true"/>
+            </Field>
+            <Field id="label_backup_info" type="label" fontSize="small">
+                <Label>Saves zigbee2mqtt's settings and device list to the backup folder chosen in the plugin's Configure window. The file holds your Zigbee network key, so keep it private.</Label>
+            </Field>
+        </ConfigUI>
+        <CallbackMethod>action_backup</CallbackMethod>
+    </Action>
+
+    <Action id="checkRouters">
+        <Name>Check zigbee2mqtt for Missing Routers</Name>
+        <ConfigUI>
+            <Field id="bridge" type="menu" defaultValue="all">
+                <Label>zigbee2mqtt:</Label>
+                <List class="self" filter="all" method="list_bridge_prefixes" dynamicReload="true"/>
+            </Field>
+        </ConfigUI>
+        <CallbackMethod>action_check_routers</CallbackMethod>
+    </Action>
+
+    <Action id="restartBridge">
+        <Name>Restart zigbee2mqtt</Name>
+        <ConfigUI>
+            <Field id="bridge" type="menu">
+                <Label>zigbee2mqtt:</Label>
+                <List class="self" method="list_bridge_prefixes" dynamicReload="true"/>
+            </Field>
+            <Field id="label_restart_info" type="label" fontColor="orange">
+                <Label>Every device on this zigbee2mqtt stops answering for about half a minute while it restarts.</Label>
+            </Field>
+        </ConfigUI>
+        <CallbackMethod>action_restart_bridge</CallbackMethod>
+    </Action>
+
 </Actions>

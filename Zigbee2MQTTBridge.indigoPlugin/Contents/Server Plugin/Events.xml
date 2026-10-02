@@ -64,4 +64,29 @@
     <Event id="bridgeRestartRequired">
         <Name>Zigbee2MQTT Bridge Needs a Restart</Name>
     </Event>
+    <Event id="offlineCountChanged">
+        <Name>Number of Offline Zigbee Devices Changed</Name>
+    </Event>
+
+    <Event id="sepButton" isSeparator="true"/>
+
+    <!-- v2.13.0. Fires on EVERY press, the same press twice in a row
+         included, which a trigger on a device state change cannot do. -->
+    <Event id="buttonPressed">
+        <Name>Zigbee Button Pressed</Name>
+        <ConfigUI>
+            <Field id="deviceId" type="menu">
+                <Label>Device:</Label>
+                <List class="self" method="list_action_devices" dynamicReload="true"/>
+                <CallbackMethod>button_device_chosen</CallbackMethod>
+            </Field>
+            <Field id="action" type="menu" defaultValue="any">
+                <Label>Press:</Label>
+                <List class="self" method="list_device_actions" dynamicReload="true"/>
+            </Field>
+            <Field id="label_action_info" type="label" fontSize="small">
+                <Label>Runs every time the device sends this press, even the same press twice in a row. The presses listed are the ones zigbee2mqtt says the device can send.</Label>
+            </Field>
+        </ConfigUI>
+    </Event>
 </Events>
