@@ -434,6 +434,18 @@ def test_motion_survives_a_plugin_restart(plugin, make_device):
     assert dev.states["onOffState"] is True
 
 
+def test_a_seeded_false_is_not_taken_as_a_reading(plugin, make_device):
+    """occupancy is seeded False on every occupancy sensor, PIR or not.
+    Carrying that into the store made the capability self-heal mark a radar
+    as having a PIR — live on the first restart of 2.11.0."""
+    dev = _presence(plugin, make_device, 2173)
+    dev.states.update({"presence": False, "occupancy": False, "motion": False})
+    plugin._motion_states.clear()
+    plugin._process_occupancy_sensor_state(dev, {"presence": True})
+    assert "has_pir" not in dev.pluginProps
+    assert plugin._motion_states[dev.id] == {"presence": True}
+
+
 def test_the_combined_state_never_votes_for_itself(plugin, make_device):
     """`motion` is the answer, not a source: reading it back would hold motion
     on after every real source has cleared."""

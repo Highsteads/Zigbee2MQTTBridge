@@ -372,14 +372,19 @@ class StateProcessingMixin:
         the source states the device still shows. Before 2.11.0 it started
         empty, and a comm restart also wiped it, so a lone "occupancy": false
         cleared motion while the stored presence still said someone was there.
+
+        Only a source that still says True is carried over. A False changes
+        nothing in the OR, and the store's keys are also read as proof of what
+        the device reports: these states are seeded False whether or not the
+        hardware has them, so copying a False in told the capability self-heal
+        a radar had a PIR (live, Bedroom 1 Wall, 02-10-2026).
         """
         store = self._motion_states.get(dev.id)
         if store is None:
             store = {}
             for key in self._MOTION_SOURCE_STATES:
-                val = dev.states.get(key)
-                if isinstance(val, bool):
-                    store[key] = val
+                if dev.states.get(key) is True:
+                    store[key] = True
             self._motion_states[dev.id] = store
         return store
 
