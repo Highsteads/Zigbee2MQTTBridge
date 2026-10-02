@@ -1786,6 +1786,11 @@
                 <TriggerLabel>Members Changed</TriggerLabel>
                 <ControlPageLabel>Member Names</ControlPageLabel>
             </State>
+            <State id="scenes">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Stored Scenes Changed</TriggerLabel>
+                <ControlPageLabel>Scenes</ControlPageLabel>
+            </State>
             <State id="lastUpdate">
                 <ValueType>String</ValueType>
                 <TriggerLabel>Last Update Changed</TriggerLabel>
@@ -1820,6 +1825,11 @@
                 <ValueType>String</ValueType>
                 <TriggerLabel>Members Changed</TriggerLabel>
                 <ControlPageLabel>Member Names</ControlPageLabel>
+            </State>
+            <State id="scenes">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Stored Scenes Changed</TriggerLabel>
+                <ControlPageLabel>Scenes</ControlPageLabel>
             </State>
             <State id="lastUpdate">
                 <ValueType>String</ValueType>

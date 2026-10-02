@@ -74,11 +74,13 @@ class DeviceStatesMixin:
             ("availability", ""),
             ("memberCount",  0),
             ("members",      ""),
+            ("scenes",       ""),
         ],
         "z2mGroupRelay": [
             ("availability", ""),
             ("memberCount",  0),
             ("members",      ""),
+            ("scenes",       ""),
         ],
         "z2mRelay": [
             ("power",        0.0),

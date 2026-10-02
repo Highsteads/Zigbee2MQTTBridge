@@ -510,6 +510,8 @@ class ActionsMixin:
         if typeId == "fadeLight" and self._fade_values(valuesDict) is None:
             errors["brightness"] = "Brightness must be a number from 0 to 100."
             errors["seconds"] = f"Seconds must be a number from 0 to {FADE_MAX_SECONDS}."
+        if typeId in ("recallScene", "storeScene", "removeScene"):
+            self._validate_scene_action(valuesDict, typeId, errors)
         if typeId in ("backupBridge", "checkRouters", "restartBridge"):
             choice = str(valuesDict.get("bridge") or "")
             if choice in ("", "none") or (choice == "all" and typeId == "restartBridge"):

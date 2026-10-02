@@ -31,6 +31,9 @@ These are under **Device Actions** when you add an action.
 | **Publish Custom Payload** | Sends a device a setting, or anything else, in the form zigbee2mqtt understands, for anything the other actions do not cover — see below. |
 | **Update Device Firmware** | Starts a firmware update on the device you choose, if one is waiting. It does nothing on a device with no update waiting — see [Firmware updates](firmware-updates.md). |
 | **Stop Blind** | Stops a blind where it is, part way up or down. |
+| **Store Zigbee Scene** | For a group or a light. Saves what the lights are doing right now — on or off, brightness and colour — as a scene, in each light's own memory. Choose **A new scene** and give it a name, or choose an existing scene to replace it. |
+| **Recall Zigbee Scene** | Puts every light in the group back as the scene stored it, all at the same moment. |
+| **Remove Zigbee Scene** | Deletes a stored scene from the lights. |
 | **Fade Light to Brightness** | Changes a light to the brightness you set, gradually, over the number of seconds you set. 0% fades it off. The bulb does the fading itself; one that cannot fade simply changes at once. |
 | **Set Up Zigbee Device Again** | Asks zigbee2mqtt to run the device's setup again, as it does when a device first pairs. It is the usual cure for a device that has stopped reporting. A battery device must be awake: press its button or set off its sensor first. |
 
@@ -41,6 +44,12 @@ These three are under the plugin's own name, not **Device Actions**, because the
 | **Back Up zigbee2mqtt** | Saves zigbee2mqtt's settings and list of devices to the backup folder set in the plugin's **Configure** window, for one zigbee2mqtt or all of them. Run it from a schedule once a week, say. See [Settings](settings.md). |
 | **Check zigbee2mqtt for Missing Routers** | Asks zigbee2mqtt whether any router it knows about has stopped answering, and writes the answer to the log and the coordinator device. |
 | **Restart zigbee2mqtt** | Restarts the zigbee2mqtt you choose. Every device on it stops answering for about half a minute. With the **Zigbee2MQTT Bridge Needs a Restart** trigger, it can restart zigbee2mqtt in the night after you change one of its settings. |
+
+### Zigbee scenes
+
+A Zigbee scene is kept in the lights themselves, so recalling one is a single message and every light changes at once, however many are in the group. To make one, set the lights how you want them, then run **Store Zigbee Scene** once — from an action group, say. After that, **Recall Zigbee Scene** brings it back from a schedule, a trigger or a control page.
+
+The scenes listed are the ones zigbee2mqtt says are stored, so a new one appears a moment after you store it. A group device's **Scenes** state lists them too.
 
 ### Publish Custom Payload
 

@@ -5,9 +5,21 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0)
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0)
 # Date:        02-10-2026
-# Version:     2.14.0
+# Version:     2.15.0
+#
+# v2.15.0 (02-10-2026): ZIGBEE SCENES (item 10 of the October comparison).
+#   New module z2m_scenes.py (ScenesMixin): Recall / Store / Remove Zigbee
+#   Scene device actions on z2mGroupLight, z2mGroupRelay and z2mLight, sent to
+#   the entity's own /set as {"scene_recall": n}, {"scene_store": {"ID": n,
+#   "name": s}}, {"scene_remove": n} (zhc toZigbee.ts). Scene lists from
+#   bridge/groups `scenes` and bridge/devices `endpoints.<ep>.scenes`, which
+#   z2m republishes when scenes change. IDs 1-255 (0 is reserved on a single
+#   device); "A new scene" takes the lowest free number; overwriting keeps the
+#   name unless a new one is given. Group devices gain a "scenes" state
+#   (registered on 2.14.0 devices at start). tests/test_v2150_scenes.py 11;
+#   12 mutations all caught.
 #
 # v2.14.0 (02-10-2026): ZIGBEE2MQTT GROUPS AS DEVICES (item 6 of the October
 #   comparison). New module z2m_groups.py (GroupsMixin) and types
@@ -969,6 +981,7 @@ from z2m_actions import ActionsMixin
 from z2m_bridge import BridgeMixin
 from z2m_bridge_tools import BridgeToolsMixin
 from z2m_groups import GroupsMixin, is_group
+from z2m_scenes import ScenesMixin
 from z2m_device_states import DeviceStatesMixin
 from z2m_menus import MenusMixin
 from z2m_mqtt import MqttMixin
@@ -1014,6 +1027,7 @@ class Plugin(
     MqttMixin,
     NativeAttributesMixin,
     OtaMixin,
+    ScenesMixin,
     SecondaryDevicesMixin,
     SettingsMixin,
     StateProcessingMixin,

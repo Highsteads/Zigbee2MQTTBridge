@@ -156,6 +156,7 @@ The plugin makes the device by itself as soon as you add the first member to a n
 |---|---|
 | **Members**, **Member Names** | How many devices are in the group, and which. |
 | **Availability** | **online** while any member is. |
+| **Scenes** | The Zigbee scenes stored for the group, with their numbers. See [Actions and triggers](actions-and-triggers.md). |
 
 zigbee2mqtt shows a group as on when any member is on, and off only when they all are. A group has no state of its own to ask for, so **Send Status Request** works it out from the members instead.
 

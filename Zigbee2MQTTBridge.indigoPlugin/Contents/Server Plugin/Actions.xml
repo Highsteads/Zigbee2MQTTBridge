@@ -108,6 +108,49 @@
         <CallbackMethod>action_fade_light</CallbackMethod>
     </Action>
 
+    <!-- v2.15.0: Zigbee scenes, kept in the bulbs themselves. -->
+    <Action id="recallScene" deviceFilter="self.z2mGroupLight,self.z2mGroupRelay,self.z2mLight" uiPath="DeviceActions">
+        <Name>Recall Zigbee Scene</Name>
+        <ConfigUI>
+            <Field id="scene" type="menu">
+                <Label>Scene:</Label>
+                <List class="self" method="list_device_scenes" dynamicReload="true"/>
+            </Field>
+            <Field id="label_recall_info" type="label" fontSize="small">
+                <Label>Every light puts itself back as the scene stored it, all at once.</Label>
+            </Field>
+        </ConfigUI>
+        <CallbackMethod>action_recall_scene</CallbackMethod>
+    </Action>
+
+    <Action id="storeScene" deviceFilter="self.z2mGroupLight,self.z2mGroupRelay,self.z2mLight" uiPath="DeviceActions">
+        <Name>Store Zigbee Scene</Name>
+        <ConfigUI>
+            <Field id="scene" type="menu" defaultValue="new">
+                <Label>Scene:</Label>
+                <List class="self" filter="store" method="list_device_scenes" dynamicReload="true"/>
+            </Field>
+            <Field id="sceneName" type="textfield" defaultValue="">
+                <Label>Name:</Label>
+            </Field>
+            <Field id="label_store_info" type="label" fontSize="small">
+                <Label>Saves what the lights are doing right now — on or off, brightness and colour — into each light's own memory. Choose an existing scene to replace it. Leave Name blank to keep its name, or for a new scene to be called Scene and its number.</Label>
+            </Field>
+        </ConfigUI>
+        <CallbackMethod>action_store_scene</CallbackMethod>
+    </Action>
+
+    <Action id="removeScene" deviceFilter="self.z2mGroupLight,self.z2mGroupRelay,self.z2mLight" uiPath="DeviceActions">
+        <Name>Remove Zigbee Scene</Name>
+        <ConfigUI>
+            <Field id="scene" type="menu">
+                <Label>Scene:</Label>
+                <List class="self" method="list_device_scenes" dynamicReload="true"/>
+            </Field>
+        </ConfigUI>
+        <CallbackMethod>action_remove_scene</CallbackMethod>
+    </Action>
+
     <Action id="reconfigureDevice"
             deviceFilter="self.z2mLight,self.z2mRelay,self.z2mContactSensor,self.z2mOccupancySensor,self.z2mWaterLeakSensor,self.z2mTemperatureSensor,self.z2mSensor,self.z2mCover,self.z2mRepeater,self.z2mButton,self.z2mLock,self.z2mThermostat"
             uiPath="DeviceActions">

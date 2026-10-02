@@ -25,7 +25,7 @@ The plugin connects to the broker, reads every message zigbee2mqtt sends, and ke
 - **Brings in every reading** — temperature, humidity, motion, doors and windows, water leaks, smoke, power and energy, battery level, and anything else a device reports.
 - **Fills in Indigo's own battery and energy readings,** and turns a device red in Indigo when zigbee2mqtt says it has gone offline.
 - **Keeps settings on the device where you put them.** Some sensors forget their settings after a battery change, and the plugin notices and puts them back.
-- **Turns zigbee2mqtt groups into devices,** so a group of lights switches together with one message.
+- **Turns zigbee2mqtt groups into devices,** so a group of lights switches together with one message, and stores and recalls Zigbee scenes in the lights themselves.
 - **Gives a sensor's extra readings their own devices** — a presence sensor that also measures temperature can have its temperature as a proper Indigo temperature sensor.
 - **Handles firmware updates**, telling you when one is waiting and installing it only when you ask.
 - **Runs triggers** when a button is pressed, a device joins or leaves the network, a firmware update finishes, devices go offline, or zigbee2mqtt itself does.

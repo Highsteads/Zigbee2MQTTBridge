@@ -260,7 +260,8 @@ class GroupsMixin:
                         f"({e}); it still follows the group", level="WARNING")
         names = self._group_member_names(entry, prefix)
         self._apply_updates(dev, [("memberCount", len(names), str(len(names))),
-                                  ("members", ", ".join(names))])
+                                  ("members", ", ".join(names)),
+                                  ("scenes", self._scene_summary(dev))])
 
     def _group_member_names(self, entry, prefix):
         names = []
@@ -294,6 +295,8 @@ class GroupsMixin:
         self._apply_indigo_subtype(dev)
         if dev.deviceTypeId == GROUP_LIGHT:
             self._apply_light_capabilities(dev)
+        # v2.15.0 added "scenes" — register it on group devices made by 2.14.0.
+        dev = self._refresh_state_list_if_missing(dev, ("scenes",))
         self._ensure_device_states(dev)
         self._keep_churn_out_of_sql_logger(dev)
         self._seed_group_state(dev)
