@@ -5,9 +5,29 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0)
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0)
 # Date:        02-10-2026
-# Version:     2.15.0
+# Version:     2.16.0
+#
+# v2.16.0 (02-10-2026): SCHEDULED FIRMWARE UPDATES (the last item of the
+#   October comparison), from zigbee2mqtt 2.14.2 otaUpdate.ts.
+#   * Update Device Firmware (menu + action) takes "when": now, or next =
+#     bridge/request/device/ota_update/schedule — installed when the DEVICE
+#     next sends queryNextImageRequest, the safe route for a sleeper. State
+#     "scheduled" counts as updateAvailable. A failed scheduled attempt goes
+#     back to "scheduled" and is retried: logged, no otaUpdateFailed.
+#   * Cancel Firmware Update (menu + device action): unschedule when
+#     scheduled, update/abort when updating. An abort we asked for is a stop,
+#     not a failure (_ota_aborting). The abort reply arrives on
+#     .../ota_update/update/abort, so the router now passes the whole tail —
+#     parts[5] alone read it as "update" and announced a finished update.
+#   * latest_release_notes kept per device; first 300 characters logged on
+#     the available edge and shown in Report Firmware Status.
+#   * otaUpdateAvailable no longer re-fires on available after a failed or
+#     stopped update. _update_announced is now per instance (a class dict
+#     was shared by every Plugin in one process).
+#   tests/test_v2160_ota_schedule.py 16 (15 fail on 2.15.0); 12 mutations,
+#   all caught bar one equivalent (an explicit early return).
 #
 # v2.15.0 (02-10-2026): ZIGBEE SCENES (item 10 of the October comparison).
 #   New module z2m_scenes.py (ScenesMixin): Recall / Store / Remove Zigbee
@@ -1096,6 +1116,14 @@ class Plugin(
         self._device_baseline = set()
         # dev id (or name) -> when otaUpdateFailed last fired for it (2.11.0).
         self._ota_failed_at = {}
+        # v2.16.0: release notes zigbee2mqtt sent for a device's waiting
+        # update, and the devices whose running update we asked to stop.
+        self._release_notes = {}
+        self._ota_aborting  = set()
+        # Per instance, not the class-level dict OtaMixin declares: a class
+        # dict is shared by every Plugin made in one process, so in the tests
+        # one test's "finished" silenced the next for five minutes (v2.16.0).
+        self._update_announced = {}
         # v2.13.0 bridge tools: our outstanding bridge/request transactions,
         # each bridge's offline devices, and whether the message being handled
         # is a retained replay (which is never a button press or a change).

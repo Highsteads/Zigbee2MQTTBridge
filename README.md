@@ -2,7 +2,7 @@
 
 **Bring your Zigbee lights, plugs, sensors, blinds, locks and radiator valves into Indigo, through zigbee2mqtt.**
 
-**Version:** 2.15.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
+**Version:** 2.16.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
 
 **[Read the full guide](https://highsteads.github.io/Zigbee2MQTTBridge/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -58,11 +58,11 @@ The [full guide](https://highsteads.github.io/Zigbee2MQTTBridge/) goes through e
 
 ## What's new
 
+**v2.16.0** — Firmware updates can wait until a battery device next asks for them, so a sleeping sensor no longer misses its update. A new **Cancel Firmware Update** stops one, and the maker's release notes appear in the log.
+
 **v2.15.0** — Zigbee scenes: store what a group of lights is doing as a scene in the lights themselves, and recall it so they all change at once.
 
 **v2.14.0** — zigbee2mqtt groups are now Indigo devices. A group of lights switches together with one message, and works anywhere a light or switch does, HomeKit included.
-
-**v2.13.0** — A **Zigbee Button Pressed** trigger that runs on every press, an offline-device count on each coordinator, **Back Up zigbee2mqtt** to the Mac, **Restart zigbee2mqtt**, **Check for Missing Routers** and **Set Up a Device Again**, and **Stop Blind** and **Fade Light** actions.
 
 Every version is listed in the [version history](https://highsteads.github.io/Zigbee2MQTTBridge/changelog.html).
 

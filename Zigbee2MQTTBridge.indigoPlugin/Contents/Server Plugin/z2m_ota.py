@@ -42,6 +42,14 @@ def log(*args, **kwargs):
 STATE_IDLE      = "idle"
 STATE_AVAILABLE = "available"
 STATE_UPDATING  = "updating"
+# v2.16.0: zigbee2mqtt 2.14.2 otaUpdate.ts. A scheduled update installs the
+# next time the DEVICE asks for one (queryNextImageRequest) — the safe route
+# for a battery device, which is asleep when "update now" is sent. A failed
+# scheduled attempt goes back to "scheduled" and is tried again.
+STATE_SCHEDULED = "scheduled"
+WHEN_NOW  = "now"
+WHEN_NEXT = "next"
+RELEASE_NOTES_SHOWN = 300     # characters of release notes put in the log
 
 
 class OtaMixin:
@@ -70,9 +78,12 @@ class OtaMixin:
             return
 
         previous = dev.states.get("updateState")
+        notes = str(update.get("latest_release_notes") or "").strip()
+        if notes:
+            self._release_notes[dev.id] = notes
         updates = [
             ("updateState", state),
-            ("updateAvailable", state == STATE_AVAILABLE),
+            ("updateAvailable", state in (STATE_AVAILABLE, STATE_SCHEDULED)),
         ]
         for key, prop in (("updateInstalledVersion", "installed_version"),
                           ("updateLatestVersion", "latest_version")):
@@ -91,12 +102,23 @@ class OtaMixin:
         # Fire on the RISING EDGE only. This object rides along with ordinary
         # state payloads, so a device with an update pending republishes
         # "available" every few minutes — firing each time would turn one
-        # pending update into a trigger storm.
-        if state == STATE_AVAILABLE and previous != STATE_AVAILABLE:
+        # pending update into a trigger storm. Coming back to "available"
+        # from a stopped or failed update is not news either (v2.16.0).
+        if (state == STATE_AVAILABLE and previous != STATE_AVAILABLE
+                and previous not in (STATE_UPDATING, STATE_SCHEDULED)):
             log(f"{dev.name}: a firmware update is available "
                 f"(installed {update.get('installed_version')}, "
                 f"latest {update.get('latest_version')})")
+            if notes:
+                short = " ".join(notes.split())
+                if len(short) > RELEASE_NOTES_SHOWN:
+                    short = short[:RELEASE_NOTES_SHOWN].rstrip() + "..."
+                log(f"{dev.name}: release notes — {short}")
             self._fire_event("otaUpdateAvailable", self._device_prefix(dev), dev.name)
+
+        if previous == STATE_SCHEDULED and state == STATE_UPDATING:
+            log(f"{dev.name}: the scheduled firmware update has started. The "
+                f"device asked for it, so it is awake and listening.")
 
         # Leaving `updating` is how an update ENDS, and the device itself is the
         # one saying so — which makes this more reliable than the bridge's reply,
@@ -107,6 +129,19 @@ class OtaMixin:
         # is the state leaving `updating` that says it came back.
         if previous == STATE_UPDATING and state != STATE_UPDATING:
             now_version = update.get("installed_version")
+            if dev.id in self._ota_aborting:
+                # We asked for it to stop: a stop, not a failure (v2.16.0).
+                self._ota_aborting.discard(dev.id)
+                log(f"{dev.name}: firmware update stopped, as asked. The device "
+                    f"is still on version {now_version if now_version is not None else 'unknown'}.")
+                return
+            if state == STATE_SCHEDULED:
+                # A scheduled update that failed goes back on the schedule and
+                # is tried again — the update is not over (v2.16.0).
+                log(f"{dev.name}: the firmware update did not finish this time. "
+                    f"zigbee2mqtt will try again the next time the device asks.",
+                    level="WARNING")
+                return
             if state == STATE_IDLE:
                 self._announce_update_finished(
                     dev.name, self._format_firmware_version(now_version),
@@ -175,23 +210,31 @@ class OtaMixin:
                 continue
             rows.append((dev.states.get("updateState") or "unknown", dev.name,
                          dev.states.get("updateInstalledVersion") or "?",
-                         dev.states.get("updateLatestVersion") or "?"))
+                         dev.states.get("updateLatestVersion") or "?",
+                         self._release_notes.get(dev.id, "")))
         if not rows:
             log("No devices report over-the-air update support.", level="WARNING")
             return
         pending = [r for r in rows if r[0] == STATE_AVAILABLE]
+        scheduled = [r for r in rows if r[0] == STATE_SCHEDULED]
         log(f"Firmware: {len(rows)} device(s) support updates, "
-            f"{len(pending)} with one available")
-        for state, name, installed, latest in sorted(rows):
+            f"{len(pending)} with one available, {len(scheduled)} scheduled")
+        for state, name, installed, latest, notes in sorted(rows):
             level = "WARNING" if state == STATE_AVAILABLE else "INFO"
             log(f"  {name}: {state} (installed {installed}, latest {latest})",
                 level=level)
+            if notes and state in (STATE_AVAILABLE, STATE_SCHEDULED):
+                short = " ".join(notes.split())
+                if len(short) > RELEASE_NOTES_SHOWN:
+                    short = short[:RELEASE_NOTES_SHOWN].rstrip() + "..."
+                log(f"    release notes: {short}")
         if not pending:
             return
         log("  To install one: Plugins -> Zigbee2MQTT Bridge -> Update Device "
             "Firmware... and pick it from the list. Do it when the device can "
             "be busy for a few minutes — an interrupted update can leave it "
-            "unusable.")
+            "unusable. For a battery device, choose to install it the next "
+            "time the device asks.")
 
     # ── Starting an update, only ever on request ─────────────────────────────
 
@@ -202,7 +245,7 @@ class OtaMixin:
         if dev is None:
             log("Update Device Firmware: no device given", level="ERROR")
             return
-        self._start_firmware_update(dev)
+        self._start_firmware_update(dev, when=action.props.get("when", WHEN_NOW))
 
     def list_devices_with_updates(self, filter="", valuesDict=None, typeId="",
                                   targetId=0):
@@ -241,11 +284,65 @@ class OtaMixin:
         except (ValueError, KeyError):
             log(f"Could not find the chosen device ({chosen!r}).", level="ERROR")
             return True
-        self._start_firmware_update(dev)
+        self._start_firmware_update(dev, when=(valuesDict or {}).get("when", WHEN_NOW))
         return True
 
-    def _start_firmware_update(self, dev):
+    # ── Cancelling (v2.16.0) ─────────────────────────────────────────────────
+
+    def _cancel_firmware_update(self, dev):
+        """Unschedule a scheduled update, or stop one that is running."""
+        ieee = (dev.ownerProps.get("ieee_address") or "").strip()
+        state = dev.states.get("updateState")
+        prefix = self._device_prefix(dev)
+        if not ieee or state not in (STATE_SCHEDULED, STATE_UPDATING):
+            log(f"{dev.name}: no firmware update is scheduled or running — "
+                f"nothing to cancel.", level="WARNING")
+            return
+        if state == STATE_SCHEDULED:
+            if self._publish(f"{prefix}/bridge/request/device/ota_update/unschedule",
+                             {"id": ieee, "transaction": ieee}):
+                log(f"{dev.name}: asked zigbee2mqtt to cancel the scheduled "
+                    f"firmware update.")
+            return
+        if self._publish(f"{prefix}/bridge/request/device/ota_update/update/abort",
+                         {"id": ieee, "transaction": ieee}):
+            self._ota_aborting.add(dev.id)
+            log(f"{dev.name}: asked zigbee2mqtt to stop the firmware update. The "
+                f"device stays on its old firmware.")
+
+    def action_cancel_firmware(self, action, dev=None, callerWaitingForResult=None):
+        if dev is None:
+            log("Cancel Device Firmware Update: no device given", level="ERROR")
+            return
+        self._cancel_firmware_update(dev)
+
+    def list_devices_updating_or_scheduled(self, filter="", valuesDict=None,
+                                           typeId="", targetId=0):
+        rows = []
+        for dev in indigo.devices.iter(self.pluginId):
+            state = dev.states.get("updateState")
+            if state in (STATE_SCHEDULED, STATE_UPDATING):
+                what = "scheduled" if state == STATE_SCHEDULED else "installing now"
+                rows.append((str(dev.id), f"{dev.name}  ({what})"))
+        if not rows:
+            return [("none", "-- nothing scheduled or installing --")]
+        return sorted(rows, key=lambda r: r[1])
+
+    def menu_cancel_firmware(self, valuesDict=None, typeId=None):
+        chosen = str((valuesDict or {}).get("targetDevice") or "").strip()
+        try:
+            dev = indigo.devices[int(chosen)]
+        except (TypeError, ValueError, KeyError):
+            log("No device chosen — nothing cancelled.", level="WARNING")
+            return True
+        self._cancel_firmware_update(dev)
+        return True
+
+    def _start_firmware_update(self, dev, when=WHEN_NOW):
         """The one guarded path to starting an update, shared by both routes.
+
+        when=WHEN_NEXT schedules it instead: zigbee2mqtt installs it the next
+        time the device asks for an update (v2.16.0).
 
         Guarded rather than trusting the caller: an update fired at a device
         that cannot take one is the expensive mistake here.
@@ -264,11 +361,22 @@ class OtaMixin:
             log(f"{dev.name}: an update is already running — leaving it alone",
                 level="WARNING")
             return
+        if state == STATE_SCHEDULED:
+            log(f"{dev.name}: an update is already scheduled — it installs the "
+                f"next time the device asks. Cancel it first to change that.",
+                level="WARNING")
+            return
         if state != STATE_AVAILABLE:
             log(f"{dev.name}: no update is available (state is {state or 'unknown'}) "
                 f"— run Check for Firmware Updates first", level="WARNING")
             return
         prefix = self._device_prefix(dev)
+        if str(when or WHEN_NOW) == WHEN_NEXT:
+            if self._publish(f"{prefix}/bridge/request/device/ota_update/schedule",
+                             {"id": ieee, "transaction": ieee}):
+                log(f"{dev.name}: asked zigbee2mqtt to install the firmware update "
+                    f"the next time the device asks for one.")
+            return
         # The transaction comes back on the reply, including an error reply,
         # whose data is otherwise empty — it is how the failure is tied back
         # to this device (2.11.0).
@@ -414,11 +522,26 @@ class OtaMixin:
             expected = action == "check" and any(
                 token in str(reason).lower() for token in self._EXPECTED_OTA_FAILURES)
             prefix_text = f"{name}: " if name else ""
-            log(f"{prefix_text}firmware {action} did not complete — {reason}",
+            what = {"schedule": "scheduling the update",
+                    "unschedule": "cancelling the scheduled update",
+                    "update/abort": "stopping the update"}.get(action, f"firmware {action}")
+            log(f"{prefix_text}{what} did not complete — {reason}",
                 level="INFO" if expected else "ERROR")
+            if action == "update/abort" and dev_id is not None:
+                self._ota_aborting.discard(dev_id)
             if action == "update":
                 self._announce_update_failed(prefix, name or "unknown", dev_id=dev_id)
             return
+        if action == "schedule":
+            log(f"{name or 'The device'}: firmware update scheduled. It installs "
+                f"the next time the device asks for one — for a battery device "
+                f"that can be hours away.")
+            return
+        if action == "unschedule":
+            log(f"{name or 'The device'}: the scheduled firmware update is cancelled.")
+            return
+        if action == "update/abort":
+            return            # the state change says it stopped
         if action == "check":
             # zigbee2mqtt 2.x spells it update_available; the camelCase form
             # read here until 2.11.0 never arrives, so every check said only
@@ -429,7 +552,7 @@ class OtaMixin:
             else:
                 log(f"{name}: firmware check completed — "
                     f"{'an update is available' if updated else 'already current'}")
-        else:
+        elif action == "update":
             # Keyed on the device id, the SAME key the state-change route
             # uses. Keying one on the id and the other on the name meant the
             # two never matched and both spoke — which is the whole thing this

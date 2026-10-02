@@ -80,6 +80,13 @@
         <Name>Update Device Firmware</Name>
         <CallbackMethod>action_update_firmware</CallbackMethod>
         <ConfigUI>
+            <Field id="when" type="menu" defaultValue="now">
+                <Label>Install:</Label>
+                <List>
+                    <Option value="now">Now</Option>
+                    <Option value="next">The next time the device asks (best for battery devices)</Option>
+                </List>
+            </Field>
             <Field id="warning" type="label" fontColor="orange">
                 <Label>Starts a firmware update over the air. It can take several minutes, the device will be unresponsive throughout, and interrupting it can leave the device unusable. Run "Check for Firmware Updates" first — this does nothing unless an update is actually waiting.</Label>
             </Field>
@@ -106,6 +113,19 @@
             </Field>
         </ConfigUI>
         <CallbackMethod>action_fade_light</CallbackMethod>
+    </Action>
+
+    <!-- v2.16.0 -->
+    <Action id="cancelFirmware"
+            deviceFilter="self.z2mLight,self.z2mRelay,self.z2mContactSensor,self.z2mOccupancySensor,self.z2mWaterLeakSensor,self.z2mTemperatureSensor,self.z2mSensor,self.z2mCover,self.z2mRepeater,self.z2mButton,self.z2mLock,self.z2mThermostat"
+            uiPath="DeviceActions">
+        <Name>Cancel Device Firmware Update</Name>
+        <CallbackMethod>action_cancel_firmware</CallbackMethod>
+        <ConfigUI>
+            <Field id="label_cancel_info" type="label" fontSize="small">
+                <Label>Cancels a scheduled update, or stops one that is installing. The device stays on its old firmware.</Label>
+            </Field>
+        </ConfigUI>
     </Action>
 
     <!-- v2.15.0: Zigbee scenes, kept in the bulbs themselves. -->

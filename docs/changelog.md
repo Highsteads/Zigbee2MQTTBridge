@@ -7,6 +7,13 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.16.0 — 2 October 2026
+
+- **Firmware updates for battery devices.** **Update Device Firmware** now asks when to install: **Now**, or **The next time the device asks**. The second waits until the device wakes and asks for new firmware by itself, so a sleeping sensor no longer misses the update. If an attempt fails, zigbee2mqtt tries again next time, and the Failed trigger waits until the update is really over.
+- **Cancel Firmware Update** — a menu item and an action that cancel a scheduled update or stop one that is installing. Stopping one you asked to stop is not counted as a failure.
+- **Release notes.** Where the maker publishes notes on what an update changes, the start of them appears in the log when the update becomes available, and in **Report Firmware Status**.
+- A device whose update failed or was stopped no longer runs the **Firmware Update Available** trigger again for the same update.
+
 ## 2.15.0 — 2 October 2026
 
 **Zigbee scenes.** Three new actions for a group or a light: **Store Zigbee Scene** saves what the lights are doing now — on or off, brightness and colour — in each light's own memory, **Recall Zigbee Scene** puts every light back that way at the same moment, and **Remove Zigbee Scene** deletes one. The scenes are picked from a list of the ones stored, and a group device shows them in a new **Scenes** state.

@@ -15,8 +15,8 @@ Devices that zigbee2mqtt says can take updates carry these:
 
 | Shown as | What it means |
 |---|---|
-| **Firmware State** | **idle** when there is nothing to do, **available** when an update is waiting, and **updating** while one runs. |
-| **Firmware Update Available** | Ticked while an update is waiting. |
+| **Firmware State** | **idle** when there is nothing to do, **available** when an update is waiting, **scheduled** when it will install the next time the device asks, and **updating** while one runs. |
+| **Firmware Update Available** | Ticked while an update is waiting, scheduled or not. |
 | **Installed Firmware** | The version the device has now. |
 | **Latest Firmware** | The newest version zigbee2mqtt knows of. |
 | **Update Progress %** | How far an update has got, while it runs. |
@@ -29,17 +29,28 @@ Choose **Plugins → Zigbee2MQTT Bridge → Check for Firmware Updates**. The pl
 
 The answers arrive over the next few minutes. A battery device answers only when it next wakes, so some take longer, and one that never answers is simply asleep, not faulty.
 
-Then choose **Plugins → Zigbee2MQTT Bridge → Report Firmware Status**. The Event Log lists every device that can take updates, the version it has, the newest version, and whether one is waiting. Devices with an update waiting are shown as warnings so they stand out.
+Then choose **Plugins → Zigbee2MQTT Bridge → Report Firmware Status**. The Event Log lists every device that can take updates, the version it has, the newest version, and whether one is waiting or scheduled. Devices with an update waiting are shown as warnings so they stand out, and where the maker has published notes on what the update changes, the start of them is shown underneath. The same notes appear in the log when an update first becomes available.
 
 ## Installing an update
 
 1. Choose **Plugins → Zigbee2MQTT Bridge → Update Device Firmware...**
 2. Pick the device from the list. Only devices with an update waiting are listed, each with the version it has and the version it will move to. If the list says **-- no updates waiting --**, run **Check for Firmware Updates** first.
-3. Click the button to start it.
+3. Under **Install**, choose **Now**, or **The next time the device asks** — see below.
+4. Click the button to start it.
 
 The Event Log says the update has started. Watch the device's **Update Progress %** if you like. Leave the device powered until it finishes.
 
 To start one from a schedule or an action group instead, for a quiet time of night, add the **Update Device Firmware** action under **Device Actions** and choose the device.
+
+### Updating a battery device
+
+A battery device sleeps nearly all the time, so an update sent **Now** usually finds it asleep and fails. Choose **The next time the device asks** instead. zigbee2mqtt then holds the update until the device itself wakes and asks whether there is new firmware, which every device does now and then, and installs it while the device is awake and listening. That can be hours later, and the device's **Firmware State** says **scheduled** meanwhile.
+
+If an attempt fails, zigbee2mqtt keeps the update scheduled and tries again the next time the device asks. The Event Log says so, and the **Firmware Update Failed** trigger does not run, because the update is not over.
+
+## Cancelling an update
+
+Choose **Plugins → Zigbee2MQTT Bridge → Cancel Firmware Update...** and pick the device. A scheduled update is cancelled, and one that is installing is stopped, leaving the device on its old firmware. The **Cancel Device Firmware Update** action does the same from a schedule or an action group. Stopping an update you asked to stop does not count as a failed update.
 
 The plugin refuses to start an update on a device that cannot take one, on a device with no update waiting, or on a device that is already updating, and says why in the Event Log.
 

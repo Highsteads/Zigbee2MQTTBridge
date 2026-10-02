@@ -135,7 +135,10 @@ class BridgeMixin:
                     self._process_bridge_event(payload, effective_prefix)
                 elif bt == "response" and len(parts) >= 6 \
                         and parts[3] == "device" and parts[4] == "ota_update":
-                    self._process_ota_response(parts[5], payload, effective_prefix)
+                    # The whole tail: "update/abort" must not read as "update",
+                    # whose reply means an update finished (v2.16.0).
+                    self._process_ota_response("/".join(parts[5:]), payload,
+                                               effective_prefix)
                 elif bt == "response" and len(parts) >= 4:
                     self._process_bridge_response("/".join(parts[3:]), payload,
                                                   effective_prefix)

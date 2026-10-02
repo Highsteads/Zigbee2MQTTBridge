@@ -24,7 +24,8 @@ These are under **Plugins → Zigbee2MQTT Bridge**. Most of them write their ans
 |---|---|
 | **Check for Firmware Updates** | Asks zigbee2mqtt to check every device that can take updates. It only looks, it installs nothing. Battery devices answer when they next wake. |
 | **Report Firmware Status** | Lists every device that can take updates, its version, the newest version, and whether an update is waiting. |
-| **Update Device Firmware...** | Lets you pick a device with an update waiting and install it. The [Firmware updates](firmware-updates.md) page explains what to expect. |
+| **Update Device Firmware...** | Lets you pick a device with an update waiting and install it, now or the next time the device asks for one — the better choice for a battery device. The [Firmware updates](firmware-updates.md) page explains what to expect. |
+| **Cancel Firmware Update...** | Cancels a scheduled update, or stops one that is installing. |
 
 ## Looking after zigbee2mqtt
 
