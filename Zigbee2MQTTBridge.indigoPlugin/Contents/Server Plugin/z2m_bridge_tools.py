@@ -184,7 +184,7 @@ class BridgeToolsMixin:
         asked = [p for p in prefixes if self._bridge_request(p, "backup")]
         if asked:
             log(f"Asked zigbee2mqtt on {_join(repr(p) for p in asked)} for a backup. "
-                f"It takes up to half a minute, and the log says where it was saved.")
+                f"It takes up to a minute, and the log says where it was saved.")
         return asked
 
     def menu_backup(self, valuesDict=None, typeId=None):

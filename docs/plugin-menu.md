@@ -30,7 +30,7 @@ These are under **Plugins → Zigbee2MQTT Bridge**. Most of them write their ans
 
 | Menu item | What it does |
 |---|---|
-| **Back Up zigbee2mqtt...** | Saves zigbee2mqtt's settings and list of devices — everything you would need to set it up again on new hardware — to the backup folder set in **Configure**, for one zigbee2mqtt or all of them. It takes up to half a minute, and the log says where the file went. The file holds your Zigbee network's key, so it is saved where only your Mac account can read it. |
+| **Back Up zigbee2mqtt...** | Saves zigbee2mqtt's settings and list of devices — everything you would need to set it up again on new hardware — to the backup folder set in **Configure**, for one zigbee2mqtt or all of them. It takes up to a minute, and the log says where the file went. The file holds your Zigbee network's key, so it is saved where only your Mac account can read it. |
 | **Check for Missing Routers...** | Asks zigbee2mqtt whether any router — a mains-powered device that passes messages on — has stopped answering, usually because it has been unplugged or switched off at the wall. The log names any it finds, and so does the coordinator device. It can take a minute or two on a big network. |
 | **Set Up a Device Again...** | Asks zigbee2mqtt to run a device's setup again, as when it first paired. Try it on a device that has stopped reporting. A battery device must be awake: press its button or set off its sensor first. |
 | **Restart zigbee2mqtt...** | Restarts the zigbee2mqtt you choose. Every device on it stops answering for about half a minute. |
