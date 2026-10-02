@@ -206,10 +206,20 @@ class SettingsMixin:
                 return spec.get("value_off", False)
             return None
         if kind == "numeric":
+            # A numeric expose may declare named PRESETS, and a preset's value
+            # can sit outside the ordinary range on purpose: a Hue bulb's
+            # color_temp_startup runs 153-500 but `previous` is 65535, meaning
+            # "come back at the colour it had". Accept the name or the value
+            # and let a preset past the range check (2.12.0).
+            presets = SettingsMixin._presets(spec)
+            if text.lower() in presets:
+                return presets[text.lower()]
             try:
                 number = float(text)
             except (TypeError, ValueError):
                 return None
+            if number in presets.values():
+                return int(number) if number == int(number) else number
             lo, hi = spec.get("value_min"), spec.get("value_max")
             if lo is not None and number < lo:
                 return None
@@ -225,6 +235,18 @@ class SettingsMixin:
                     return value
             return None
         return text   # text
+
+    @staticmethod
+    def _presets(spec):
+        """{lower-case preset name: value} for a numeric expose."""
+        out = {}
+        for preset in spec.get("presets") or []:
+            if not isinstance(preset, dict):
+                continue
+            name, value = preset.get("name"), preset.get("value")
+            if name and isinstance(value, (int, float)) and not isinstance(value, bool):
+                out[str(name).lower()] = value
+        return out
 
     @staticmethod
     def _binary_as_bool(spec, value):
@@ -452,6 +474,13 @@ class SettingsMixin:
                 parts.append(f'        <Label>{escape(label)}:</Label>')
                 if kind == "numeric":
                     lo, hi = spec.get("value_min"), spec.get("value_max")
+                    presets = self._presets(spec)
+                    if presets:
+                        desc = (f"Or type one of: {', '.join(presets)}. "
+                                f"{desc}").strip()
+                        named = [n for n, v in presets.items() if v == current]
+                        if named:
+                            hint = f" Currently reporting: {current} ({named[0]})."
                     if lo is not None or hi is not None:
                         desc = f"Range {lo} to {hi}. {desc}".strip()
 

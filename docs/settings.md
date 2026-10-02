@@ -73,6 +73,7 @@ Some devices have a **Device Settings** section at the bottom. It lists the sett
 - From then on, if the device ever reports something different — after a battery change, say — the plugin writes a warning to the Event Log and sends your value again.
 - Leave a setting on **-- not managed --**, or blank, and the plugin leaves it alone. That is how every setting starts.
 - A setting that belongs to a group shows the group's name first, such as **Color options: Execute if off**.
+- Some number settings also have named choices, listed under the field. A Hue bulb's **Color temp startup**, for one, takes **warm** or **previous**, and **previous** brings the bulb back at the colour it had before the power went off. Type the name or the number.
 
 A battery device only listens while it is awake. If it is asleep when you click **Save**, the plugin sends your setting again the next time the device reports and differs.
 

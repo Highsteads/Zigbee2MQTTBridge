@@ -22,6 +22,7 @@ except ImportError:
 import json
 
 from z2m_helpers import _brightness_100_to_255, _kelvin_to_mireds
+from z2m_secondary import CHANNEL_TYPE_ID
 
 
 # `log` is a LATE-BOUND delegate, deliberately not `from z2m_helpers import log`.
@@ -62,6 +63,9 @@ class ActionsMixin:
             return
 
         cmd    = action.deviceAction
+        if dev.deviceTypeId == CHANNEL_TYPE_ID:
+            self._channel_action(cmd, dev)
+            return
         fname  = dev.pluginProps.get("friendly_name", "")
         prefix = self._device_prefix(dev)
 
@@ -97,21 +101,53 @@ class ActionsMixin:
                 log(f"Unhandled lock action {cmd} for {dev.name}", level="WARNING")
             return
 
+        # A multi-channel switch with no plain state is switched through its
+        # first channel (2.12.0); everything else keeps "state".
+        key = self._relay_state_key(dev) if dev.deviceTypeId == "z2mRelay" else "state"
+        self._switch_command(cmd, dev, prefix, fname, key)
+
+    def _switch_command(self, cmd, dev, prefix, fname, key):
+        """On / off / toggle / status for one switch, under its own key."""
         if cmd == indigo.kDeviceAction.TurnOn:
-            self._publish_cmd(f"{prefix}/{fname}/set", {"state": "ON"}, dev, "on")
+            self._publish_cmd(f"{prefix}/{fname}/set", {key: "ON"}, dev, "on")
         elif cmd == indigo.kDeviceAction.TurnOff:
-            self._publish_cmd(f"{prefix}/{fname}/set", {"state": "OFF"}, dev, "off")
+            self._publish_cmd(f"{prefix}/{fname}/set", {key: "OFF"}, dev, "off")
         elif cmd == indigo.kDeviceAction.Toggle:
             new_state = "OFF" if dev.onState else "ON"
-            self._publish_cmd(f"{prefix}/{fname}/set", {"state": new_state}, dev,
+            self._publish_cmd(f"{prefix}/{fname}/set", {key: new_state}, dev,
                               f"toggle -> {new_state.lower()}")
         elif cmd == indigo.kDeviceAction.RequestStatus:
-            self._request_state(fname, dev.deviceTypeId, prefix, dev_props=dict(dev.pluginProps))
+            if key == "state":
+                self._request_state(fname, dev.deviceTypeId, prefix,
+                                    dev_props=dict(dev.pluginProps))
+            else:
+                self._publish(f"{prefix}/{fname}/get", {key: ""})
             # Activity, not an action on the house: a /get simply asks
             # zigbee2mqtt to resend what it already holds.
             log_activity(self, f'sent "{dev.name}" status request')
         else:
             log(f"Unhandled relay action {cmd} for {dev.name}", level="WARNING")
+
+    def _channel_action(self, cmd, dev):
+        """A further channel of a multi-channel switch (2.12.0).
+
+        It has no zigbee2mqtt name of its own: commands go to its PARENT's
+        name as state_<channel>. The parent is looked up each time rather than
+        trusting the name copied at creation, which a rename in zigbee2mqtt
+        would leave behind.
+        """
+        endpoint = (dev.ownerProps.get("channel_endpoint") or "").strip()
+        try:
+            parent = indigo.devices[int(dev.ownerProps.get("primary_device_id") or 0)]
+        except (KeyError, TypeError, ValueError):
+            parent = None
+        if parent is None or not endpoint:
+            log(f"{dev.name}: cannot find the switch this channel belongs to — "
+                f"nothing sent", level="ERROR")
+            return
+        fname = parent.pluginProps.get("friendly_name", "")
+        self._switch_command(cmd, dev, self._device_prefix(parent), fname,
+                             f"state_{endpoint}")
 
     def actionControlDimmer(self, action, dev):
         """Handle dimmer-class device actions (z2mLight and z2mCover)."""

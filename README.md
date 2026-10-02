@@ -2,7 +2,7 @@
 
 **Bring your Zigbee lights, plugs, sensors, blinds, locks and radiator valves into Indigo, through zigbee2mqtt.**
 
-**Version:** 2.11.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
+**Version:** 2.12.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
 
 **[Read the full guide](https://highsteads.github.io/Zigbee2MQTTBridge/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -56,11 +56,11 @@ The [full guide](https://highsteads.github.io/Zigbee2MQTTBridge/) goes through e
 
 ## What's new
 
+**v2.12.0** — Switches with two or more channels now work, with a device for each extra channel if you want one. Device Settings take a device's named choices, such as a Hue bulb's **previous** colour after a power cut.
+
 **v2.11.0** — Nine faults found by an independent review, all fixed. Separate devices no longer stop the original updating, a smoke alarm that also measures temperature is made as an alarm, **Refresh Device List from MQTT** works, and grouped device settings reach the device. The [version history](https://highsteads.github.io/Zigbee2MQTTBridge/changelog.html) lists all nine.
 
 **v2.10.0** — A device zigbee2mqtt reports offline now stays red in Indigo until zigbee2mqtt hears from it again. Before, the red could vanish within ten minutes while the device was still dead.
-
-**v2.9.0** — The **Update Device Firmware** action now asks which device to update, so it works in a schedule or an action group. The **Broker Port** in the plugin's settings is now used when the shared settings file has no port of its own.
 
 Every version is listed in the [version history](https://highsteads.github.io/Zigbee2MQTTBridge/changelog.html).
 

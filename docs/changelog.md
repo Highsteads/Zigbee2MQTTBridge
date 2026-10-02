@@ -7,6 +7,11 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.12.0 — 2 October 2026
+
+- **Switches with more than one channel now work.** A two-gang wall switch, such as a Tuya TS0002, used to come in as one device that never showed on or off, and whose On and Off went to whichever channel zigbee2mqtt chose. The device now follows and switches its first channel, and each other channel can have a device of its own from the **Separate Devices** section of its settings window.
+- **Device Settings take a device's named choices.** Where a device lists named values for a number, such as a Hue bulb's **previous** for the colour it comes back at after a power cut, you can type the name, and a value outside the ordinary range is accepted when it is one of those choices. The window lists them, and shows the name beside what the device reports.
+
 ## 2.11.0 — 2 October 2026
 
 Nine faults found by a second, independent review, all fixed. None of them was causing trouble in my house, but each would have caught somebody out.

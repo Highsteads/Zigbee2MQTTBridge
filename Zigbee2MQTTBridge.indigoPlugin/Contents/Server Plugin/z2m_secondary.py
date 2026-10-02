@@ -21,6 +21,7 @@
 from datetime import datetime
 
 import z2m_helpers
+from z2m_detection import _switch_layout
 
 try:
     import indigo  # noqa: F401  — injected by the plugin host at runtime
@@ -43,8 +44,27 @@ SECONDARY_TYPES = {
     "pressure":    ("z2mPressureSecondary",    "Pressure",    1, " hPa"),
 }
 
+# A further channel of a multi-channel switch (2.12.0). Its "reading" is
+# CHANNEL_PREFIX + the channel's endpoint name, e.g. "channel_l2".
+CHANNEL_TYPE_ID = "z2mRelayChannel"
+CHANNEL_PREFIX  = "channel_"
+
 # The secondary device type ids, for "is this itself a secondary?" checks.
-SECONDARY_TYPE_IDS = {t for t, _l, _d, _s in SECONDARY_TYPES.values()}
+SECONDARY_TYPE_IDS = ({t for t, _l, _d, _s in SECONDARY_TYPES.values()}
+                      | {CHANNEL_TYPE_ID})
+
+
+def channel_label(endpoint):
+    """How a channel is named to a person: l2 -> "L2", right -> "Right"."""
+    text = str(endpoint)
+    return text.upper() if len(text) <= 2 else text.title()
+
+
+def secondary_label(reading):
+    """The human label for a reading or a channel."""
+    if reading.startswith(CHANNEL_PREFIX):
+        return f"Channel {channel_label(reading[len(CHANNEL_PREFIX):])}"
+    return SECONDARY_TYPES[reading][1]
 
 
 def is_secondary(dev):
@@ -93,8 +113,25 @@ class SecondaryDevicesMixin:
                 if prop in SECONDARY_TYPES and (feature.get("access", 0) or 0) & 1:
                     reported.add(prop)
 
-        walk(((entry.get("definition") or {}).get("exposes")) or [])
-        return [r for r in SECONDARY_TYPES if r in reported]
+        exposes = ((entry.get("definition") or {}).get("exposes")) or []
+        walk(exposes)
+        offered = [r for r in SECONDARY_TYPES if r in reported]
+        if dev.deviceTypeId == "z2mRelay":
+            offered += [CHANNEL_PREFIX + ep for ep in _switch_layout(exposes)[1]]
+        return offered
+
+    def _relay_state_key(self, dev):
+        """The payload key this relay's own on/off lives under.
+
+        "state" for an ordinary switch; "state_l1" (its first channel) for a
+        multi-channel switch with no plain state (2.12.0). Read from the live
+        bridge cache, so it is "state" until zigbee2mqtt's device list has
+        arrived — which is also what was sent before 2.12.0.
+        """
+        ieee = (dev.ownerProps.get("ieee_address") or "").strip()
+        entry = self.bridge_devices.get(ieee) if ieee else None
+        exposes = (((entry or {}).get("definition") or {}).get("exposes")) or []
+        return _switch_layout(exposes)[0]
 
     @staticmethod
     def _secondary_key(reading):
@@ -125,7 +162,7 @@ class SecondaryDevicesMixin:
 
     def _create_secondary(self, dev, reading):
         """Create the secondary device and group it with its parent."""
-        type_id, label, _dp, _suffix = SECONDARY_TYPES[reading]
+        label = secondary_label(reading)
         name = f"{dev.name} [{label}]"
         # Indigo refuses a duplicate name, and a clash here is entirely
         # plausible — the user may already have a device called this.
@@ -134,25 +171,31 @@ class SecondaryDevicesMixin:
         while candidate in existing_names:
             candidate = f"{name} {n}"
             n += 1
+        props = {
+            "primary_device_id": str(dev.id),
+            "friendly_name": dev.ownerProps.get("friendly_name", ""),
+            "ieee_address": dev.ownerProps.get("ieee_address", ""),
+            "mqtt_prefix": dev.ownerProps.get("mqtt_prefix", ""),
+            "secondary_reading": reading,
+        }
+        if reading.startswith(CHANNEL_PREFIX):
+            type_id = CHANNEL_TYPE_ID
+            props["channel_endpoint"] = reading[len(CHANNEL_PREFIX):]
+        else:
+            type_id = SECONDARY_TYPES[reading][0]
+            # A native sensor only HAS sensorValue while this is True.
+            # Without it every write is silently dropped and the device
+            # shows nothing at all — the trap that left ShellyDirect's
+            # sensor values dead for months.
+            props["SupportsSensorValue"] = True
+            props["SupportsOnState"] = False
         try:
             new_dev = indigo.device.create(
                 protocol=indigo.kProtocol.Plugin,
                 name=candidate,
                 deviceTypeId=type_id,
                 folder=dev.folderId,
-                props={
-                    "primary_device_id": str(dev.id),
-                    "friendly_name": dev.ownerProps.get("friendly_name", ""),
-                    "ieee_address": dev.ownerProps.get("ieee_address", ""),
-                    "mqtt_prefix": dev.ownerProps.get("mqtt_prefix", ""),
-                    "secondary_reading": reading,
-                    # A native sensor only HAS sensorValue while this is True.
-                    # Without it every write is silently dropped and the device
-                    # shows nothing at all — the trap that left ShellyDirect's
-                    # sensor values dead for months.
-                    "SupportsSensorValue": True,
-                    "SupportsOnState": False,
-                },
+                props=props,
             )
         except Exception as e:
             self.exception_handler(e, log_failing_statement=True,
@@ -226,28 +269,49 @@ class SecondaryDevicesMixin:
 
     # ── Feeding them ─────────────────────────────────────────────────────────
 
+    def _live_secondary(self, dev, reading):
+        """The secondary device for this reading, or None.
+
+        One deleted behind our back is forgotten rather than warned about for
+        ever.
+        """
+        secondary_id = self._secondary_dev_id(dev, reading)
+        if not secondary_id:
+            return None
+        try:
+            return indigo.devices[secondary_id]
+        except KeyError:
+            with self.props_lock:
+                props = dict(dev.pluginProps)
+                props.pop(self._secondary_key(reading) + "_id", None)
+                props[self._secondary_key(reading)] = False
+                dev.replacePluginPropsOnServer(props)
+            return None
+
     def _route_to_secondaries(self, dev, payload):
         """Copy a parent's readings out to whichever secondaries exist."""
         if not isinstance(payload, dict):
             return
+        # Switch channels: state_<channel> -> that channel's own device (2.12.0).
+        for key, raw in payload.items():
+            if not (isinstance(key, str) and key.startswith("state_")) or raw is None:
+                continue
+            channel = self._live_secondary(dev, CHANNEL_PREFIX + key[len("state_"):])
+            if channel is None:
+                continue
+            on = str(raw).upper() == "ON"
+            self._apply_updates(channel, [
+                ("onOffState", on, "on" if on else "off"),
+                ("lastUpdate", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            ])
         for reading, (_type_id, label, dp, suffix) in SECONDARY_TYPES.items():
             if reading not in payload:
                 continue
             raw = payload.get(reading)
             if raw is None:
                 continue          # null is no reading, not a zero
-            secondary_id = self._secondary_dev_id(dev, reading)
-            if not secondary_id:
-                continue
-            try:
-                secondary = indigo.devices[secondary_id]
-            except KeyError:
-                # Deleted behind our back — forget it rather than warn for ever.
-                with self.props_lock:
-                    props = dict(dev.pluginProps)
-                    props.pop(self._secondary_key(reading) + "_id", None)
-                    props[self._secondary_key(reading)] = False
-                    dev.replacePluginPropsOnServer(props)
+            secondary = self._live_secondary(dev, reading)
+            if secondary is None:
                 continue
             try:
                 value = round(float(raw), dp) if dp else int(round(float(raw)))
@@ -282,14 +346,15 @@ class SecondaryDevicesMixin:
             parts = [
                 '\n    <Field id="z2mSecSep" type="separator"/>',
                 '    <Field id="z2mSecLabel" type="label" fontColor="darkgray">',
-                '        <Label>Separate Devices — this device also measures the '
-                'readings below. Tick one to give it its own Indigo device, '
-                'grouped with this one, so it appears as a proper sensor. This '
-                'device keeps everything it already has.</Label>',
+                '        <Label>Separate Devices — this device also has the '
+                'readings or switch channels below. Tick one to give it its own '
+                'Indigo device, grouped with this one, so it appears as a proper '
+                'sensor or switch. This device keeps everything it already '
+                'has.</Label>',
                 '    </Field>',
             ]
             for reading in offered:
-                _t, label, _dp, _s = SECONDARY_TYPES[reading]
+                label = secondary_label(reading)
                 parts.append(f'    <Field id="{self._secondary_key(reading)}" '
                              f'type="checkbox" defaultValue="false">')
                 parts.append(f'        <Label>{escape(label)}:</Label>')

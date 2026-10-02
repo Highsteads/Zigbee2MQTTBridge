@@ -166,6 +166,35 @@ def _detect_device_type(exposes, model=""):
     return "z2mSensor"
 
 
+def _switch_layout(exposes):
+    """(state key the device itself uses, channels that need their own device).
+
+    A multi-channel switch publishes one switch per channel, each with its
+    property suffixed by the channel: state_l1, state_l2 (zigbee-herdsman-
+    converters, Base.withEndpoint). Many — a Tuya TS0002 among them — have NO
+    plain `state` at all, so before 2.12.0 the device never showed on or off
+    and its On/Off went to whatever channel zigbee2mqtt picked as default.
+
+    With no plain state, the device follows its first channel and the rest
+    are offered as their own devices. With a plain state as well, the device
+    keeps it and every channel is offered.
+    """
+    channels, plain = [], False
+    for entry in exposes or []:
+        if entry.get("type") != "switch":
+            continue
+        endpoint = entry.get("endpoint")
+        if not endpoint:
+            plain = True
+        elif str(endpoint) not in channels:
+            channels.append(str(endpoint))
+    if not channels:
+        return "state", []
+    if plain:
+        return "state", channels
+    return f"state_{channels[0]}", channels[1:]
+
+
 def _detect_light_capabilities(exposes):
     """Return dict of capability flags for a z2mLight device."""
     has_color_temp = False

@@ -46,6 +46,8 @@ For wall switches, smart plugs and in-wall switch modules. It switches on and of
 
 A plug that measures power and energy also reports them into Indigo's own energy readings. Indigo's action to reset a device's energy total works too, even though the total itself lives on the plug: the plugin remembers the reading at the moment you reset it and counts on from there.
 
+A switch with two or more channels, such as a two-gang wall switch, comes in as one **Z2M Relay** that switches its first channel. Each further channel can have a device of its own — see [Separate devices](#separate-devices-for-extra-readings) below.
+
 ## Z2M Cover
 
 For blinds, curtains and shutters.
@@ -161,6 +163,8 @@ One for each zigbee2mqtt you run, made with **Plugins → Zigbee2MQTT Bridge →
 | **Last Event**, **Last Event Device**, **Last Event Time** | The last network event on this zigbee2mqtt — a device joining or leaving, say — which device it was about, and when. |
 
 ## Separate devices for extra readings
+
+The same goes for a switch with more than one channel. Its own device switches the first channel, and the section offers each of the others, such as **Channel L2**. Tick it and click **Save**, and the plugin makes a **Z2M Switch Channel** device, such as **Landing Switch [Channel L2]**, that switches on and off with Indigo's usual controls and follows that channel alone.
 
 A presence sensor that also measures temperature, humidity and light keeps all of it on one device. If you would rather have, say, its temperature as a proper Indigo temperature sensor — to show on a control page, or to offer to HomeKit — you can split it out.
 

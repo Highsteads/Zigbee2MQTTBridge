@@ -302,8 +302,13 @@ class StateProcessingMixin:
         """Update z2mRelay device states from MQTT payload."""
         updates = []
 
-        if "state" in payload:
-            updates.append(("onOffState", str(payload["state"]).upper() == "ON"))
+        # A multi-channel switch with no plain state follows its first channel
+        # (2.12.0); its other channels go to their own devices.
+        key = self._relay_state_key(dev)
+        if key not in payload:
+            key = "state"
+        if key in payload:
+            updates.append(("onOffState", str(payload[key]).upper() == "ON"))
 
         if "power" in payload:
             try:

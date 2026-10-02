@@ -5,9 +5,26 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0)
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0)
 # Date:        02-10-2026
-# Version:     2.11.0
+# Version:     2.12.0
+#
+# v2.12.0 (02-10-2026): the two improvements the 02-10-2026 review suggested.
+#   * MULTI-CHANNEL SWITCHES. zigbee-herdsman-converters suffixes each
+#     channel's property (state_l1, state_l2) and many such switches have no
+#     plain `state`, so a TS0002 never showed on/off and its On/Off went to
+#     zigbee2mqtt's default channel. z2m_detection._switch_layout() gives the
+#     key the device itself uses (state, or its first channel) and the
+#     channels that need their own device. Those are offered in the existing
+#     Separate Devices section and made as z2mRelayChannel (relay, grouped,
+#     is_secondary); commands go to the PARENT's current friendly_name as
+#     state_<channel>, looked up each time so a rename cannot strand them.
+#   * DECLARED PRESETS. A numeric expose's `presets` (Hue color_temp_startup
+#     `previous` = 65535, outside its 153-500 range) are accepted by name or
+#     value, listed in the dialog, and named beside the reported value.
+#   No hardware here for either: built from the real Hue fixture and zhc's
+#   Base.withEndpoint. tests/test_v2120_improvements.py 15 (13 fail on
+#   2.11.0, 2 are controls); 14-way mutation sweep all caught.
 #
 # v2.11.0 (02-10-2026): NINE FAULTS FROM AN INDEPENDENT REVIEW, each pinned by a
 #   test that fails on 2.10.0 (tests/test_v2110_fixes.py, 30 tests; an 18-way

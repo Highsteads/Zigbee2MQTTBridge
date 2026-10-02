@@ -1682,4 +1682,35 @@
         </States>
     </Device>
 
+    <!-- ================================================================
+         Z2M Switch Channel [Secondary]  (v2.12.0)
+         One channel of a multi-channel switch, such as a Tuya TS0002. The
+         parent device switches the first channel; each further channel can
+         be given a device of its own from the parent's Separate Devices
+         section. Commands go to the parent's zigbee2mqtt name as
+         state_<channel>.
+         ================================================================ -->
+    <Device type="relay" id="z2mRelayChannel" subType="indigo.kRelayDeviceSubType.Switch" allowUserCreation="false">
+        <Name>Z2M Switch Channel [Secondary]</Name>
+        <ConfigUI>
+            <Field id="primary_device_id" type="textfield" readonly="true" defaultValue="">
+                <Label>Parent Device Id:</Label>
+                <Description>The switch this channel belongs to. Untick the box on that device to stop using this one.</Description>
+            </Field>
+            <Field id="friendly_name" type="textfield" readonly="true" defaultValue="">
+                <Label>Friendly Name:</Label>
+            </Field>
+            <Field id="channel_endpoint" type="textfield" readonly="true" defaultValue="">
+                <Label>Channel:</Label>
+            </Field>
+        </ConfigUI>
+        <States>
+            <State id="lastUpdate">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Update Changed</TriggerLabel>
+                <ControlPageLabel>Last Update</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
 </Devices>
