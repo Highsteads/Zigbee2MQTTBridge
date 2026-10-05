@@ -180,9 +180,43 @@ def test_a_status_request_on_a_group_sends_nothing(plugin, make_device, make_act
     switch = _group_dev(plugin, make_device, type_id="z2mGroupRelay", dev_id=2428,
                         gid=12, name="Plugs")
     plugin.actionControlDevice(
-        make_action(deviceAction=indigo.kDimmerRelayAction.RequestStatus), light)
+        make_action(deviceAction=indigo.kDeviceAction.RequestStatus), light)
     plugin.actionControlDevice(
         make_action(deviceAction=indigo.kDeviceAction.RequestStatus), switch)
+    assert out == []
+    assert light.states["onOffState"] is True
+
+
+def test_a_group_light_takes_every_dimmer_action_without_raising(
+        plugin, make_device, make_action, monkeypatch):
+    """2.17.1: actionControlDimmer compared against kDimmerRelayAction.RequestStatus,
+    which Indigo does not have, so EVERY action on a group light raised
+    AttributeError. The stub now refuses that name as Indigo does."""
+    out = []
+    monkeypatch.setattr(plugin, "_publish", lambda t, p: out.append((t, p)) or True)
+    light = _group_dev(plugin, make_device, dev_id=2440)
+    for name in ("TurnOn", "TurnOff", "Toggle"):
+        plugin.actionControlDevice(
+            make_action(deviceAction=getattr(indigo.kDimmerRelayAction, name)), light)
+    plugin.actionControlDevice(
+        make_action(deviceAction=indigo.kDimmerRelayAction.SetBrightness,
+                    actionValue=50), light)
+    assert [p for _t, p in out] == [{"state": "ON"}, {"state": "OFF"}, {"state": "ON"},
+                                    {"brightness": 127, "state": "ON"}]
+
+
+def test_universal_status_request_on_a_group_seeds_it_and_sends_nothing(
+        plugin, make_device, make_action, monkeypatch):
+    out = []
+    monkeypatch.setattr(plugin, "_publish", lambda t, p: out.append((t, p)) or True)
+    _member(plugin, make_device, "0xa", "Lamp A", CT_BULB, 2450, on=True)
+    plugin.bridge_groups[PREFIX] = {10: _group(10, "Lounge Lamps", "0xa")}
+    light = _group_dev(plugin, make_device, dev_id=2451)
+    switch = _group_dev(plugin, make_device, type_id="z2mGroupRelay", dev_id=2452,
+                        gid=10, name="Plugs")
+    for dev in (light, switch):
+        plugin.actionControlUniversal(
+            make_action(deviceAction=indigo.kUniversalAction.RequestStatus), dev)
     assert out == []
     assert light.states["onOffState"] is True
 

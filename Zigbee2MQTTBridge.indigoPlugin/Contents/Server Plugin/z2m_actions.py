@@ -160,8 +160,10 @@ class ActionsMixin:
         """Handle dimmer-class device actions (z2mLight, z2mCover and, from
         v2.14.0, z2mGroupLight — a group takes the same /set as a bulb)."""
         cmd    = action.deviceAction
+        # action.deviceAction is a kDeviceAction; kDimmerRelayAction has no
+        # RequestStatus (2.17.1 — it raised AttributeError on every action).
         if (dev.deviceTypeId == "z2mGroupLight"
-                and cmd == indigo.kDimmerRelayAction.RequestStatus):
+                and cmd == indigo.kDeviceAction.RequestStatus):
             # A group has no state of its own to ask zigbee2mqtt for.
             self._seed_group_state(dev, announce=True)
             return
@@ -252,6 +254,12 @@ class ActionsMixin:
         cmd    = action.deviceAction
         fname  = dev.pluginProps.get("friendly_name", "")
         prefix = self._device_prefix(dev)
+
+        if (dev.deviceTypeId in ("z2mGroupLight", "z2mGroupRelay")
+                and cmd == indigo.kUniversalAction.RequestStatus):
+            # A group has no state of its own to ask zigbee2mqtt for (2.17.1).
+            self._seed_group_state(dev, announce=True)
+            return
 
         if cmd == indigo.kUniversalAction.RequestStatus:
             self._request_state(fname, dev.deviceTypeId, prefix, dev_props=dict(dev.pluginProps))

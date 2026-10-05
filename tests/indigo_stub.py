@@ -41,7 +41,28 @@ class _Enum:
 
 
 kDeviceAction        = _Enum("kDeviceAction")
-kDimmerRelayAction   = _Enum("kDimmerRelayAction")
+
+
+class _StrictEnum(_Enum):
+    """An _Enum that refuses names the real Indigo enum lacks, so a test fails
+    where Indigo would raise AttributeError (2.17.1: kDimmerRelayAction has no
+    RequestStatus, and the permissive stub let that through)."""
+
+    def __init__(self, namespace: str, members):
+        super().__init__(namespace)
+        self._members = frozenset(members)
+
+    def __getattr__(self, name: str) -> str:
+        if not name.startswith("_") and name not in self._members:
+            raise AttributeError(f"indigo.{self._namespace} has no {name}")
+        return super().__getattr__(name)
+
+
+# Live members of indigo.kDimmerRelayAction on Indigo 2025.2.0 (05-10-2026).
+kDimmerRelayAction   = _StrictEnum("kDimmerRelayAction",
+                                   ("TurnOn", "TurnOff", "Toggle", "SetBrightness",
+                                    "BrightenBy", "DimBy", "SetColorLevels",
+                                    "AllOff", "AllLightsOn", "AllLightsOff"))
 kSensorAction        = _Enum("kSensorAction")
 kUniversalAction     = _Enum("kUniversalAction")
 kThermostatAction    = _Enum("kThermostatAction")

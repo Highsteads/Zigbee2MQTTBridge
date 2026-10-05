@@ -5,9 +5,21 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0)
-# Date:        02-10-2026
-# Version:     2.17.0
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1)
+# Date:        05-10-2026
+# Version:     2.17.1
+#
+# v2.17.1 (05-10-2026): FIX: every action on a group light raised AttributeError.
+#   actionControlDimmer (z2m_actions.py) tested the action against
+#   indigo.kDimmerRelayAction.RequestStatus, which Indigo does not have
+#   (live on 2025.2.0: TurnOn..DimBy, SetColorLevels and the three All* only), and
+#   the test ran first for z2mGroupLight, so TurnOn, TurnOff, Toggle and
+#   SetBrightness all failed. action.deviceAction is a kDeviceAction, which does
+#   carry RequestStatus. Send Status Request through the universal handler
+#   (actionControlUniversal) now seeds a group from its members too, instead of
+#   sending the /get a group has no state to answer. tests/indigo_stub.py's
+#   kDimmerRelayAction now refuses names Indigo lacks, and
+#   tests/test_indigo_names_exist.py checks every indigo.* name in the bundle.
 #
 # v2.17.0 (02-10-2026): REPORT NETWORK MAP. New module z2m_network_map.py
 #   (NetworkMapMixin + pure summarise_network_map). Menu + plugin action send
