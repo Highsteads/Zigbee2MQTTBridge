@@ -10,8 +10,8 @@
 #              prove the pieces are wired together, so a routing change
 #              cannot quietly stop a dead leak sensor reaching its error state.
 #
-#              Also: reconnect re-subscribes every prefix, and one xfail for a
-#              gap found in review (no state refresh after a reconnect).
+#              Also: reconnect re-subscribes every prefix and (v2.18.0)
+#              re-requests device state.
 # Author:      CliveS & Claude
 # Date:        01-11-2026
 # Version:     1.0
@@ -167,14 +167,10 @@ def test_every_reconnect_resubscribes_every_prefix(plugin):
     assert plugin.mqtt_connected is True
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Review finding: after an MQTT reconnect (broker restart, network blip, "
-    "watchdog rebuild) nothing asks devices for their current state. "
-    "zigbee2mqtt does not retain device state by default, so a light or plug "
-    "switched during the outage keeps showing its old state until it next "
-    "reports. Only Mac wake (via deviceStartComm) re-requests."))
 def test_reconnect_asks_started_devices_for_their_state(plugin, make_device,
                                                         monkeypatch):
+    """Review finding 1, fixed in v2.18.0: zigbee2mqtt does not retain device
+    state by default, so a reconnect must ask mains devices again."""
     make_device(9102, "Hall Plug", "z2mRelay",
                 pluginProps={"friendly_name": "Hall Plug"})
     plugin.friendly_name_map[("zigbee2mqtt", "Hall Plug")] = 9102

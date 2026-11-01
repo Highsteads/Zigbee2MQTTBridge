@@ -7,6 +7,12 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.18.0 — 1 November 2026
+
+- **Devices say when the bridge is down.** If the plugin loses its connection to the MQTT broker, or zigbee2mqtt reports itself offline, for more than 3 minutes, every device on that bridge shows the error **bridge down**, because its states are only the last ones heard. Other plugins that watch for devices in error (such as a leak or device-health monitor) now see it. When the bridge returns the error goes; a device zigbee2mqtt had already reported offline stays **offline**. A short blip, or zigbee2mqtt restarting, does not set it off. Untick **Mark Devices When the Bridge Is Down** in Configure to turn this off.
+- **States refreshed after a reconnect.** zigbee2mqtt does not keep device states on the broker unless told to, so a light switched while the connection was down used to show its old state until it next reported. Mains-powered devices are now asked for their state each time the plugin connects. Battery devices are asleep and are left alone.
+- **MQTT Connected** — a new state on the coordinator device, true while the plugin is connected to the broker.
+
 ## 2.17.1 — 5 October 2026
 
 **Fix: group lights could not be switched from Indigo.** Turning a group light on or off, toggling it or setting its brightness failed with an error every time, because the plugin checked the action against a name Indigo does not have. It checks the right one now. **Send Status Request** on a group, from either route, works the group's state out from its members rather than asking zigbee2mqtt for a state a group does not have.

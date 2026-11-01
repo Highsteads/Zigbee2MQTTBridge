@@ -37,6 +37,7 @@ Open these with **Plugins → Zigbee2MQTT Bridge → Configure**. When you click
 | Setting | What it does |
 |---|---|
 | **Watchdog Silence Limit (s)** | How many seconds can pass with no message from the broker before the plugin checks the connection, and makes a new one if the check gets no answer. It is 300 — five minutes — to start with, and cannot be less than 60. Raise it on a small or quiet Zigbee network where several minutes can pass with no messages. [How it works](how-it-works.md) explains more. |
+| **Mark Devices When the Bridge Is Down** | If the plugin loses its connection to the MQTT broker, or zigbee2mqtt reports itself offline, for more than 3 minutes, every device on that bridge shows the error **bridge down** until it returns, because its states are then only the last ones heard. On to start with. |
 | **Log Routine Activity to the Event Log** | Every command the plugin sends, each status request, devices announcing themselves and the steps of connecting to the broker are written to the plugin's own log file. Tick this to see them in the Indigo Event Log as well. It is off to start with. Warnings and errors always appear in the Event Log whatever this is set to. |
 | **Show Debug Info in Event Log** | Adds a great deal of detail to the Event Log, including the routine activity above. Only useful when chasing a problem. |
 

@@ -2,7 +2,7 @@
 
 **Bring your Zigbee lights, plugs, sensors, blinds, locks and radiator valves into Indigo, through zigbee2mqtt.**
 
-**Version:** 2.17.1 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
+**Version:** 2.18.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
 
 **[Read the full guide](https://highsteads.github.io/Zigbee2MQTTBridge/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -57,6 +57,8 @@ You need zigbee2mqtt already set up and working, with its messages going to an M
 The [full guide](https://highsteads.github.io/Zigbee2MQTTBridge/) goes through each step, explains every setting, and covers what to do if something does not work.
 
 ## What's new
+
+**v2.18.0** — If the plugin loses its connection to the MQTT broker, or zigbee2mqtt goes offline, for more than 3 minutes, every device on that bridge now shows the error **bridge down** instead of looking healthy. After a reconnect, mains devices are asked for their current state. The coordinator device has a new **MQTT Connected** state.
 
 **v2.17.1** — Fixes switching a Zigbee group light from Indigo, which failed with an error every time.
 

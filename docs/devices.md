@@ -15,7 +15,7 @@ Every Zigbee device, whatever its kind, carries these:
 
 | Shown as | What it means |
 |---|---|
-| **Availability** | **Online** or **Offline**, as zigbee2mqtt reports it. When zigbee2mqtt says a device is offline, the device also turns red in Indigo's device list, and the Event Log says so. It clears by itself when the device is heard from again. |
+| **Availability** | **Online** or **Offline**, as zigbee2mqtt reports it. When zigbee2mqtt says a device is offline, the device also turns red in Indigo's device list, and the Event Log says so. It clears by itself when the device is heard from again. If the plugin cannot hear zigbee2mqtt at all for more than 3 minutes, the device shows **bridge down** instead, until the bridge returns. |
 | **Link Quality** | How well the device's radio signal is coming through, from 0 to 255. Higher is better. |
 | **LastSeen** | The date and time zigbee2mqtt last heard from the device, if zigbee2mqtt is set to report it. |
 | **Messages / sec**, **Leave Count**, **Network Address Changes** | Figures from zigbee2mqtt's health report, which it sends every ten minutes. Leave Count goes up when a device drops off the network and joins again, and Network Address Changes when it takes a new place in the network. Both count from when zigbee2mqtt last started. |
@@ -167,6 +167,7 @@ One for each zigbee2mqtt you run, made with **Plugins → Zigbee2MQTT Bridge →
 | Shown as | What it means |
 |---|---|
 | **Status** | Whether zigbee2mqtt is online. |
+| **MQTT Connected** | Whether the plugin is connected to the MQTT broker. While it is false, everything else here is the last value heard. |
 | **Z2M Version**, **Coordinator Type** | The version of zigbee2mqtt and the kind of Zigbee radio it runs. |
 | **Permit Join**, **Permit Join End** | Whether pairing is open, and when it closes. |
 | **Network Channel**, **PAN ID**, **Extended PAN ID** | The radio channel and identity of your Zigbee network. |

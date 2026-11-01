@@ -1444,6 +1444,13 @@
                 <TriggerLabel>Last Update Changed</TriggerLabel>
                 <ControlPageLabel>Last Update</ControlPageLabel>
             </State>
+            <!-- v2.18.0: the plugin's own connection to the MQTT broker. While
+                 it is False, every other state here is the last one heard. -->
+            <State id="mqttConnected">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>MQTT Broker Connected Changed</TriggerLabel>
+                <ControlPageLabel>MQTT Connected</ControlPageLabel>
+            </State>
 
             <!-- Health, from the bridge/health topic (v2.1.0).  zigbee2mqtt
                  publishes this every 10 minutes by default, so treat every

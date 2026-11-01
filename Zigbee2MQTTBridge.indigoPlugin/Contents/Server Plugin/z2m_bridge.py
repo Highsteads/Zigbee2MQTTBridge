@@ -74,6 +74,13 @@ class BridgeMixin:
             # if it does not come.
             prefixes = [s[:-2] for s in (subscribed or []) if s.endswith("/#")]
             self._await_device_list(prefixes)
+            # zigbee2mqtt does not retain device state by default, so anything
+            # that changed while we were disconnected is unknown. Ask every
+            # mains device again (v2.18.0); battery devices are asleep.
+            asked = self._refresh_after_connect(prefixes)
+            if asked:
+                log_activity(self, f"Asked {asked} mains device(s) for their "
+                                   f"current state after connecting")
             return
         if topic == "__disconnected__":
             rc = payload.get("rc", "?")
@@ -457,6 +464,7 @@ class BridgeMixin:
             return
         self._bridge_state_cache[prefix] = state
         self._update_coordinator(prefix, status=state)
+        self._note_bridge_state(prefix, state)   # outage clock (v2.18.0)
 
         # Raise the bridge events on a CHANGE only (v2.1.0).  bridge/state is
         # retained, so it replays on every reconnect — firing on each arrival

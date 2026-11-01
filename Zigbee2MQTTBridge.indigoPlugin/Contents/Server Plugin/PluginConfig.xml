@@ -68,6 +68,12 @@
     <Field id="label_mqtt_silence_limit_info" type="label">
         <Label>Seconds of MQTT silence before the liveness watchdog probes (and, if unanswered, rebuilds) the connection. Raise this on a small/quiet Zigbee network. Minimum 60.</Label>
     </Field>
+    <Field id="markDevicesWhenBridgeDown" type="checkbox" defaultValue="true">
+        <Label>Mark Devices When the Bridge Is Down</Label>
+    </Field>
+    <Field id="label_markDevicesWhenBridgeDown_info" type="label">
+        <Label>On by default. If the MQTT broker connection is lost, or zigbee2mqtt reports itself offline, for more than 3 minutes, every device on that bridge shows the error "bridge down" until it returns, because its states are then only the last ones heard. Untick to leave devices as they are.</Label>
+    </Field>
     <Field id="logActivityToEventLog" type="checkbox" defaultValue="false">
         <Label>Log Routine Activity to the Event Log</Label>
     </Field>

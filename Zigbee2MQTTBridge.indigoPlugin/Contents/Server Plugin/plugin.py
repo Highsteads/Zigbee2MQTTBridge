@@ -5,9 +5,27 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1)
-# Date:        05-10-2026
-# Version:     2.17.1
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0)
+# Date:        01-11-2026
+# Version:     2.18.0
+#
+# v2.18.0 (01-11-2026): SAY WHEN ZIGBEE2MQTT CANNOT BE HEARD; REFRESH ON RECONNECT.
+#   New module z2m_link_health.py (LinkHealthMixin), from the 01-11-2026 review.
+#   * A lost broker connection, or bridge/state "offline", for LINK_DOWN_GRACE
+#     (180 s) puts every device routed through that prefix in the Indigo error
+#     "bridge down" — before, every device went on showing its last state as
+#     if live and no other plugin could tell. The link returning lifts only the
+#     marks set here: a device whose availability last read "offline" goes back
+#     to "offline". An existing "offline" error is never overwritten, and a
+#     coordinator is never given an error. Pref markDevicesWhenBridgeDown
+#     (default on). wake_up restarts the clocks so sleep is not an outage.
+#   * Coordinator state mqttConnected follows the broker link immediately.
+#   * __connected__ now asks every started mains device (power_source mains, or
+#     a light/relay/cover with none recorded) for its state: zigbee2mqtt does
+#     not retain device state by default, so changes during an outage were
+#     lost until the device next reported. Battery devices and groups skipped.
+#   tests/test_v2180_link_health.py; the reconnect xfail in
+#   tests/test_leak_sensor_health_contract.py now passes.
 #
 # v2.17.1 (05-10-2026): FIX: every action on a group light raised AttributeError.
 #   actionControlDimmer (z2m_actions.py) tested the action against
@@ -1026,6 +1044,7 @@ from z2m_actions import ActionsMixin
 from z2m_bridge import BridgeMixin
 from z2m_bridge_tools import BridgeToolsMixin
 from z2m_groups import GroupsMixin, is_group
+from z2m_link_health import LinkHealthMixin
 from z2m_scenes import ScenesMixin
 from z2m_network_map import NetworkMapMixin
 from z2m_device_states import DeviceStatesMixin
@@ -1069,6 +1088,7 @@ class Plugin(
     BridgeToolsMixin,
     DeviceStatesMixin,
     GroupsMixin,
+    LinkHealthMixin,
     MenusMixin,
     MqttMixin,
     NativeAttributesMixin,
@@ -1255,6 +1275,9 @@ class Plugin(
         # Last seen restart_required per prefix — same rising-edge reasoning.
         self._bridge_info_previous = {}  # type: dict[str, bool]
 
+        # Broker / bridge outage tracking and the "bridge down" marks (v2.18.0).
+        self._init_link_health()
+
         # Startup banner moved to showPluginInfo on demand (revised 25-May-2026 per Jay).
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -1288,6 +1311,8 @@ class Plugin(
         # watchdog sees the pre-sleep last_rx_ts (potentially hours old) and tears
         # the just-rebuilt client straight back down on the next check.
         self.last_rx_ts = time.time()
+        # Likewise the outage clocks: time asleep is not an outage (v2.18.0).
+        self._restart_link_clocks()
         # MQTT FIRST, then super() (which restarts device comm): the settle-delay
         # /get requests deviceStartComm schedules used to race the reconnect and
         # die on a not-yet-connected client (v1.9.23).
@@ -1334,6 +1359,10 @@ class Plugin(
             self._check_bridge_requests()
         except Exception as e:
             log(f"bridge request check error: {e}", level="ERROR")
+        try:
+            self._check_link_health()
+        except Exception as e:
+            log(f"link health check error: {e}", level="ERROR")
 
     # NB: no stopConcurrentThread override — the base implementation sets
     # stopThread AND writes the wake pipe so self.sleep() returns instantly.
@@ -1440,7 +1469,10 @@ class Plugin(
             # v2.1.0 added the health and lastEvent states — register them
             # before anything tries to write one.
             dev = self._refresh_state_list_if_missing(
-                dev, self._V210_COORDINATOR_STATES + self._V213_COORDINATOR_STATES)
+                dev, self._V210_COORDINATOR_STATES + self._V213_COORDINATOR_STATES
+                + self._V218_COORDINATOR_STATES)
+            # Write mqttConnected afresh on the next link check (v2.18.0).
+            self._coord_mqtt_shown.pop(prefix, None)
             self._ensure_device_states(dev)
             self._publish_offline_count(prefix)
             # If we already have a cached bridge/info or bridge/state for this
