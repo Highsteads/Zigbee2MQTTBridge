@@ -7,6 +7,10 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.20.1 — 1 November 2026
+
+**Fix: a device that was already offline could stay green after a restart.** When the plugin starts, the broker sends zigbee2mqtt's last word on every device straight away, and it could arrive before Indigo had started that device. The plugin then ignored it, so a sensor that had died — a leak sensor with a flat battery, say — stayed green, because zigbee2mqtt does not say it again until something changes. The plugin now remembers what it heard and applies it as each device starts. A new device made with **Discover & Create Devices** also shows whether it is online straight away.
+
 ## 2.20.0 — 1 November 2026
 
 - **Battery readings with a decimal point are no longer lost.** A device that sent its battery as text such as "87.5" had the reading skipped. Every device now reads battery the same way: rounded to a whole percentage and kept between 0 and 100. The **Battery** state and Indigo's own battery level now always match.

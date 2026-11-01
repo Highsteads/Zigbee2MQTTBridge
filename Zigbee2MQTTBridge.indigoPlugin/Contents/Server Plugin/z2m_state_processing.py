@@ -45,18 +45,29 @@ def log(*args, **kwargs):
 class StateProcessingMixin:
     """See the file header above."""
 
-    def _process_availability(self, friendly_name, payload, prefix=None):
+    def _process_availability(self, friendly_name, payload, prefix=None,
+                              replayed=False):
         """Handle availability message — update the 'availability' state.
         Lookup is prefix-qualified (v1.9.22) so a name shared across the two
-        bridges resolves to the right device."""
+        bridges resolves to the right device.
+
+        v2.20.1: the verdict is remembered for EVERY name, known or not, and
+        replayed by deviceStartComm (_replay_cached_availability). A report
+        that arrives before Indigo has started the device — the retained
+        replay at startup, or one for a device Discover & Create has not made
+        yet — used to be dropped here, so a sensor already dead at restart
+        stayed green until zigbee2mqtt's verdict next CHANGED, which for a
+        dead sensor is never. `replayed` keeps that replay from firing the
+        offline-count trigger, as a retained message would not."""
         if prefix is None:
             prefix = self._topic_prefix()
+        state = payload.get("state", "offline") if isinstance(payload, dict) else str(payload)
+        self._availability_cache[(prefix, friendly_name)] = state
         dev_id = self.friendly_name_map.get((prefix, friendly_name))
         if dev_id is None:
             return
         try:
             dev   = indigo.devices[dev_id]
-            state = payload.get("state", "offline") if isinstance(payload, dict) else str(payload)
             dev.updateStateOnServer("availability", state, uiValue=state.capitalize(),
                                     clearErrorState=False)
 
@@ -105,13 +116,24 @@ class StateProcessingMixin:
                 self.exception_handler(e, log_failing_statement=True,
                                        context=f"error state for '{dev.name}'")
 
-            self._note_availability(dev, prefix, is_online)
+            self._note_availability(dev, prefix, is_online, replayed=replayed)
 
             if self.debug:
                 log(f"{dev.name}: availability = {state}")
         except Exception as e:
             self.exception_handler(e, log_failing_statement=True,
                                    context=f"availability update for '{friendly_name}'")
+
+    def _replay_cached_availability(self, dev, prefix, fname):
+        """deviceStartComm: apply the last availability heard for this device,
+        if it came before the device was routed (v2.20.1). Reads the cache at
+        call time, so a report that lands meanwhile is never overwritten by an
+        older one."""
+        state = self._availability_cache.get((prefix, fname))
+        if state is None:
+            return
+        self._process_availability(fname, {"state": state}, prefix=prefix,
+                                   replayed=True)
 
     def _process_device_state(self, friendly_name, payload, prefix=None):
         """Dispatch a device state payload to the type-specific handler.

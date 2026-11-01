@@ -457,7 +457,7 @@ class BridgeToolsMixin:
 
     # ── Offline devices per bridge ───────────────────────────────────────────
 
-    def _note_availability(self, dev, prefix, online):
+    def _note_availability(self, dev, prefix, online, replayed=False):
         """Keep each bridge's set of offline devices, and say when it changes.
 
         A group is not a device: zigbee2mqtt calls it offline only when every
@@ -473,7 +473,9 @@ class BridgeToolsMixin:
             offline.add(dev.id)
         if len(offline) != before:
             self._publish_offline_count(prefix)
-            if not self._current_retained:
+            # A retained message, or a cached verdict replayed at device start
+            # (v2.20.1), is not news.
+            if not self._current_retained and not replayed:
                 self._fire_event("offlineCountChanged", prefix, dev.name)
 
     def _forget_offline(self, dev):

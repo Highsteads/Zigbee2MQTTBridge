@@ -5,9 +5,21 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0, 2.19.0, 2.20.0)
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0, 2.19.0, 2.20.0, 2.20.1)
 # Date:        01-11-2026
-# Version:     2.20.0
+# Version:     2.20.1
+#
+# v2.20.1 (01-11-2026): FIX: an availability report heard before its device was
+#   started was dropped (review finding 4). _process_availability returned at
+#   the friendly_name_map lookup, so the retained replay at startup — or a
+#   report for a device Discover & Create had not made yet — was lost, and a
+#   sensor already dead stayed green until zigbee2mqtt's verdict next CHANGED
+#   (for a dead sensor, never). Every verdict is now kept in
+#   _availability_cache[(prefix, fname)] and replayed by deviceStartComm and
+#   _start_group (_replay_cached_availability). replayed=True keeps the replay
+#   from firing offlineCountChanged, passed explicitly rather than through
+#   _current_retained because deviceStartComm runs on another thread.
+#   tests/test_v2201_availability_before_start.py.
 #
 # v2.20.0 (01-11-2026): BATTERY AND ALARM PARSING (review findings 5 and 6).
 #   * Battery: the eight handlers that read `battery` used int(raw), which
@@ -1278,6 +1290,10 @@ class Plugin(
         # deviceStartComm so the freshly created device picks up online/offline.
         self._bridge_state_cache = {}  # type: dict[str, str]
 
+        # Last availability verdict per (prefix, friendly_name), for devices
+        # known OR NOT YET started — replayed at deviceStartComm (v2.20.1).
+        self._availability_cache = {}  # type: dict[tuple[str, str], str]
+
         # Per-device motion component states for occupancy sensors.
         # Stores last known bool for each motion-related key the device has ever sent
         # (motion, occupancy, presence, pir, ...).  Partial payloads only update the
@@ -1583,6 +1599,11 @@ class Plugin(
         self._ensure_device_states(dev)
 
         self._keep_churn_out_of_sql_logger(dev)
+
+        # An availability report that arrived before this device was routed
+        # was dropped until v2.20.1 — a sensor already dead at restart stayed
+        # green. Apply it now that the device exists and is routed.
+        self._replay_cached_availability(dev, self._device_prefix(dev), fname)
 
         # displayStateId is cached on the device record at create time and is
         # read-only on existing instances — only fix for a stale value after a
