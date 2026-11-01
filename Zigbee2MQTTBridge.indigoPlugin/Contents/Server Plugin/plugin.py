@@ -5,9 +5,20 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0, 2.19.0, 2.20.0, 2.20.1)
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0, 2.19.0, 2.20.0, 2.20.1, 2.20.2)
 # Date:        01-11-2026
-# Version:     2.20.1
+# Version:     2.20.2
+#
+# v2.20.2 (01-11-2026): FIX: a "bridge down" error could outlive a restart.
+#   2.18.0 records the devices it marks in _link_marked, which is in memory, so
+#   a mark left by the previous run (plugin or Indigo restarted mid-outage) was
+#   unknown to _clear_link_down and never lifted when zigbee2mqtt's
+#   availability was off. Water Leak Monitor ignores a sensor in error, so leak
+#   watching stopped for good. deviceStartComm and _start_group now call
+#   _clear_leftover_link_mark (z2m_link_health.py) BEFORE the cached
+#   availability replay, so "offline" still wins where zigbee2mqtt says so; a
+#   mark this session set is left to the link check. Found in the Water Leak
+#   Monitor review. tests/test_v2202_leftover_bridge_down.py.
 #
 # v2.20.1 (01-11-2026): FIX: an availability report heard before its device was
 #   started was dropped (review finding 4). _process_availability returned at
@@ -1603,6 +1614,9 @@ class Plugin(
         # An availability report that arrived before this device was routed
         # was dropped until v2.20.1 — a sensor already dead at restart stayed
         # green. Apply it now that the device exists and is routed.
+        # First lift a "bridge down" left by a previous run (v2.20.2), so the
+        # replay can put "offline" back where zigbee2mqtt says so.
+        self._clear_leftover_link_mark(dev)
         self._replay_cached_availability(dev, self._device_prefix(dev), fname)
 
         # displayStateId is cached on the device record at create time and is

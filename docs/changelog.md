@@ -7,6 +7,10 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.20.2 — 1 November 2026
+
+**Fix: a "bridge down" error could stay on a device for good.** If the plugin or Indigo restarted while devices showed **bridge down**, the error could stay after the bridge was back, because the plugin only remembered which devices it had marked while it was running. With availability turned off in zigbee2mqtt, nothing else cleared it — and a leak monitor that ignores sensors in error would stop watching. Each device now loses a leftover **bridge down** when it starts. If the bridge really is still down, it shows **bridge down** again after 3 minutes.
+
 ## 2.20.1 — 1 November 2026
 
 **Fix: a device that was already offline could stay green after a restart.** When the plugin starts, the broker sends zigbee2mqtt's last word on every device straight away, and it could arrive before Indigo had started that device. The plugin then ignored it, so a sensor that had died — a leak sensor with a flat battery, say — stayed green, because zigbee2mqtt does not say it again until something changes. The plugin now remembers what it heard and applies it as each device starts. A new device made with **Discover & Create Devices** also shows whether it is online straight away.

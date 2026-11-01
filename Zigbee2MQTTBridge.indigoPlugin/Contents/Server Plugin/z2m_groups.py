@@ -301,6 +301,7 @@ class GroupsMixin:
         self._keep_churn_out_of_sql_logger(dev)
         self._seed_group_state(dev)
         # A group's availability can arrive before it is started (v2.20.1).
+        self._clear_leftover_link_mark(dev)   # v2.20.2
         self._replay_cached_availability(dev, self._device_prefix(dev), fname)
 
     def _seed_group_state(self, dev, announce=False):
