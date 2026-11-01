@@ -7,6 +7,26 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.20.1 — 1 November 2026
+
+**Fix: a device that was already offline could stay green after a restart.** When the plugin starts, the broker sends zigbee2mqtt's last word on every device straight away, and it could arrive before Indigo had started that device. The plugin then ignored it, so a sensor that had died — a leak sensor with a flat battery, say — stayed green, because zigbee2mqtt does not say it again until something changes. The plugin now remembers what it heard and applies it as each device starts. A new device made with **Discover & Create Devices** also shows whether it is online straight away.
+
+## 2.20.0 — 1 November 2026
+
+- **Battery readings with a decimal point are no longer lost.** A device that sent its battery as text such as "87.5" had the reading skipped. Every device now reads battery the same way: rounded to a whole percentage and kept between 0 and 100. The **Battery** state and Indigo's own battery level now always match.
+- **An empty leak or smoke report no longer cancels an alarm.** If a leak sensor or smoke alarm ever sent an empty value, the plugin read it as "all clear". It now ignores it and keeps the last real reading.
+
+## 2.19.0 — 1 November 2026
+
+- **A warning when zigbee2mqtt is not tracking availability.** The plugin only knows a device has died — a leak sensor with a flat battery, say — because zigbee2mqtt reports it offline, and zigbee2mqtt only does that when its **Availability** setting is on. The plugin now reads that setting and warns in the Event Log if it is off. If zigbee2mqtt does not say, and no availability reports have arrived 10 minutes after connecting, it warns that availability is probably off. **Test MQTT Connection** lists it as a problem too.
+- **Availability Tracking** and **Battery Device Offline After** — two new states on the coordinator device. The second is how long zigbee2mqtt lets a battery device stay silent before calling it offline, for example **25 h**.
+
+## 2.18.0 — 1 November 2026
+
+- **Devices say when the bridge is down.** If the plugin loses its connection to the MQTT broker, or zigbee2mqtt reports itself offline, for more than 3 minutes, every device on that bridge shows the error **bridge down**, because its states are only the last ones heard. Other plugins that watch for devices in error (such as a leak or device-health monitor) now see it. When the bridge returns the error goes; a device zigbee2mqtt had already reported offline stays **offline**. A short blip, or zigbee2mqtt restarting, does not set it off. Untick **Mark Devices When the Bridge Is Down** in Configure to turn this off.
+- **States refreshed after a reconnect.** zigbee2mqtt does not keep device states on the broker unless told to, so a light switched while the connection was down used to show its old state until it next reported. Mains-powered devices are now asked for their state each time the plugin connects. Battery devices are asleep and are left alone.
+- **MQTT Connected** — a new state on the coordinator device, true while the plugin is connected to the broker.
+
 ## 2.17.1 — 5 October 2026
 
 **Fix: group lights could not be switched from Indigo.** Turning a group light on or off, toggling it or setting its brightness failed with an error every time, because the plugin checked the action against a name Indigo does not have. It checks the right one now. **Send Status Request** on a group, from either route, works the group's state out from its members rather than asking zigbee2mqtt for a state a group does not have.

@@ -2,7 +2,7 @@
 
 **Bring your Zigbee lights, plugs, sensors, blinds, locks and radiator valves into Indigo, through zigbee2mqtt.**
 
-**Version:** 2.17.1 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
+**Version:** 2.20.1 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
 
 **[Read the full guide](https://highsteads.github.io/Zigbee2MQTTBridge/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -57,6 +57,14 @@ You need zigbee2mqtt already set up and working, with its messages going to an M
 The [full guide](https://highsteads.github.io/Zigbee2MQTTBridge/) goes through each step, explains every setting, and covers what to do if something does not work.
 
 ## What's new
+
+**v2.20.1** — A device zigbee2mqtt already reports offline when Indigo or the plugin restarts now shows its error straight away, instead of staying green.
+
+**v2.20.0** — Battery readings sent with a decimal point are no longer lost, and an empty leak or smoke report can no longer cancel an alarm.
+
+**v2.19.0** — Warns you if availability is turned off in zigbee2mqtt. Without it a device that stops responding, such as a leak sensor with a flat battery, is never reported offline. The coordinator device shows whether it is on, and how long a battery device can be silent before it counts as offline.
+
+**v2.18.0** — If the plugin loses its connection to the MQTT broker, or zigbee2mqtt goes offline, for more than 3 minutes, every device on that bridge now shows the error **bridge down** instead of looking healthy. After a reconnect, mains devices are asked for their current state. The coordinator device has a new **MQTT Connected** state.
 
 **v2.17.1** — Fixes switching a Zigbee group light from Indigo, which failed with an error every time.
 

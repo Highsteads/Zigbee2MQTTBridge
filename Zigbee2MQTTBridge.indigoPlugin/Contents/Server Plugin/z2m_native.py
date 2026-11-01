@@ -198,6 +198,8 @@ class NativeAttributesMixin:
                                 "lastEvent")
     # v2.13.0: offline count, missing routers, last backup.
     _V213_COORDINATOR_STATES = ("offlineDevices", "missingRouters", "lastBackup")
+    # v2.18.0: whether the plugin is connected to the MQTT broker.
+    _V218_COORDINATOR_STATES = ("mqttConnected",)
 
     def _refresh_state_list_if_missing(self, dev, required_keys):
         """Re-register the device's state list when a declared state is absent.

@@ -5,9 +5,67 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1)
-# Date:        05-10-2026
-# Version:     2.17.1
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0, 2.19.0, 2.20.0, 2.20.1)
+# Date:        01-11-2026
+# Version:     2.20.1
+#
+# v2.20.1 (01-11-2026): FIX: an availability report heard before its device was
+#   started was dropped (review finding 4). _process_availability returned at
+#   the friendly_name_map lookup, so the retained replay at startup — or a
+#   report for a device Discover & Create had not made yet — was lost, and a
+#   sensor already dead stayed green until zigbee2mqtt's verdict next CHANGED
+#   (for a dead sensor, never). Every verdict is now kept in
+#   _availability_cache[(prefix, fname)] and replayed by deviceStartComm and
+#   _start_group (_replay_cached_availability). replayed=True keeps the replay
+#   from firing offlineCountChanged, passed explicitly rather than through
+#   _current_retained because deviceStartComm runs on another thread.
+#   tests/test_v2201_availability_before_start.py.
+#
+# v2.20.0 (01-11-2026): BATTERY AND ALARM PARSING (review findings 5 and 6).
+#   * Battery: the eight handlers that read `battery` used int(raw), which
+#     dropped a reading sent as text with a decimal ("87.5" -> ValueError ->
+#     skipped) and let True through as 1%. New _payload_battery
+#     (z2m_state_processing.py) uses the native mirror's _coerce_battery_percent
+#     (rounded, clamped 0-100, bools/junk rejected), so `battery` and
+#     `batteryLevel` always agree. Readings are now ROUNDED, not truncated
+#     (87.6 -> 88, was 87), and clamped (120 -> 100).
+#   * Alarms: new z2m_helpers._alarm_bool — _payload_bool, except "" is unknown.
+#     water_leak (leak sensor + generic sensor) and smoke use it, so an empty
+#     value no longer reads as "all clear" and cancels a standing alarm.
+#     _payload_bool is unchanged: Configure checkboxes rely on "" -> False.
+#   tests/test_v2200_battery_and_alarm_parsing.py.
+#
+# v2.19.0 (01-11-2026): SAY WHEN ZIGBEE2MQTT'S AVAILABILITY TRACKING IS OFF.
+#   New module z2m_availability_config.py (AvailabilityConfigMixin), review
+#   finding 3. The "offline" error comes ONLY from <device>/availability; with
+#   availability off in zigbee2mqtt a dead device stayed green and nothing said
+#   why. bridge/info config.availability is now read tolerantly (1.x bool or
+#   object; 2.x {"enabled", "passive": {"timeout": minutes}}; anything else =
+#   unknown, never guessed). Off -> one WARNING per prefix per session. Unknown
+#   -> WARNING if no availability message has arrived AVAILABILITY_WAIT (600 s)
+#   after connecting while the bridge is online and has devices; a later
+#   message withdraws it. New coordinator states availabilityTracking (enabled
+#   / some devices / disabled / probably off / unknown) and batteryOfflineAfter
+#   ("25 h"); Test MQTT Connection lists availability off as a problem.
+#   tests/test_v2190_availability_config.py.
+#
+# v2.18.0 (01-11-2026): SAY WHEN ZIGBEE2MQTT CANNOT BE HEARD; REFRESH ON RECONNECT.
+#   New module z2m_link_health.py (LinkHealthMixin), from the 01-11-2026 review.
+#   * A lost broker connection, or bridge/state "offline", for LINK_DOWN_GRACE
+#     (180 s) puts every device routed through that prefix in the Indigo error
+#     "bridge down" — before, every device went on showing its last state as
+#     if live and no other plugin could tell. The link returning lifts only the
+#     marks set here: a device whose availability last read "offline" goes back
+#     to "offline". An existing "offline" error is never overwritten, and a
+#     coordinator is never given an error. Pref markDevicesWhenBridgeDown
+#     (default on). wake_up restarts the clocks so sleep is not an outage.
+#   * Coordinator state mqttConnected follows the broker link immediately.
+#   * __connected__ now asks every started mains device (power_source mains, or
+#     a light/relay/cover with none recorded) for its state: zigbee2mqtt does
+#     not retain device state by default, so changes during an outage were
+#     lost until the device next reported. Battery devices and groups skipped.
+#   tests/test_v2180_link_health.py; the reconnect xfail in
+#   tests/test_leak_sensor_health_contract.py now passes.
 #
 # v2.17.1 (05-10-2026): FIX: every action on a group light raised AttributeError.
 #   actionControlDimmer (z2m_actions.py) tested the action against
@@ -1023,9 +1081,11 @@ def log_activity(*args, **kwargs):
 
 
 from z2m_actions import ActionsMixin
+from z2m_availability_config import AvailabilityConfigMixin
 from z2m_bridge import BridgeMixin
 from z2m_bridge_tools import BridgeToolsMixin
 from z2m_groups import GroupsMixin, is_group
+from z2m_link_health import LinkHealthMixin
 from z2m_scenes import ScenesMixin
 from z2m_network_map import NetworkMapMixin
 from z2m_device_states import DeviceStatesMixin
@@ -1065,10 +1125,12 @@ def merge_sql_logger_ignore(existing, extra=SQL_LOGGER_CHURN_STATES):
 
 class Plugin(
     ActionsMixin,
+    AvailabilityConfigMixin,
     BridgeMixin,
     BridgeToolsMixin,
     DeviceStatesMixin,
     GroupsMixin,
+    LinkHealthMixin,
     MenusMixin,
     MqttMixin,
     NativeAttributesMixin,
@@ -1228,6 +1290,10 @@ class Plugin(
         # deviceStartComm so the freshly created device picks up online/offline.
         self._bridge_state_cache = {}  # type: dict[str, str]
 
+        # Last availability verdict per (prefix, friendly_name), for devices
+        # known OR NOT YET started — replayed at deviceStartComm (v2.20.1).
+        self._availability_cache = {}  # type: dict[tuple[str, str], str]
+
         # Per-device motion component states for occupancy sensors.
         # Stores last known bool for each motion-related key the device has ever sent
         # (motion, occupancy, presence, pir, ...).  Partial payloads only update the
@@ -1254,6 +1320,11 @@ class Plugin(
 
         # Last seen restart_required per prefix — same rising-edge reasoning.
         self._bridge_info_previous = {}  # type: dict[str, bool]
+
+        # Broker / bridge outage tracking and the "bridge down" marks (v2.18.0).
+        self._init_link_health()
+        # Is zigbee2mqtt's availability tracking on? (v2.19.0)
+        self._init_availability_config()
 
         # Startup banner moved to showPluginInfo on demand (revised 25-May-2026 per Jay).
 
@@ -1288,6 +1359,8 @@ class Plugin(
         # watchdog sees the pre-sleep last_rx_ts (potentially hours old) and tears
         # the just-rebuilt client straight back down on the next check.
         self.last_rx_ts = time.time()
+        # Likewise the outage clocks: time asleep is not an outage (v2.18.0).
+        self._restart_link_clocks()
         # MQTT FIRST, then super() (which restarts device comm): the settle-delay
         # /get requests deviceStartComm schedules used to race the reconnect and
         # die on a not-yet-connected client (v1.9.23).
@@ -1334,6 +1407,14 @@ class Plugin(
             self._check_bridge_requests()
         except Exception as e:
             log(f"bridge request check error: {e}", level="ERROR")
+        try:
+            self._check_link_health()
+        except Exception as e:
+            log(f"link health check error: {e}", level="ERROR")
+        try:
+            self._check_availability_reports()
+        except Exception as e:
+            log(f"availability check error: {e}", level="ERROR")
 
     # NB: no stopConcurrentThread override — the base implementation sets
     # stopThread AND writes the wake pipe so self.sleep() returns instantly.
@@ -1440,7 +1521,13 @@ class Plugin(
             # v2.1.0 added the health and lastEvent states — register them
             # before anything tries to write one.
             dev = self._refresh_state_list_if_missing(
-                dev, self._V210_COORDINATOR_STATES + self._V213_COORDINATOR_STATES)
+                dev, self._V210_COORDINATOR_STATES + self._V213_COORDINATOR_STATES
+                + self._V218_COORDINATOR_STATES + self._V219_COORDINATOR_STATES)
+            # Write mqttConnected afresh on the next link check (v2.18.0).
+            self._coord_mqtt_shown.pop(prefix, None)
+            # And the availability verdict, now (v2.19.0).
+            self._avail_shown.pop(prefix, None)
+            self._show_availability_on_coordinator(prefix)
             self._ensure_device_states(dev)
             self._publish_offline_count(prefix)
             # If we already have a cached bridge/info or bridge/state for this
@@ -1512,6 +1599,11 @@ class Plugin(
         self._ensure_device_states(dev)
 
         self._keep_churn_out_of_sql_logger(dev)
+
+        # An availability report that arrived before this device was routed
+        # was dropped until v2.20.1 — a sensor already dead at restart stayed
+        # green. Apply it now that the device exists and is routed.
+        self._replay_cached_availability(dev, self._device_prefix(dev), fname)
 
         # displayStateId is cached on the device record at create time and is
         # read-only on existing instances — only fix for a stale value after a

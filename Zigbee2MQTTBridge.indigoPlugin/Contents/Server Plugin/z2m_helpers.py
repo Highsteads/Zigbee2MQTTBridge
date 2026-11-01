@@ -214,6 +214,20 @@ def _payload_bool(val):
     return None
 
 
+def _alarm_bool(val):
+    """_payload_bool for life-safety readings (water_leak, smoke) — v2.20.0.
+
+    Identical except that an empty string is UNKNOWN (None), not False.
+    _payload_bool reads "" as False, which suits a Configure checkbox Indigo
+    stored empty, but on an alarm it would turn a malformed report into
+    "all clear" and silently cancel a standing leak or smoke alarm. None
+    makes the caller skip the write and keep the last known value.
+    """
+    if isinstance(val, str) and not val.strip():
+        return None
+    return _payload_bool(val)
+
+
 def _iter_features(exposes):
     """
     Yield (entry, is_top_level) for every item in exposes, plus recursively

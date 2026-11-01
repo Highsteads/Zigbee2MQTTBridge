@@ -23,7 +23,7 @@ except ImportError:
 from z2m_constants import DEVICE_FOLDER_NAME
 from z2m_helpers import (
     _brightness_255_to_100, _hs_to_rgb, _iter_features, _mireds_to_kelvin,
-    _payload_bool, _xy_to_rgb,
+    _alarm_bool, _payload_bool, _xy_to_rgb,
 )
 
 
@@ -45,18 +45,29 @@ def log(*args, **kwargs):
 class StateProcessingMixin:
     """See the file header above."""
 
-    def _process_availability(self, friendly_name, payload, prefix=None):
+    def _process_availability(self, friendly_name, payload, prefix=None,
+                              replayed=False):
         """Handle availability message — update the 'availability' state.
         Lookup is prefix-qualified (v1.9.22) so a name shared across the two
-        bridges resolves to the right device."""
+        bridges resolves to the right device.
+
+        v2.20.1: the verdict is remembered for EVERY name, known or not, and
+        replayed by deviceStartComm (_replay_cached_availability). A report
+        that arrives before Indigo has started the device — the retained
+        replay at startup, or one for a device Discover & Create has not made
+        yet — used to be dropped here, so a sensor already dead at restart
+        stayed green until zigbee2mqtt's verdict next CHANGED, which for a
+        dead sensor is never. `replayed` keeps that replay from firing the
+        offline-count trigger, as a retained message would not."""
         if prefix is None:
             prefix = self._topic_prefix()
+        state = payload.get("state", "offline") if isinstance(payload, dict) else str(payload)
+        self._availability_cache[(prefix, friendly_name)] = state
         dev_id = self.friendly_name_map.get((prefix, friendly_name))
         if dev_id is None:
             return
         try:
             dev   = indigo.devices[dev_id]
-            state = payload.get("state", "offline") if isinstance(payload, dict) else str(payload)
             dev.updateStateOnServer("availability", state, uiValue=state.capitalize(),
                                     clearErrorState=False)
 
@@ -105,13 +116,24 @@ class StateProcessingMixin:
                 self.exception_handler(e, log_failing_statement=True,
                                        context=f"error state for '{dev.name}'")
 
-            self._note_availability(dev, prefix, is_online)
+            self._note_availability(dev, prefix, is_online, replayed=replayed)
 
             if self.debug:
                 log(f"{dev.name}: availability = {state}")
         except Exception as e:
             self.exception_handler(e, log_failing_statement=True,
                                    context=f"availability update for '{friendly_name}'")
+
+    def _replay_cached_availability(self, dev, prefix, fname):
+        """deviceStartComm: apply the last availability heard for this device,
+        if it came before the device was routed (v2.20.1). Reads the cache at
+        call time, so a report that lands meanwhile is never overwritten by an
+        older one."""
+        state = self._availability_cache.get((prefix, fname))
+        if state is None:
+            return
+        self._process_availability(fname, {"state": state}, prefix=prefix,
+                                   replayed=True)
 
     def _process_device_state(self, friendly_name, payload, prefix=None):
         """Dispatch a device state payload to the type-specific handler.
@@ -226,6 +248,22 @@ class StateProcessingMixin:
         except Exception as e:
             self.exception_handler(e, log_failing_statement=True,
                                    context=f"{dev.name} setting drift check")
+
+    def _payload_battery(self, raw):
+        """A battery percentage from a payload, for the custom `battery` state.
+
+        v2.20.0: was int(raw), which dropped a reading sent as text with a
+        decimal ("87.5" raised ValueError and was skipped) and let True
+        through as 1%. Now the SAME coercion as the native batteryLevel
+        mirror (_coerce_battery_percent: rounded, clamped 0-100, bools and
+        junk rejected), so the two states can never disagree. Raises
+        ValueError when there is no usable reading, so every caller's
+        existing except clause skips the write as before.
+        """
+        pct = self._coerce_battery_percent(raw)
+        if pct is None:
+            raise ValueError(f"no usable battery reading in {raw!r}")
+        return pct
 
     def _is_valid_state_id(self, key):
         """Indigo XML state IDs must start with an ASCII letter and contain only
@@ -361,7 +399,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
@@ -480,7 +518,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
@@ -503,7 +541,7 @@ class StateProcessingMixin:
         updates = []
 
         if "water_leak" in payload:
-            leak = _payload_bool(payload["water_leak"])   # string tokens safe
+            leak = _alarm_bool(payload["water_leak"])   # tokens safe; "" = unknown (v2.20.0)
             if leak is not None:
                 updates.append(("waterLeak",   leak))
                 updates.append(("onOffState",  leak, "Leak!" if leak else "OK"))
@@ -517,7 +555,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
@@ -569,7 +607,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
@@ -599,13 +637,14 @@ class StateProcessingMixin:
             # onOffState priority). _payload_bool handles the string tokens
             # ("false"/"OFF") a non-conforming device might publish — a raw
             # bool() would read those as True.
-            val = _payload_bool(payload["smoke"])
+            # v2.20.0: _alarm_bool — an empty value must not clear the alarm.
+            val = _alarm_bool(payload["smoke"])
             if val is not None:
                 smoke = val
                 updates.append(("smoke", val, "Smoke!" if val else "OK"))
 
         if "water_leak" in payload:
-            val = _payload_bool(payload["water_leak"])   # string tokens safe
+            val = _alarm_bool(payload["water_leak"])   # tokens safe; "" = unknown (v2.20.0)
             if val is not None:
                 water_leak = val
                 updates.append(("waterLeak", val))
@@ -673,7 +712,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
@@ -894,7 +933,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                batt = int(float(payload["battery"]))
+                batt = self._payload_battery(payload["battery"])
                 updates.append(("battery", batt, f"{batt}%"))
             except (ValueError, TypeError):
                 pass
@@ -981,7 +1020,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
@@ -1042,7 +1081,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass

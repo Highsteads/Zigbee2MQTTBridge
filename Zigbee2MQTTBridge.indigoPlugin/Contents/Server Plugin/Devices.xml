@@ -1444,6 +1444,27 @@
                 <TriggerLabel>Last Update Changed</TriggerLabel>
                 <ControlPageLabel>Last Update</ControlPageLabel>
             </State>
+            <!-- v2.18.0: the plugin's own connection to the MQTT broker. While
+                 it is False, every other state here is the last one heard. -->
+            <State id="mqttConnected">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>MQTT Broker Connected Changed</TriggerLabel>
+                <ControlPageLabel>MQTT Connected</ControlPageLabel>
+            </State>
+            <!-- v2.19.0: whether zigbee2mqtt reports devices going offline at
+                 all (enabled / some devices / disabled / probably off /
+                 unknown), and how long a battery device may be silent before
+                 it counts as offline ("25 h"; empty when not known). -->
+            <State id="availabilityTracking">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Tracking Changed</TriggerLabel>
+                <ControlPageLabel>Availability Tracking</ControlPageLabel>
+            </State>
+            <State id="batteryOfflineAfter">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Battery Offline Timeout Changed</TriggerLabel>
+                <ControlPageLabel>Battery Device Offline After</ControlPageLabel>
+            </State>
 
             <!-- Health, from the bridge/health topic (v2.1.0).  zigbee2mqtt
                  publishes this every 10 minutes by default, so treat every

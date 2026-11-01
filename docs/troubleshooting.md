@@ -48,6 +48,8 @@ The red clears by itself when the device is heard from again. The coordinator de
 
 ## A device has stopped reporting, but is not offline
 
+First check the coordinator device's **Availability Tracking**. If it says **disabled** or **probably off**, zigbee2mqtt is not reporting dead devices at all, so none will ever turn red. Turn it on in zigbee2mqtt (**Settings → Availability**, or `availability: enabled: true` in `configuration.yaml`) and restart zigbee2mqtt. Even when it is on, a battery device is only called offline after it has been silent for a long time; **Battery Device Offline After** says how long.
+
 Choose **Plugins → Zigbee2MQTT Bridge → Set Up a Device Again...**. It asks zigbee2mqtt to run the device's setup again, which often brings back the readings after a firmware update or a change of Zigbee radio. A battery device must be awake: press its button or set off its sensor first. The log says whether it worked.
 
 ## A light or plug does not respond
