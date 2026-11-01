@@ -5,9 +5,23 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0, 2.19.0)
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0, 2.19.0, 2.20.0)
 # Date:        01-11-2026
-# Version:     2.19.0
+# Version:     2.20.0
+#
+# v2.20.0 (01-11-2026): BATTERY AND ALARM PARSING (review findings 5 and 6).
+#   * Battery: the eight handlers that read `battery` used int(raw), which
+#     dropped a reading sent as text with a decimal ("87.5" -> ValueError ->
+#     skipped) and let True through as 1%. New _payload_battery
+#     (z2m_state_processing.py) uses the native mirror's _coerce_battery_percent
+#     (rounded, clamped 0-100, bools/junk rejected), so `battery` and
+#     `batteryLevel` always agree. Readings are now ROUNDED, not truncated
+#     (87.6 -> 88, was 87), and clamped (120 -> 100).
+#   * Alarms: new z2m_helpers._alarm_bool — _payload_bool, except "" is unknown.
+#     water_leak (leak sensor + generic sensor) and smoke use it, so an empty
+#     value no longer reads as "all clear" and cancels a standing alarm.
+#     _payload_bool is unchanged: Configure checkboxes rely on "" -> False.
+#   tests/test_v2200_battery_and_alarm_parsing.py.
 #
 # v2.19.0 (01-11-2026): SAY WHEN ZIGBEE2MQTT'S AVAILABILITY TRACKING IS OFF.
 #   New module z2m_availability_config.py (AvailabilityConfigMixin), review

@@ -7,6 +7,11 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.20.0 — 1 November 2026
+
+- **Battery readings with a decimal point are no longer lost.** A device that sent its battery as text such as "87.5" had the reading skipped. Every device now reads battery the same way: rounded to a whole percentage and kept between 0 and 100. The **Battery** state and Indigo's own battery level now always match.
+- **An empty leak or smoke report no longer cancels an alarm.** If a leak sensor or smoke alarm ever sent an empty value, the plugin read it as "all clear". It now ignores it and keeps the last real reading.
+
 ## 2.19.0 — 1 November 2026
 
 - **A warning when zigbee2mqtt is not tracking availability.** The plugin only knows a device has died — a leak sensor with a flat battery, say — because zigbee2mqtt reports it offline, and zigbee2mqtt only does that when its **Availability** setting is on. The plugin now reads that setting and warns in the Event Log if it is off. If zigbee2mqtt does not say, and no availability reports have arrived 10 minutes after connecting, it warns that availability is probably off. **Test MQTT Connection** lists it as a problem too.

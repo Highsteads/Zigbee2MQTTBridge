@@ -23,7 +23,7 @@ except ImportError:
 from z2m_constants import DEVICE_FOLDER_NAME
 from z2m_helpers import (
     _brightness_255_to_100, _hs_to_rgb, _iter_features, _mireds_to_kelvin,
-    _payload_bool, _xy_to_rgb,
+    _alarm_bool, _payload_bool, _xy_to_rgb,
 )
 
 
@@ -227,6 +227,22 @@ class StateProcessingMixin:
             self.exception_handler(e, log_failing_statement=True,
                                    context=f"{dev.name} setting drift check")
 
+    def _payload_battery(self, raw):
+        """A battery percentage from a payload, for the custom `battery` state.
+
+        v2.20.0: was int(raw), which dropped a reading sent as text with a
+        decimal ("87.5" raised ValueError and was skipped) and let True
+        through as 1%. Now the SAME coercion as the native batteryLevel
+        mirror (_coerce_battery_percent: rounded, clamped 0-100, bools and
+        junk rejected), so the two states can never disagree. Raises
+        ValueError when there is no usable reading, so every caller's
+        existing except clause skips the write as before.
+        """
+        pct = self._coerce_battery_percent(raw)
+        if pct is None:
+            raise ValueError(f"no usable battery reading in {raw!r}")
+        return pct
+
     def _is_valid_state_id(self, key):
         """Indigo XML state IDs must start with an ASCII letter and contain only
         ASCII letters and digits.  Underscores are NOT accepted — Indigo's XML
@@ -361,7 +377,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
@@ -480,7 +496,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
@@ -503,7 +519,7 @@ class StateProcessingMixin:
         updates = []
 
         if "water_leak" in payload:
-            leak = _payload_bool(payload["water_leak"])   # string tokens safe
+            leak = _alarm_bool(payload["water_leak"])   # tokens safe; "" = unknown (v2.20.0)
             if leak is not None:
                 updates.append(("waterLeak",   leak))
                 updates.append(("onOffState",  leak, "Leak!" if leak else "OK"))
@@ -517,7 +533,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
@@ -569,7 +585,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
@@ -599,13 +615,14 @@ class StateProcessingMixin:
             # onOffState priority). _payload_bool handles the string tokens
             # ("false"/"OFF") a non-conforming device might publish — a raw
             # bool() would read those as True.
-            val = _payload_bool(payload["smoke"])
+            # v2.20.0: _alarm_bool — an empty value must not clear the alarm.
+            val = _alarm_bool(payload["smoke"])
             if val is not None:
                 smoke = val
                 updates.append(("smoke", val, "Smoke!" if val else "OK"))
 
         if "water_leak" in payload:
-            val = _payload_bool(payload["water_leak"])   # string tokens safe
+            val = _alarm_bool(payload["water_leak"])   # tokens safe; "" = unknown (v2.20.0)
             if val is not None:
                 water_leak = val
                 updates.append(("waterLeak", val))
@@ -673,7 +690,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
@@ -894,7 +911,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                batt = int(float(payload["battery"]))
+                batt = self._payload_battery(payload["battery"])
                 updates.append(("battery", batt, f"{batt}%"))
             except (ValueError, TypeError):
                 pass
@@ -981,7 +998,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
@@ -1042,7 +1059,7 @@ class StateProcessingMixin:
 
         if "battery" in payload:
             try:
-                bat = int(payload["battery"])
+                bat = self._payload_battery(payload["battery"])
                 updates.append(("battery", bat, f"{bat} %"))
             except (ValueError, TypeError):
                 pass
