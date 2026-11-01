@@ -168,6 +168,8 @@ One for each zigbee2mqtt you run, made with **Plugins → Zigbee2MQTT Bridge →
 |---|---|
 | **Status** | Whether zigbee2mqtt is online. |
 | **MQTT Connected** | Whether the plugin is connected to the MQTT broker. While it is false, everything else here is the last value heard. |
+| **Availability Tracking** | Whether zigbee2mqtt reports devices going offline: **enabled**, **some devices**, **disabled**, **probably off** or **unknown**. Without it a dead device never turns red. |
+| **Battery Device Offline After** | How long zigbee2mqtt lets a battery device stay silent before it calls it offline, for example **25 h**. Empty when zigbee2mqtt does not say. |
 | **Z2M Version**, **Coordinator Type** | The version of zigbee2mqtt and the kind of Zigbee radio it runs. |
 | **Permit Join**, **Permit Join End** | Whether pairing is open, and when it closes. |
 | **Network Channel**, **PAN ID**, **Extended PAN ID** | The radio channel and identity of your Zigbee network. |

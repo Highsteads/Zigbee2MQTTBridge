@@ -27,6 +27,8 @@ STATE_REQUEST_DELAY  = 2    # seconds after deviceStartComm before requesting st
 # v2.18.0 link health (z2m_link_health.py):
 LINK_DOWN_GRACE      = 180  # seconds a bridge may be unreachable before its devices are marked "bridge down"
 LINK_CHECK_EVERY     = 5    # seconds between link-health checks in runConcurrentThread
+# v2.19.0 (z2m_availability_config.py):
+AVAILABILITY_WAIT    = 600  # seconds after connecting with no availability message before warning it is off
 DEVICE_FOLDER_NAME   = "Zigbee2MQTT"
 
 # Declared lastAction enum Option values (must stay in sync with the z2mButton

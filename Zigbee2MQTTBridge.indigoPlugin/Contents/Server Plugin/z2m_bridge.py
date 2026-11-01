@@ -77,6 +77,8 @@ class BridgeMixin:
             # zigbee2mqtt does not retain device state by default, so anything
             # that changed while we were disconnected is unknown. Ask every
             # mains device again (v2.18.0); battery devices are asleep.
+            # The retained availability replay is due now (v2.19.0).
+            self._start_availability_wait(prefixes)
             asked = self._refresh_after_connect(prefixes)
             if asked:
                 log_activity(self, f"Asked {asked} mains device(s) for their "
@@ -155,6 +157,7 @@ class BridgeMixin:
         # Handles friendly names with embedded slashes correctly
         if parts[-1] == "availability":
             fname = "/".join(parts[1:-1])
+            self._note_availability_seen(effective_prefix)   # v2.19.0
             self._process_availability(fname, payload, prefix=effective_prefix)
             return
 
@@ -534,6 +537,8 @@ class BridgeMixin:
             self._fire_event("bridgeRestartRequired", prefix, prefix)
 
         self._update_coordinator(prefix, **kv)
+        # Is availability tracking on? A dead device is invisible without it.
+        self._note_availability_config(prefix, payload)   # v2.19.0
 
     def _update_coordinator(self, prefix, **state_kv):
         """Push a batch of state updates to the coordinator device bound to

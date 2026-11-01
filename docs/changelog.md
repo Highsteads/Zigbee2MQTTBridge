@@ -7,6 +7,11 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.19.0 — 1 November 2026
+
+- **A warning when zigbee2mqtt is not tracking availability.** The plugin only knows a device has died — a leak sensor with a flat battery, say — because zigbee2mqtt reports it offline, and zigbee2mqtt only does that when its **Availability** setting is on. The plugin now reads that setting and warns in the Event Log if it is off. If zigbee2mqtt does not say, and no availability reports have arrived 10 minutes after connecting, it warns that availability is probably off. **Test MQTT Connection** lists it as a problem too.
+- **Availability Tracking** and **Battery Device Offline After** — two new states on the coordinator device. The second is how long zigbee2mqtt lets a battery device stay silent before calling it offline, for example **25 h**.
+
 ## 2.18.0 — 1 November 2026
 
 - **Devices say when the bridge is down.** If the plugin loses its connection to the MQTT broker, or zigbee2mqtt reports itself offline, for more than 3 minutes, every device on that bridge shows the error **bridge down**, because its states are only the last ones heard. Other plugins that watch for devices in error (such as a leak or device-health monitor) now see it. When the bridge returns the error goes; a device zigbee2mqtt had already reported offline stays **offline**. A short blip, or zigbee2mqtt restarting, does not set it off. Untick **Mark Devices When the Bridge Is Down** in Configure to turn this off.

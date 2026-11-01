@@ -444,6 +444,9 @@ class MenusMixin:
                 problems.append(f"bridge '{prefix}' reports {state}")
             elif state is None:
                 problems.append(f"no bridge/state seen yet from '{prefix}'")
+            avail_problem = self._availability_problem(prefix)   # v2.19.0
+            if avail_problem:
+                problems.append(avail_problem)
         if problems:
             for p in problems:
                 self.logger.error(f"Connection test FAILED — {p}")

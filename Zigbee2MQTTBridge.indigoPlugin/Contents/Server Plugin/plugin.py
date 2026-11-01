@@ -5,9 +5,23 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0)
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0, 2.19.0)
 # Date:        01-11-2026
-# Version:     2.18.0
+# Version:     2.19.0
+#
+# v2.19.0 (01-11-2026): SAY WHEN ZIGBEE2MQTT'S AVAILABILITY TRACKING IS OFF.
+#   New module z2m_availability_config.py (AvailabilityConfigMixin), review
+#   finding 3. The "offline" error comes ONLY from <device>/availability; with
+#   availability off in zigbee2mqtt a dead device stayed green and nothing said
+#   why. bridge/info config.availability is now read tolerantly (1.x bool or
+#   object; 2.x {"enabled", "passive": {"timeout": minutes}}; anything else =
+#   unknown, never guessed). Off -> one WARNING per prefix per session. Unknown
+#   -> WARNING if no availability message has arrived AVAILABILITY_WAIT (600 s)
+#   after connecting while the bridge is online and has devices; a later
+#   message withdraws it. New coordinator states availabilityTracking (enabled
+#   / some devices / disabled / probably off / unknown) and batteryOfflineAfter
+#   ("25 h"); Test MQTT Connection lists availability off as a problem.
+#   tests/test_v2190_availability_config.py.
 #
 # v2.18.0 (01-11-2026): SAY WHEN ZIGBEE2MQTT CANNOT BE HEARD; REFRESH ON RECONNECT.
 #   New module z2m_link_health.py (LinkHealthMixin), from the 01-11-2026 review.
@@ -1041,6 +1055,7 @@ def log_activity(*args, **kwargs):
 
 
 from z2m_actions import ActionsMixin
+from z2m_availability_config import AvailabilityConfigMixin
 from z2m_bridge import BridgeMixin
 from z2m_bridge_tools import BridgeToolsMixin
 from z2m_groups import GroupsMixin, is_group
@@ -1084,6 +1099,7 @@ def merge_sql_logger_ignore(existing, extra=SQL_LOGGER_CHURN_STATES):
 
 class Plugin(
     ActionsMixin,
+    AvailabilityConfigMixin,
     BridgeMixin,
     BridgeToolsMixin,
     DeviceStatesMixin,
@@ -1277,6 +1293,8 @@ class Plugin(
 
         # Broker / bridge outage tracking and the "bridge down" marks (v2.18.0).
         self._init_link_health()
+        # Is zigbee2mqtt's availability tracking on? (v2.19.0)
+        self._init_availability_config()
 
         # Startup banner moved to showPluginInfo on demand (revised 25-May-2026 per Jay).
 
@@ -1363,6 +1381,10 @@ class Plugin(
             self._check_link_health()
         except Exception as e:
             log(f"link health check error: {e}", level="ERROR")
+        try:
+            self._check_availability_reports()
+        except Exception as e:
+            log(f"availability check error: {e}", level="ERROR")
 
     # NB: no stopConcurrentThread override — the base implementation sets
     # stopThread AND writes the wake pipe so self.sleep() returns instantly.
@@ -1470,9 +1492,12 @@ class Plugin(
             # before anything tries to write one.
             dev = self._refresh_state_list_if_missing(
                 dev, self._V210_COORDINATOR_STATES + self._V213_COORDINATOR_STATES
-                + self._V218_COORDINATOR_STATES)
+                + self._V218_COORDINATOR_STATES + self._V219_COORDINATOR_STATES)
             # Write mqttConnected afresh on the next link check (v2.18.0).
             self._coord_mqtt_shown.pop(prefix, None)
+            # And the availability verdict, now (v2.19.0).
+            self._avail_shown.pop(prefix, None)
+            self._show_availability_on_coordinator(prefix)
             self._ensure_device_states(dev)
             self._publish_offline_count(prefix)
             # If we already have a cached bridge/info or bridge/state for this
