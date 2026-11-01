@@ -53,6 +53,10 @@ def log(*args, **kwargs):
     return z2m_helpers.log(*args, **kwargs)
 
 
+def log_activity(*args, **kwargs):
+    return z2m_helpers.log_activity(*args, **kwargs)
+
+
 class LinkHealthMixin:
     """See the file header above."""
 
@@ -188,6 +192,35 @@ class LinkHealthMixin:
             self._link_down_announced.discard(prefix)
             log(f"zigbee2mqtt on '{prefix}' is reachable again — "
                 f"'{LINK_ERROR}' lifted from {restored} device(s)")
+
+    def _clear_leftover_link_mark(self, dev):
+        """deviceStartComm / _start_group: lift a "bridge down" this session
+        did not set (v2.20.2).
+
+        _link_marked lives in memory, so a mark left by the PREVIOUS run (a
+        plugin or Indigo restart during an outage) is not in it, and nothing
+        would ever clear it: _clear_link_down only lifts marks it knows, and
+        when zigbee2mqtt's availability is off no "online" arrives either.
+        Water Leak Monitor ignores a sensor in error, so a stuck mark would
+        stop leak watching for good.
+
+        Called BEFORE the cached availability replay, so a device zigbee2mqtt
+        has called offline goes straight back to "offline". If the bridge is
+        really still down, the link check marks it again after the grace.
+        A mark this session set (a device restarted mid-outage) is left alone:
+        the link check owns it and will lift it.
+        """
+        if dev.id in self._link_marked:
+            return
+        if getattr(dev, "errorState", "") != LINK_ERROR:
+            return
+        try:
+            dev.setErrorStateOnServer(None)
+            log_activity(self, f"{dev.name}: cleared a '{LINK_ERROR}' left over "
+                               f"from before the plugin started")
+        except Exception as e:
+            self.exception_handler(e, log_failing_statement=True,
+                                   context=f"clearing leftover '{LINK_ERROR}' on '{dev.name}'")
 
     def _forget_link_mark(self, dev):
         """deviceStopComm: a stopped device is no longer ours to clear."""
