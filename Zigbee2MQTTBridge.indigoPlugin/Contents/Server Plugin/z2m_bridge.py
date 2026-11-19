@@ -23,6 +23,7 @@ except ImportError:
 from datetime import datetime
 
 from z2m_constants import DEVICE_FOLDER_NAME
+from z2m_detection import _interview_unfinished
 from z2m_secondary import is_secondary
 
 
@@ -191,7 +192,7 @@ class BridgeMixin:
         # skipped, so they must count as NEW on the refresh that brings the
         # definition, or they are never created at all (v2.7.2).
         pending = {ieee for ieee, d in self.bridge_devices.items()
-                   if d.get("_mqtt_prefix") == prefix and d.get("definition") is None}
+                   if d.get("_mqtt_prefix") == prefix and _interview_unfinished(d)}
 
         old_count = len(self.bridge_devices)
         # Preserve entries from the other prefix; replace only entries for this prefix
@@ -299,7 +300,7 @@ class BridgeMixin:
                         if new_cache[ieee].get("_mqtt_prefix") == prefix
                         and (ieee not in old_ieee
                              or (ieee in pending
-                                 and new_cache[ieee].get("definition") is not None))}
+                                 and not _interview_unfinished(new_cache[ieee])))}
             if new_ieee:
                 folder_id      = self._ensure_device_folder(DEVICE_FOLDER_NAME)
                 existing_names = self._get_existing_friendly_names()

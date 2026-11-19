@@ -32,7 +32,7 @@ The plugin has not yet had zigbee2mqtt's list of devices.
 
 ## A device was skipped as "not yet interviewed"
 
-zigbee2mqtt has not finished setting the device up after pairing, so the plugin does not yet know what kind of device it is. Wake it — press its button, or set off its sensor — and let zigbee2mqtt finish. The plugin creates the device by itself once zigbee2mqtt has done so, or you can run **Discover & Create Devices** again.
+zigbee2mqtt has not finished setting the device up after pairing, or its first attempt failed, so the plugin does not yet know what kind of device it is. Wake it — press its button, or set off its sensor — and let zigbee2mqtt finish. The plugin creates the device by itself once zigbee2mqtt has done so, or you can run **Discover & Create Devices** again.
 
 ## A device shows "offline" in red
 

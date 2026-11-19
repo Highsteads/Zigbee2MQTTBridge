@@ -34,7 +34,7 @@ from z2m_constants import DEVICE_FOLDER_NAME
 from z2m_groups import is_group
 from z2m_detection import (
     _build_capabilities_display, _detect_contact_sensor_capabilities,
-    _detect_device_type, _detect_light_capabilities,
+    _detect_device_type, _detect_light_capabilities, _interview_unfinished,
     _detect_occupancy_sensor_capabilities, _detect_relay_capabilities,
     _detect_sensor_capabilities, _detect_temperature_sensor_capabilities,
     _detect_water_leak_sensor_capabilities,
@@ -89,7 +89,7 @@ class MenusMixin:
             return "exists"
 
         definition = device_data.get("definition")
-        if definition is None:
+        if _interview_unfinished(device_data):
             log(f"  skip (not yet interviewed by z2m): {fname}", level="WARNING")
             return "no_definition"
 

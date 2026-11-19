@@ -14,6 +14,23 @@
 
 from z2m_helpers import _iter_features
 
+def _interview_unfinished(device_data):
+    """True while zigbee2mqtt has not finished interviewing a device.
+
+    A missing definition is the plain case. The other one (v2.20.3): when the
+    first interview attempt fails, zigbee2mqtt publishes the device WITH a
+    stand-in definition that has no model and exposes nothing but link
+    quality, and marks it interview_completed False. Creating from that makes
+    every device a repeater, and the type cannot be changed afterwards.
+    """
+    if device_data.get("definition") is None:
+        return True
+    if device_data.get("interview_completed") is False:
+        return True
+    return str(device_data.get("interview_state", "")).upper() in (
+        "PENDING", "IN_PROGRESS", "FAILED")
+
+
 def _detect_device_type(exposes, model=""):
     """
     Determine the best Indigo device type for a zigbee2mqtt device from its

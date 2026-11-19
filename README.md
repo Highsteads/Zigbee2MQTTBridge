@@ -2,7 +2,7 @@
 
 **Bring your Zigbee lights, plugs, sensors, blinds, locks and radiator valves into Indigo, through zigbee2mqtt.**
 
-**Version:** 2.20.2 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
+**Version:** 2.20.3 | **Author:** CliveS & Claude | **Needs:** Indigo 2023.2 or later, zigbee2mqtt and an MQTT broker
 
 **[Read the full guide](https://highsteads.github.io/Zigbee2MQTTBridge/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -57,6 +57,8 @@ You need zigbee2mqtt already set up and working, with its messages going to an M
 The [full guide](https://highsteads.github.io/Zigbee2MQTTBridge/) goes through each step, explains every setting, and covers what to do if something does not work.
 
 ## What's new
+
+**v2.20.3** — A new device whose first set-up attempt fails is no longer created as a repeater; the plugin waits until zigbee2mqtt has finished.
 
 **v2.20.2** — A **bridge down** error no longer stays on a device after the plugin restarts.
 

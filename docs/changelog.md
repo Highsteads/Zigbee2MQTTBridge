@@ -7,6 +7,10 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.20.3 — 19 November 2026
+
+**Fix: a newly paired device could be created as a repeater.** When zigbee2mqtt's first attempt to set a new device up failed, it still listed the device, with nothing known about it but its link quality. The plugin created the Indigo device from that straight away, as a repeater, and a device's type cannot be changed afterwards, so a smart plug could not be switched from Indigo. The plugin now waits until zigbee2mqtt has finished setting the device up. If you have a device this happened to, delete it in Indigo and run **Discover & Create Devices**.
+
 ## 2.20.2 — 1 November 2026
 
 **Fix: a "bridge down" error could stay on a device for good.** If the plugin or Indigo restarted while devices showed **bridge down**, the error could stay after the bridge was back, because the plugin only remembered which devices it had marked while it was running. With availability turned off in zigbee2mqtt, nothing else cleared it — and a leak monitor that ignores sensors in error would stop watching. Each device now loses a leftover **bridge down** when it starts. If the bridge really is still down, it shows **bridge down** again after 3 minutes.

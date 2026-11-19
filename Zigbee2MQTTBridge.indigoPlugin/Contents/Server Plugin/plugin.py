@@ -5,9 +5,21 @@
 #              Auto-discovers all device types (lights, relays, sensors, covers) from
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
-# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0, 2.19.0, 2.20.0, 2.20.1, 2.20.2)
-# Date:        01-11-2026
-# Version:     2.20.2
+# Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0, 2.19.0, 2.20.0, 2.20.1, 2.20.2); Claude Fable 5.2 (2.20.3)
+# Date:        19-11-2026
+# Version:     2.20.3
+#
+# v2.20.3 (19-11-2026): FIX: a device whose first interview failed was created
+#   as a repeater for good. zigbee2mqtt publishes such a device with a stand-in
+#   definition (no model, link quality only) and interview_completed False;
+#   _try_create_device only checked for a missing definition, so
+#   _detect_device_type saw nothing but link quality and returned z2mRepeater.
+#   Live case 18-11-2026: a Third Reality 3RSPU01080Z plug, created 23 s after
+#   joining, interview successful 2.5 minutes later. _interview_unfinished
+#   (z2m_detection.py) now decides it for both the create guard and the
+#   "pending" set in _process_bridge_devices, so the device is created on the
+#   refresh that brings the finished interview.
+#   tests/test_v2203_failed_first_interview.py.
 #
 # v2.20.2 (01-11-2026): FIX: a "bridge down" error could outlive a restart.
 #   2.18.0 records the devices it marks in _link_marked, which is in memory, so
