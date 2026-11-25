@@ -227,7 +227,15 @@ class DeviceStatesMixin:
         as mains — suppressing the battery state on a device that does have a
         cell would hide a genuinely flat one, which is the costlier mistake of
         the two.  So this returns False unless the answer is explicit.
+
+        A device zigbee2mqtt lists a battery reading for (has_battery) has a
+        cell, whatever it says about its power source: the Third Reality
+        3RTHS24BZ runs on two AAA cells and reports "Mains (single phase)"
+        (v2.20.4).  The reading list comes from zigbee2mqtt's definition of
+        the model; the power source is the device's own word.
         """
+        if str(props.get("has_battery", "")).strip().lower() in ("true", "1"):
+            return False
         source = str(props.get("power_source") or "").strip().lower()
         return source.startswith("mains")
 

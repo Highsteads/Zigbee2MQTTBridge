@@ -15,6 +15,9 @@
 
 import z2m_helpers
 
+# What the battery state says while its 0 is only the seed (v2.20.4).
+BATTERY_NOT_REPORTED_UI = "Not reported yet"
+
 try:
     import indigo  # noqa: F401  — injected by the plugin host at runtime
 except ImportError:
@@ -243,6 +246,16 @@ class NativeAttributesMixin:
                 # number at all (v2.2.0).
                 dev.updateStateOnServer("battery", 0, uiValue="Mains",
                                         clearErrorState=False)
+            elif battery == 0 and dev.states.get("battery.ui") == "Mains":
+                # Labelled "Mains" by an earlier version on the device's own
+                # word, but zigbee2mqtt lists a battery for it (v2.20.4).  The
+                # 0 is still only the seed, so say that until it reports.
+                dev.updateStateOnServer("battery", 0,
+                                        uiValue=BATTERY_NOT_REPORTED_UI,
+                                        clearErrorState=False)
+                log(f"{dev.name}: battery powered, not mains - its battery "
+                    f"reading now says '{BATTERY_NOT_REPORTED_UI}' until the "
+                    f"device sends one")
             elif battery:
                 self._mirror_native_battery(dev, battery)
             elif battery == 0 and self.debug:

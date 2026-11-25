@@ -349,7 +349,7 @@ class BridgeMixin:
                     new_props["power_source"] = source
                     dev.replacePluginPropsOnServer(new_props)
                 dev.refreshFromServer()
-                if self._is_mains_powered({"power_source": source}) \
+                if self._is_mains_powered(new_props) \
                         and "battery" in dev.states:
                     # Existing mains device carrying a seeded 0 — label it, as
                     # the state itself cannot be removed once it exists.

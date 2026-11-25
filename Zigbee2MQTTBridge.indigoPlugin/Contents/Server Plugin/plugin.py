@@ -6,8 +6,18 @@
 #              the zigbee2mqtt bridge and creates matching Indigo devices in a
 #              "Zigbee2MQTT" device folder via Plugins > Discover & Create Devices.
 # Author:      CliveS & Claude Fable 5.1; Claude Opus 5.5 (2.8.3, 2.9.0, 2.10.0, 2.11.0, 2.12.0, 2.13.0, 2.14.0, 2.15.0, 2.16.0, 2.17.0, 2.17.1, 2.18.0, 2.19.0, 2.20.0, 2.20.1, 2.20.2); Claude Fable 5.2 (2.20.3)
-# Date:        19-11-2026
-# Version:     2.20.3
+# Date:        25-11-2026
+# Version:     2.20.4
+#
+# v2.20.4 (25-11-2026): FIX: a battery device that tells zigbee2mqtt it runs
+#   on mains had its battery state labelled "Mains". Live case: the Third
+#   Reality 3RTHS24BZ temperature and humidity sensor (two AAA cells) reports
+#   power_source "Mains (single phase)". _is_mains_powered now returns False
+#   for a device zigbee2mqtt lists a battery reading for (has_battery), so it
+#   is seeded a battery state and is not asked for its state after a
+#   reconnect. _backfill_native_attributes replaces a wrong "Mains" label
+#   with "Not reported yet" until the first reading arrives.
+#   tests/test_v2204_battery_device_called_mains.py.
 #
 # v2.20.3 (19-11-2026): FIX: a device whose first interview failed was created
 #   as a repeater for good. zigbee2mqtt publishes such a device with a stand-in

@@ -7,6 +7,10 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 2.20.4 — 25 November 2026
+
+A battery sensor that tells zigbee2mqtt it runs on mains no longer has its battery reading labelled "Mains". The Third Reality temperature and humidity sensor (3RTHS24BZ) does this, although it runs on two AAA cells. If zigbee2mqtt lists a battery reading for a device, the plugin now treats it as battery powered. Its reading says "Not reported yet" until the sensor sends its first figure, which can take some hours.
+
 ## 2.20.3 — 19 November 2026
 
 **Fix: a newly paired device could be created as a repeater.** When zigbee2mqtt's first attempt to set a new device up failed, it still listed the device, with nothing known about it but its link quality. The plugin created the Indigo device from that straight away, as a repeater, and a device's type cannot be changed afterwards, so a smart plug could not be switched from Indigo. The plugin now waits until zigbee2mqtt has finished setting the device up. If you have a device this happened to, delete it in Indigo and run **Discover & Create Devices**.

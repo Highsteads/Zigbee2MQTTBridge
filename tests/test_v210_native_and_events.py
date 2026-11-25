@@ -548,7 +548,7 @@ def test_mains_device_is_not_seeded_a_battery_state(plugin, make_device):
     dev = make_device(760, "Garage Presence", "z2mOccupancySensor",
                       pluginProps={"friendly_name": "Garage Presence",
                                    "power_source": "Mains (single phase)",
-                                   "has_battery": True})
+                                   "has_battery": False})
     plugin._ensure_device_states(dev)
     assert "battery" not in dev.states
 
